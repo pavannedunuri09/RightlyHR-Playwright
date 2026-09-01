@@ -1,0 +1,22 @@
+{
+  "name": "rightlyhr-playwright",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:login": "playwright test tests/login.spec.ts --project=chromium --headed --workers=1",
+    "test:wfh": "playwright test tests/work-from-home.spec.ts --project=chromium --headed --workers=1",
+    "test:headed": "playwright test --headed --project=chromium --workers=1",
+    "report": "playwright show-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.0",
+    "dotenv": "^17.4.2"
+  }
+}
