@@ -26,7 +26,8 @@ export class LoginPage {
   }
 
   async goto() {
-    await this.page.goto('/login');
+    await this.page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await this.emailInput.waitFor({ state: 'visible' });
   }
 
   async login(email: string, password: string) {
@@ -46,7 +47,13 @@ export class LoginPage {
       throw new Error('Set LOGIN_EMAIL and LOGIN_PASSWORD in .env');
     }
     await this.goto();
-    await this.login(email, password);
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await Promise.all([
+      this.page.waitForURL(/\/dashboard\/emp/, {
+        timeout: 45000,
+        waitUntil: 'domcontentloaded',
+      }),
+      this.login(email, password),
+    ]);
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
   }
 }
