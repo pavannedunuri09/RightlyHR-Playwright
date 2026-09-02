@@ -9,3 +9,4 @@ node_modules/
 
 # Secrets
 .env
+/tests/fixtures/last-trainee.json

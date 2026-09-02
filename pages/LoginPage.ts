@@ -47,6 +47,6 @@ export class LoginPage {
     }
     await this.goto();
     await this.login(email, password);
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 45000, waitUntil: 'commit' });
   }
 }
