@@ -8,6 +8,7 @@
     "test:login": "playwright test tests/login.spec.ts --project=chromium --headed --workers=1",
     "test:wfh": "playwright test tests/work-from-home.spec.ts --project=chromium --headed --workers=1",
     "test:remote-login": "playwright test tests/remote-login.spec.ts --project=chromium --headed --workers=1",
+    "test:allocation": "playwright test tests/job-info-allocation.spec.ts --project=chromium --headed --workers=1",
     "test:wfh-settings": "playwright test tests/wfh-entitlement-criteria.spec.ts --project=chromium --headed --workers=1",
     "test:headed": "playwright test --headed --project=chromium --workers=1",
     "report": "playwright show-report"

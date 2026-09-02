@@ -63,4 +63,13 @@ export class LoginPage {
     }
     await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
   }
+
+  async validateUserSession() {
+    await this.page.context().clearCookies();
+    await this.page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    }).catch(() => {});
+    await this.loginFromEnv();
+  }
 }
