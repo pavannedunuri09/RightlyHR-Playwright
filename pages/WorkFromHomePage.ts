@@ -101,9 +101,23 @@ export class WorkFromHomePage {
 
   async openTimeOffMenu() {
     await this.closeRequestDialogIfOpen();
+    await this.timeOffNav.waitFor({ state: 'visible' });
     await this.timeOffToggle.waitFor({ state: 'visible' });
+    if (await this.timeOffWfhTab.isVisible().catch(() => false)) {
+      return;
+    }
     await this.page.waitForTimeout(2000);
-    await this.timeOffToggle.click();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.timeOffToggle.click();
+      try {
+        await this.timeOffWfhTab.waitFor({ state: 'visible', timeout: 8000 });
+        return;
+      } catch {
+        await this.page.keyboard.press('Escape');
+        await this.page.waitForTimeout(1000);
+      }
+    }
+    await this.timeOffNav.click();
     await this.timeOffWfhTab.waitFor({ state: 'visible', timeout: 15000 });
   }
 
