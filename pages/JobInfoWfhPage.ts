@@ -21,8 +21,12 @@ export class JobInfoWfhPage {
   readonly activeStatus: Locator;
   readonly inactiveStatus: Locator;
   readonly wfhActiveRow: Locator;
+  readonly wfhInactiveRow: Locator;
+  readonly remoteLoginActiveRow: Locator;
   readonly remoteLoginInactiveRow: Locator;
+  readonly remoteLoginManager: Locator;
   readonly duplicateEffectiveDateMessage: Locator;
+  readonly alreadyAllocatedMessage: Locator;
   readonly cancelButton: Locator;
 
   constructor(page: Page) {
@@ -49,12 +53,24 @@ export class JobInfoWfhPage {
     }).filter({
       has: page.getByRole('cell', { name: 'Active', exact: true }),
     });
+    this.wfhInactiveRow = page.getByRole('row').filter({
+      has: page.getByRole('cell', { name: 'WFH', exact: true }),
+    }).filter({
+      has: page.getByRole('cell', { name: 'Inactive', exact: true }),
+    });
+    this.remoteLoginActiveRow = page.getByRole('row').filter({
+      has: page.getByRole('cell', { name: 'Remote Login', exact: true }),
+    }).filter({
+      has: page.getByRole('cell', { name: 'Active', exact: true }),
+    });
     this.remoteLoginInactiveRow = page.getByRole('row').filter({
       has: page.getByRole('cell', { name: 'Remote Login', exact: true }),
     }).filter({
       has: page.getByRole('cell', { name: 'Inactive', exact: true }),
     });
+    this.remoteLoginManager = page.getByRole('combobox', { name: 'Select Remote Login Manager' });
     this.duplicateEffectiveDateMessage = page.getByText('A record already exists for the selected effective date.');
+    this.alreadyAllocatedMessage = page.getByText(/already/i);
     this.cancelButton = page.getByRole('dialog').getByRole('button', { name: 'Cancel' });
   }
 
@@ -167,6 +183,7 @@ export class JobInfoWfhPage {
   }
 
   async allocateWfh(effectiveFrom: string, managerLabel: string) {
+    await this.inactivateActiveRow('Remote Login');
     const dialog = await this.fillAllocateForm(effectiveFrom, managerLabel);
     await this.submitButton.click();
     try {
@@ -181,5 +198,82 @@ export class JobInfoWfhPage {
   async submitAllocateKeepingDialog(effectiveFrom: string, managerLabel: string) {
     await this.fillAllocateForm(effectiveFrom, managerLabel);
     await this.submitButton.click();
+  }
+
+  activeRow(allocationType: 'WFH' | 'Remote Login') {
+    return allocationType === 'WFH' ? this.wfhActiveRow : this.remoteLoginActiveRow;
+  }
+
+  async inactivateActiveRow(allocationType: 'WFH' | 'Remote Login') {
+    const row = this.activeRow(allocationType).first();
+    if (!(await row.isVisible().catch(() => false))) {
+      return;
+    }
+    const kebab = row.locator('.dropdown').first();
+    await kebab.click();
+    await this.page.getByText('Inactive', { exact: true }).click();
+    await this.page.getByRole('button', { name: 'Yes', exact: true }).click();
+    await this.page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+  }
+
+  async fillAllocateRemoteLoginForm(effectiveFrom: string, managerLabel: string) {
+    await this.allocateButton.click();
+    const dialog = this.page.getByRole('dialog');
+    await dialog.waitFor({ state: 'visible' });
+
+    await dialog.getByText('Allow Work From Home *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
+    await this.page.getByRole('option', { name: 'No', exact: true }).click();
+
+    await dialog.getByText('Allow Remote Login *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
+    await this.page.getByRole('option', { name: 'Yes', exact: true }).click();
+
+    const locationTrigger = dialog
+      .getByText(/Work Location \*/)
+      .locator('..')
+      .getByRole('button', { name: 'dropdown trigger' })
+      .first();
+    await locationTrigger.waitFor({ state: 'visible' });
+    await locationTrigger.click();
+    try {
+      await this.page.getByRole('option', { name: 'Remote', exact: true }).click({ timeout: 5000 });
+    } catch {
+      await this.page.getByText('Remote', { exact: true }).click();
+    }
+
+    const managerCombo = dialog.getByRole('combobox', { name: /Select Remote Login Manager/i });
+    if (await managerCombo.isVisible().catch(() => false)) {
+      await managerCombo.click();
+    } else {
+      await dialog
+        .getByText(/Remote Login Manager \*/)
+        .locator('..')
+        .getByRole('button', { name: 'dropdown trigger' })
+        .click();
+    }
+    try {
+      await this.page.getByRole('option').filter({ hasText: managerLabel }).click({ timeout: 5000 });
+    } catch {
+      await this.page.getByText('SD302262 - saii Pavan Dinesh').click();
+    }
+
+    const dateInput = dialog.getByRole('textbox').first();
+    await dateInput.fill(effectiveFrom);
+    return dialog;
+  }
+
+  async allocateRemoteLogin(effectiveFrom: string, managerLabel: string) {
+    await this.inactivateActiveRow('WFH');
+    if (await this.remoteLoginActiveRow.isVisible().catch(() => false)) {
+      return;
+    }
+    const dialog = await this.fillAllocateRemoteLoginForm(effectiveFrom, managerLabel);
+    await this.submitButton.click();
+    try {
+      await dialog.waitFor({ state: 'hidden', timeout: 8000 });
+    } catch {
+      await dialog.getByRole('textbox').first().fill(effectiveFrom);
+      await this.submitButton.click();
+      await dialog.waitFor({ state: 'hidden', timeout: 15000 });
+    }
   }
 }
