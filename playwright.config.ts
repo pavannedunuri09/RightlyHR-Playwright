@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/codegen-wfh.ts', '**/codegent-wfh.ts'],
+  testIgnore: ['**/codegen-wfh.ts', '**/codegen-wfh-settings.ts', '**/codegent-wfh.ts'],
   timeout: 120000,
   /* Run tests in files in parallel */
   fullyParallel: true,
