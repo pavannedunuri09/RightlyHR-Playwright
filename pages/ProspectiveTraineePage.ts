@@ -4,6 +4,7 @@ export type TraineeDetails = {
   firstName: string;
   lastName: string;
   email: string;
+  employeeId?: string;
   designation?: string;
   employmentType?: string;
   location?: string;
@@ -15,7 +16,9 @@ export class ProspectiveTraineePage {
   readonly employeesIcon: Locator;
   readonly employeesTab: Locator;
   readonly prospectiveTab: Locator;
+  readonly activeTab: Locator;
   readonly traineesTab: Locator;
+  readonly activeTraineesTab: Locator;
   readonly addProspectiveTraineeButton: Locator;
   readonly firstNameInput: Locator;
   readonly lastNameInput: Locator;
@@ -33,7 +36,9 @@ export class ProspectiveTraineePage {
     this.employeesIcon = page.locator('img[src="/main-menu-icons/employee-management-icon.png"]');
     this.employeesTab = page.locator('#sidenav-main-drop').getByText('Employees', { exact: true });
     this.prospectiveTab = page.getByText('Prospective', { exact: true });
+    this.activeTab = page.getByRole('listitem').filter({ has: page.getByText('Active', { exact: true }) });
     this.traineesTab = page.locator('a[href="/employee-management/prospective/interns"]');
+    this.activeTraineesTab = page.locator('a[href="/employee-management/active/interns"]');
     this.addProspectiveTraineeButton = page.getByRole('button', { name: 'Add Prospective Trainee' });
     this.firstNameInput = page.getByRole('textbox', { name: 'Please enter first name' });
     this.lastNameInput = page.getByRole('textbox', { name: 'Please enter last name' });
@@ -57,6 +62,7 @@ export class ProspectiveTraineePage {
       firstName,
       lastName,
       email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${suffix}@yopmail.com`,
+      designation: 'Front End Developer',
     };
   }
 
@@ -92,6 +98,35 @@ export class ProspectiveTraineePage {
       waitUntil: 'commit',
     });
     await this.addProspectiveTraineeButton.waitFor({ state: 'visible', timeout: 20000 });
+  }
+
+  async openActiveTraineesList() {
+    if (await this.activeTab.first().isVisible().catch(() => false)) {
+      await this.activeTab.first().click();
+    } else {
+      await this.openEmployeesModule();
+      await this.activeTab.first().waitFor({ state: 'visible', timeout: 15000 });
+      await this.activeTab.first().click();
+    }
+
+    await this.page.waitForURL(/\/employee-management\/active/, {
+      timeout: 15000,
+      waitUntil: 'commit',
+    }).catch(() => {});
+
+    const traineesLink = this.activeTraineesTab.or(this.page.getByRole('link', { name: /Trainees/ }));
+    await traineesLink.first().waitFor({ state: 'visible', timeout: 15000 });
+    await traineesLink.first().click();
+    await this.page.waitForURL(/\/employee-management\/active\/interns/, {
+      timeout: 15000,
+      waitUntil: 'commit',
+    }).catch(() => {});
+    await this.traineeSearch.waitFor({ state: 'visible', timeout: 20000 });
+  }
+
+  async expectTraineeHiddenInList(email: string) {
+    await this.searchTrainee(email);
+    await expect(this.traineeRow(email)).toBeHidden({ timeout: 15000 });
   }
 
   private async openEmployeesModule() {
@@ -155,6 +190,14 @@ export class ProspectiveTraineePage {
     await this.traineeSearch.press('Enter');
   }
 
+  async clearTraineeSearch() {
+    await this.traineeSearch.waitFor({ state: 'visible' });
+    await this.traineeSearch.click();
+    await this.traineeSearch.fill('');
+    await this.traineeSearch.press('Enter');
+    await this.page.waitForTimeout(800);
+  }
+
   traineeRow(query: string) {
     return this.page.getByRole('row').filter({ hasText: query }).first();
   }
@@ -179,18 +222,120 @@ export class ProspectiveTraineePage {
     await row.getByText(`${details.firstName} ${details.lastName}`).click();
   }
 
-  async findDocumentsSubmittedTrainee(): Promise<{ firstName: string; lastName: string; email: string } | null> {
-    await this.searchTrainee('Documents Submitted');
-    const row = this.page.getByRole('row').filter({
-      has: this.page.getByRole('cell', { name: 'Documents Submitted', exact: true }),
-    }).first();
+  async openActiveTraineeProfile(details: { firstName: string; lastName: string; email?: string }) {
+    const fullName = `${details.firstName} ${details.lastName}`;
+    await this.searchTrainee(details.email ?? details.firstName);
+    let row = this.traineeRow(fullName);
     if (!(await row.isVisible({ timeout: 8000 }).catch(() => false))) {
-      return null;
+      await this.searchTrainee(details.firstName);
+      row = this.traineeRow(fullName);
     }
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await row.getByText(fullName).click();
+    await this.page.getByText('Personal', { exact: true }).or(this.page.getByText('Job', { exact: true })).first()
+      .waitFor({ state: 'visible', timeout: 20000 });
+  }
+
+  async findDocumentsSubmittedTrainee(): Promise<TraineeDetails | null> {
+    return this.findTraineeByStatus('Documents Submitted');
+  }
+
+  async findDocumentsVerifiedTrainee(): Promise<TraineeDetails | null> {
+    return this.findTraineeByStatus('Documents Verified');
+  }
+
+  async findOfferLetterRejectedTrainee(): Promise<TraineeDetails | null> {
+    return this.findTraineeByStatus('Offer Letter Rejected');
+  }
+
+  async findOfferLetterReleasedTrainee(): Promise<TraineeDetails | null> {
+    return this.findTraineeByStatus('Offer Letter Released');
+  }
+
+  async findOfferLetterAcceptedTrainee(): Promise<TraineeDetails | null> {
+    return this.findTraineeByStatus('Offer Letter Accepted');
+  }
+
+  async findTraineeByStatus(status: string): Promise<TraineeDetails | null> {
+    await this.clearTraineeSearch();
+    await this.expandTablePageSize();
+    await this.goToFirstTablePage();
+
+    const statusRe = new RegExp(status.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    for (let pageIndex = 0; pageIndex < 25; pageIndex++) {
+      const matched = this.page.getByRole('row').filter({ hasText: statusRe });
+      const count = await matched.count();
+      for (let index = 0; index < count; index++) {
+        const row = matched.nth(index);
+        if (!(await row.isVisible().catch(() => false))) {
+          continue;
+        }
+        const trainee = await this.readTraineeFromRow(row);
+        if (isUsableListedTrainee(trainee)) {
+          return trainee;
+        }
+        console.log(`Skipping incomplete trainee ${trainee.email || trainee.firstName}`);
+      }
+      if (!(await this.goToNextTablePage())) {
+        break;
+      }
+    }
+    return null;
+  }
+
+  async expandTablePageSize() {
+    const dropdown = this.page.locator('.p-paginator .p-dropdown').first();
+    if (!(await dropdown.isVisible().catch(() => false))) {
+      return;
+    }
+    const current = ((await dropdown.innerText().catch(() => '')) || '').trim();
+    if (/\b(50|100)\b/.test(current)) {
+      return;
+    }
+    await dropdown.click();
+    const option = this.page.getByRole('option').filter({ hasText: /^(50|100)$/ }).last();
+    if (await option.isVisible().catch(() => false)) {
+      await option.click();
+      await this.page.waitForTimeout(800);
+    } else {
+      await this.page.keyboard.press('Escape');
+    }
+  }
+
+  private async goToFirstTablePage() {
+    const first = this.page.locator('.p-paginator-first').last();
+    if (!(await first.isVisible().catch(() => false))) {
+      return;
+    }
+    const firstClass = (await first.getAttribute('class')) || '';
+    if (firstClass.includes('p-disabled') || (await first.isDisabled().catch(() => false))) {
+      return;
+    }
+    await first.click();
+    await this.page.waitForTimeout(500);
+  }
+
+  private async goToNextTablePage() {
+    const next = this.page.locator('.p-paginator-next').last();
+    if (!(await next.isVisible().catch(() => false))) {
+      return false;
+    }
+    const nextClass = (await next.getAttribute('class')) || '';
+    if (nextClass.includes('p-disabled') || (await next.isDisabled().catch(() => false))) {
+      return false;
+    }
+    await next.click();
+    await this.page.waitForTimeout(500);
+    return true;
+  }
+
+  async readTraineeFromRow(row: Locator) {
+    const id = (await row.getByRole('cell').nth(0).innerText()).trim();
     const name = (await row.getByRole('cell').nth(1).innerText()).trim();
     const email = (await row.getByRole('cell').nth(3).innerText()).trim();
     const parts = name.split(/\s+/).filter(Boolean);
     return {
+      employeeId: id.replace(/\D/g, '') || id,
       firstName: parts[0] ?? name,
       lastName: parts.slice(1).join(' ') || parts[0] || name,
       email,
@@ -255,4 +400,20 @@ function shortAlphaId(length: number) {
     suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
   return suffix;
+}
+
+function isUsableListedTrainee(trainee: TraineeDetails) {
+  const first = trainee.firstName ?? '';
+  const last = trainee.lastName ?? '';
+  const email = trainee.email ?? '';
+  if (!/^[A-Za-z]+$/.test(first)) {
+    return false;
+  }
+  if (!last.split(/\s+/).every((part) => /^[A-Za-z]+$/.test(part))) {
+    return false;
+  }
+  if (!/@yopmail\.com$/i.test(email)) {
+    return false;
+  }
+  return !/(fsdf|asdf|testreport|vif|xxxx|dummy|reportingtest)/i.test(`${first}${last}${email}`);
 }

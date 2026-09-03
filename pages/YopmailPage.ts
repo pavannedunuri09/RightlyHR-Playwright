@@ -1,35 +1,39 @@
 import { type Page } from '@playwright/test';
 
+type MailMessage = {
+  id: string;
+  subject: string;
+  body: string;
+};
+
 export class YopmailPage {
   readonly page: Page;
+  private mailbox = '';
+  private cachedMail: MailMessage | null = null;
 
   constructor(page: Page) {
     this.page = page;
   }
 
   async openInbox(email: string) {
-    await this.page.goto('https://yopmail.com/');
-    await this.dismissConsent();
-
-    const login = this.page.getByRole('textbox', { name: 'Login' });
-    await login.waitFor({ state: 'visible', timeout: 20000 });
-    await login.fill(email);
-    await this.page.getByTitle('Check Inbox @yopmail.com').click();
-    await this.page.waitForTimeout(2000);
+    this.mailbox = mailboxFromEmail(email);
+    this.cachedMail = null;
+    await this.gotoInbox();
   }
 
-  async waitForMailSubject(fullName: string, timeoutMs = 90000) {
-    const expected = `RightlyHR - ${fullName}`;
+  async waitForMailSubject(fullName: string, timeoutMs = 180000) {
+    const pattern = namePattern(fullName);
     const deadline = Date.now() + timeoutMs;
+
     while (Date.now() < deadline) {
-      const subject = this.mailFrame().getByText(new RegExp(`RightlyHR - ${fullName}`));
-      if (await subject.first().isVisible().catch(() => false)) {
-        const text = (await subject.first().innerText()).trim();
-        console.log(`Mail subject: ${text}`);
-        return text || expected;
+      const mail = await this.findMailUi(pattern);
+      if (mail) {
+        this.cachedMail = mail;
+        console.log(`Mail subject: ${mail.subject}`);
+        return mail.subject;
       }
-      await this.refreshInbox();
-      await this.page.waitForTimeout(5000);
+      await this.reloadInbox();
+      await sleep(8000);
     }
     throw new Error(`Yopmail did not receive mail for ${fullName}`);
   }
@@ -42,43 +46,202 @@ export class YopmailPage {
     }
   }
 
-  async waitForRerequestMail(fullName: string, previousSubject: string, timeoutMs = 90000) {
+  async waitForRerequestMail(fullName: string, previousSubject: string, timeoutMs = 120000) {
+    const pattern = namePattern(fullName);
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      await this.refreshInbox();
-      await this.page.waitForTimeout(2000);
-      await this.openLatestInboxMail();
 
-      const subject = await this.readCurrentSubject(fullName);
-      const body = await this.mailFrame().locator('body').innerText().catch(() => '');
+    while (Date.now() < deadline) {
+      const mail = await this.findMailUi(pattern);
       if (
-        subject &&
-        (subject !== previousSubject || /Comments\s*:/i.test(body)) &&
-        /Comments\s*:|re-?request/i.test(`${subject}\n${body}`)
+        mail &&
+        (mail.subject !== previousSubject || /Comments\s*:/i.test(mail.body)) &&
+        /Comments\s*:|re-?request/i.test(`${mail.subject}\n${mail.body}`)
       ) {
-        console.log(`Mail subject: ${subject}`);
-        return subject;
+        this.cachedMail = mail;
+        console.log(`Mail subject: ${mail.subject}`);
+        return mail.subject;
       }
-      await this.page.waitForTimeout(5000);
+      await this.reloadInbox();
+      await sleep(8000);
     }
     throw new Error(`No re-request Yopmail message for ${fullName}`);
   }
 
-  async waitForNewMail(fullName: string, previousSubject: string, timeoutMs = 90000) {
+  async waitForMailMatching(pattern: RegExp, timeoutMs = 120000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      await this.refreshInbox();
-      await this.page.waitForTimeout(2000);
-      await this.openLatestInboxMail();
-
-      const subject = await this.readCurrentSubject(fullName);
-      if (subject && subject !== previousSubject && !/Request for Documents Upload/i.test(subject)) {
-        console.log(`Mail subject: ${subject}`);
-        return subject;
+      for (const mail of await this.listMailsUi()) {
+        const combined = `${mail.subject}\n${mail.body}`;
+        if (pattern.test(combined)) {
+          this.cachedMail = mail;
+          const subject = (await this.readCurrentSubjectFromBody(combined)) || mail.subject;
+          console.log(`Mail subject: ${subject.replace(/\s+/g, ' ').trim()}`);
+          return subject.replace(/\s+/g, ' ').trim();
+        }
       }
-      await this.page.waitForTimeout(5000);
+      await this.reloadInbox();
+      await sleep(8000);
+    }
+    throw new Error(`Yopmail did not receive mail matching ${pattern}`);
+  }
+
+  async waitForNewMail(fullName: string, previousSubject: string, timeoutMs = 120000) {
+    const pattern = namePattern(fullName);
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const mail = await this.findMailUi(pattern);
+      if (
+        mail &&
+        mail.subject !== previousSubject &&
+        !/Request for Documents Upload/i.test(mail.subject)
+      ) {
+        this.cachedMail = mail;
+        console.log(`Mail subject: ${mail.subject}`);
+        return mail.subject;
+      }
+      await this.reloadInbox();
+      await sleep(8000);
     }
     throw new Error(`No new Yopmail message after document submit for ${fullName}`);
+  }
+
+  async readCredentials() {
+    if (this.cachedMail) {
+      const parsed = parseCredentials(this.cachedMail.body);
+      if (parsed) {
+        console.log(`Yopmail username: ${parsed.username}`);
+        return parsed;
+      }
+    }
+
+    for (const mail of await this.listMailsUi()) {
+      const parsed = parseCredentials(mail.body);
+      if (parsed) {
+        this.cachedMail = mail;
+        console.log(`Yopmail username: ${parsed.username}`);
+        return parsed;
+      }
+    }
+
+    throw new Error('Could not read Username/Password from Yopmail');
+  }
+
+  async findCredentialsInInbox() {
+    return this.readCredentials();
+  }
+
+  async mailBody() {
+    if (this.cachedMail) {
+      return this.cachedMail.body.replace(/\s+/g, ' ').trim();
+    }
+    const messages = await this.listMailsUi();
+    return messages[0]?.body.replace(/\s+/g, ' ').trim() ?? '';
+  }
+
+  async openOnboardingPortal() {
+    if (!this.cachedMail) {
+      await this.listMailsUi();
+    }
+    const body = this.cachedMail?.body ?? '';
+    const portalUrl = extractPortalUrl(body);
+    if (portalUrl) {
+      const onboardingPage = await this.page.context().newPage();
+      await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
+      return onboardingPage;
+    }
+
+    const popupPromise = this.page.waitForEvent('popup');
+    const clickHere = this.mailFrame().getByRole('link', { name: 'Click here' });
+    const portalLink = this.mailFrame().getByRole('link', { name: /portal|onboarding|click here/i }).first();
+    if (await clickHere.isVisible().catch(() => false)) {
+      await clickHere.click();
+    } else {
+      await portalLink.click();
+    }
+    const onboardingPage = await popupPromise;
+    await onboardingPage.waitForLoadState('domcontentloaded');
+    return onboardingPage;
+  }
+
+  private async findMailUi(pattern: RegExp) {
+    for (const mail of await this.listMailsUi()) {
+      if (pattern.test(`${mail.subject}\n${mail.body}`)) {
+        return mail;
+      }
+    }
+    return null;
+  }
+
+  private async listMailsUi() {
+    await this.ensureInboxVisible();
+
+    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
+    const items = inbox.locator('button, .m, div[class*="m"]');
+    const count = await items.count();
+    const limit = count > 0 ? Math.min(count, 12) : 0;
+    const messages: MailMessage[] = [];
+
+    if (limit === 0) {
+      const inboxText = (await inbox.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (inboxText) {
+        await this.openLatestInboxMail();
+        const body = (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+        if (body) {
+          messages.push({ id: 'latest', subject: inboxText.slice(0, 120), body });
+        }
+      }
+      return messages;
+    }
+
+    for (let index = 0; index < limit; index += 1) {
+      const item = items.nth(index);
+      if (!(await item.isVisible().catch(() => false))) {
+        continue;
+      }
+      const preview = ((await item.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      await item.click();
+      await sleep(900);
+      const body = (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (!body) {
+        continue;
+      }
+      const subject = preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() || body.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() || preview.slice(0, 120);
+      messages.push({ id: `mail-${index}`, subject, body });
+    }
+
+    return messages;
+  }
+
+  private async gotoInbox() {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await this.page.goto(`https://yopmail.com/en/?login=${encodeURIComponent(this.mailbox)}`, {
+          waitUntil: 'domcontentloaded',
+        });
+        await this.dismissConsent();
+        await this.handleCaptchaIfVisible();
+        await this.waitForInboxReady();
+        return;
+      } catch (error) {
+        lastError = error;
+        console.log(`Yopmail inbox open attempt ${attempt + 1} failed: ${error}`);
+        await sleep(5000);
+      }
+    }
+    throw lastError;
+  }
+
+  private async reloadInbox() {
+    await this.gotoInbox();
+  }
+
+  private async ensureInboxVisible() {
+    if (!(await this.inboxReady())) {
+      await this.gotoInbox();
+    }
+    await this.handleCaptchaIfVisible();
   }
 
   private async openLatestInboxMail() {
@@ -86,48 +249,12 @@ export class YopmailPage {
     const firstMail = inbox.locator('button, .m, div[class*="m"]').first();
     if (await firstMail.isVisible().catch(() => false)) {
       await firstMail.click();
-      await this.page.waitForTimeout(1000);
+      await sleep(900);
     }
-  }
-
-  private async readCurrentSubject(fullName: string) {
-    const inMail = this.mailFrame().getByText(new RegExp(`RightlyHR - ${fullName}`));
-    if (await inMail.first().isVisible().catch(() => false)) {
-      return (await inMail.first().innerText()).trim();
-    }
-    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
-    const firstMail = inbox.locator('button, .m, div[class*="m"]').first();
-    return (await firstMail.innerText().catch(() => '')).trim().split('\n')[0];
-  }
-
-  async readCredentials() {
-    const body = (await this.mailFrame().locator('body').innerText()).replace(/\s+/g, ' ');
-    const username = body.match(/Username\s*:\s*(\S+)/i)?.[1];
-    const password = body.match(/Password\s*:\s*(\S+)/i)?.[1];
-    if (!username || !password) {
-      throw new Error(`Could not read Username/Password from Yopmail. Mail text: ${body}`);
-    }
-    console.log(`Yopmail username: ${username}`);
-    return { username, password };
-  }
-
-  async openOnboardingPortal() {
-    const popupPromise = this.page.waitForEvent('popup');
-    await this.mailFrame().getByRole('link', { name: 'Click here' }).click();
-    const onboardingPage = await popupPromise;
-    await onboardingPage.waitForLoadState('domcontentloaded');
-    return onboardingPage;
   }
 
   private mailFrame() {
     return this.page.frameLocator('iframe[name="ifmail"]');
-  }
-
-  private async refreshInbox() {
-    const refresh = this.page.locator('#refresh');
-    if (await refresh.isVisible().catch(() => false)) {
-      await refresh.click();
-    }
   }
 
   private async dismissConsent() {
@@ -136,4 +263,144 @@ export class YopmailPage {
       await consent.click();
     }
   }
+
+  private async handleCaptchaIfVisible() {
+    if (!(await this.hasCaptcha())) {
+      return;
+    }
+
+    console.log('Yopmail CAPTCHA detected — trying automated checkbox click...');
+    await this.tryClickRecaptcha();
+
+    const headed = process.env.HEADLESS !== 'true' && !(process.env.CI === 'true' || process.env.CI === '1');
+    if (headed) {
+      await this.page.bringToFront();
+      console.log('If CAPTCHA remains, click "I\'m not a robot" in the Yopmail tab.');
+    }
+
+    const timeoutMs = headed ? 180000 : 45000;
+    const cleared = await this.waitForCaptchaCleared(timeoutMs);
+    if (!cleared) {
+      throw new Error(
+        'Yopmail CAPTCHA blocked inbox access. Run with --headed and complete the checkbox, or retry after a short wait.',
+      );
+    }
+    console.log('Yopmail CAPTCHA cleared; continuing.');
+  }
+
+  private async hasCaptcha() {
+    if (await this.page.locator('#r_parent.r_popup, .r_popup').isVisible({ timeout: 500 }).catch(() => false)) {
+      return true;
+    }
+    const captchaText = this.page.getByText(/I'm not a robot|verify you are human|just a moment|checking your browser|complete the captcha|are you a robot/i);
+    return captchaText.first().isVisible({ timeout: 1000 }).catch(() => false);
+  }
+
+  private async tryClickRecaptcha() {
+    const popup = this.page.locator('#r_parent, .r_popup');
+    const popupClickTargets = [
+      popup.locator('input[type="checkbox"]'),
+      popup.locator('[role="checkbox"]'),
+      popup.getByText(/not a robot/i),
+      popup.locator('iframe').first(),
+    ];
+    for (const target of popupClickTargets) {
+      if (await target.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await target.click({ timeout: 3000 }).catch(() => {});
+        await sleep(1500);
+      }
+    }
+
+    for (const frame of this.page.frames()) {
+      if (!/recaptcha|challenges\.cloudflare|turnstile/i.test(frame.url())) {
+        continue;
+      }
+      const checkbox = frame.locator(
+        '#recaptcha-anchor, .recaptcha-checkbox-border, .ctp-checkbox-label, input[type="checkbox"], [role="checkbox"]',
+      ).first();
+      if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await checkbox.click({ timeout: 3000 }).catch(() => {});
+        await sleep(1500);
+      }
+    }
+  }
+
+  private async waitForCaptchaCleared(timeoutMs: number) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.inboxReady() && !(await this.hasCaptcha())) {
+        return true;
+      }
+      await this.tryClickRecaptcha();
+      await sleep(2000);
+    }
+    return false;
+  }
+
+  private async waitForInboxReady() {
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if (await this.inboxReady()) {
+        return;
+      }
+      await this.handleCaptchaIfVisible();
+      await sleep(1000);
+    }
+    throw new Error('Yopmail inbox did not load after login');
+  }
+
+  private async inboxReady() {
+    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
+    if (await inbox.locator('body').isVisible().catch(() => false)) {
+      return true;
+    }
+    return this.page.locator('#refresh').isVisible().catch(() => false);
+  }
+
+  private async readCurrentSubjectFromBody(combined: string) {
+    const rightly = combined.match(/RightlyHR[^\n]*/i);
+    if (rightly?.[0]) {
+      return rightly[0].trim();
+    }
+    const offer = combined.match(/[^\n]*Offer Letter[^\n]*/i);
+    return offer?.[0]?.trim();
+  }
+}
+
+function mailboxFromEmail(email: string) {
+  return email.includes('@') ? email.split('@')[0] : email;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function namePattern(fullName: string) {
+  const [first, ...rest] = fullName.trim().split(/\s+/);
+  const last = rest.join(' ');
+  return last
+    ? new RegExp(`RightlyHR[\\s\\S]*${escapeRegExp(first)}[\\s\\S]*${escapeRegExp(last)}`, 'i')
+    : new RegExp(`RightlyHR[\\s\\S]*${escapeRegExp(first)}`, 'i');
+}
+
+function parseCredentials(body: string) {
+  const username = body.match(/Username\s*:\s*(\S+)/i)?.[1];
+  const password = body.match(/Password\s*:\s*(\S+)/i)?.[1];
+  if (!username || !password) {
+    return null;
+  }
+  return { username, password };
+}
+
+function extractPortalUrl(body: string) {
+  const href = body.match(/href="([^"]+)"/i)?.[1];
+  if (href && /onboarding|portal|rightlyhr|cluster\.rightlyhr/i.test(href)) {
+    return href.replace(/&amp;/g, '&');
+  }
+  const url = body.match(/(https?:\/\/[^\s"'<>]+(?:onboarding|portal|pre-onboarding)[^\s"'<>]*)/i)?.[1];
+  return url?.replace(/&amp;/g, '&') ?? null;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -7,6 +7,7 @@ export class PreOnboardingPage {
   readonly loginButton: Locator;
   readonly invalidCredentialsMessage: Locator;
   readonly goToApplicationButton: Locator;
+  readonly offerLetterButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -17,6 +18,7 @@ export class PreOnboardingPage {
       /invalid|incorrect|wrong (email|mail|password|username|credentials)|unable to login|login failed/i,
     );
     this.goToApplicationButton = page.getByRole('button', { name: 'Go to Application' });
+    this.offerLetterButton = page.getByRole('button', { name: /Offer Letter/ });
   }
 
   async expectLoaded() {
@@ -40,7 +42,7 @@ export class PreOnboardingPage {
   }
 
   async expectLoggedIn() {
-    await expect(this.goToApplicationButton).toBeVisible({ timeout: 20000 });
+    await expect(this.goToApplicationButton.or(this.offerLetterButton).first()).toBeVisible({ timeout: 20000 });
   }
 
   async goToApplication() {

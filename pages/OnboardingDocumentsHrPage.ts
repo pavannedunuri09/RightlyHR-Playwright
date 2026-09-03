@@ -148,24 +148,17 @@ export class OnboardingDocumentsHrPage {
   }
 
   private async openRowAction(row: Locator, action: 'Verify' | 'Reject') {
-    const dropdown = row.locator('.dropdown > a, .dropdown.ng-star-inserted').first();
-    const actionCell = row.getByRole('cell').filter({ hasText: new RegExp(action) }).first();
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
 
-    if (await dropdown.isVisible().catch(() => false)) {
-      await dropdown.click();
-    } else {
-      await actionCell.click();
-    }
+    const kebab = row.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted').last();
+    await kebab.scrollIntoViewIfNeeded();
+    await kebab.waitFor({ state: 'visible', timeout: 10000 });
+    await kebab.click();
 
-    const menuItem = this.page
-      .locator('.dropdown-menu.show, .dropdown-menu')
-      .getByText(action, { exact: true })
-      .last();
-    if (await menuItem.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await menuItem.click();
-      return;
-    }
-
-    await this.page.getByText(action, { exact: true }).last().click();
+    const menuItem = this.page.locator('.dropdown-menu.show').getByText(action, { exact: true })
+      .or(this.page.getByText(action, { exact: true }).filter({ visible: true }));
+    await menuItem.last().waitFor({ state: 'visible', timeout: 8000 });
+    await menuItem.last().click();
   }
 }
