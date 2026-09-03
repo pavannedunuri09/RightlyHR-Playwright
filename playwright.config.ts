@@ -9,7 +9,13 @@ dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/codegen-wfh.ts', '**/codegen-wfh-settings.ts', '**/codegent-wfh.ts', '**/codegen-remote-login.ts'],
+  testIgnore: [
+    '**/codegen-wfh.ts',
+    '**/codegen-wfh-settings.ts',
+    '**/codegent-wfh.ts',
+    '**/codegen-remote-login.ts',
+    '**/codegen-onbehalf-remote-login.ts',
+  ],
   timeout: 120000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -51,6 +57,11 @@ export default defineConfig({
     {
       name: '05-wfh-settings',
       testMatch: /wfh-entitlement-criteria\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '06-onbehalf-remote-login',
+      testMatch: /on-behalf-remote-login\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
