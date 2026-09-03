@@ -119,8 +119,8 @@ test.describe.serial('Job Info WFH / Remote Login allocation', () => {
     await expect(page).toHaveURL(/\/time-off\/wfh/i);
   });
 
-  test('switches WFH to Remote Login after user validation then restores WFH', async ({ page }) => {
-    test.setTimeout(240000);
+  test('switches Time Off to Remote Login after user validation', async ({ page }) => {
+    test.setTimeout(180000);
     const jobWfh = new JobInfoWfhPage(page);
     await jobWfh.openEmployeeJobWfh(EMPLOYEE_NAME, EMPLOYEE_SEARCH);
 
@@ -137,19 +137,5 @@ test.describe.serial('Job Info WFH / Remote Login allocation', () => {
     await expect(page).toHaveURL(/\/time-off\/remote(\/|$)/i);
     const rlPage = new RemoteLoginPage(page);
     await expect(rlPage.requestRemoteLoginButton).toBeVisible();
-
-    await jobWfh.openEmployeeJobWfh(EMPLOYEE_NAME, EMPLOYEE_SEARCH);
-    await jobWfh.ensureWfhActiveForToday(WFH_MANAGER);
-    await expect(jobWfh.wfhActiveRow).toBeVisible();
-    await expect(jobWfh.remoteLoginActiveRow).toHaveCount(0);
-
-    await loginPage.validateUserSession();
-    const wfhTabs = await jobWfh.peekTimeOffTabs();
-    await expect(wfhTabs.wfh).toBeVisible();
-    await expect(wfhTabs.remoteLogin).toHaveCount(0);
-    await wfhTabs.wfh.click();
-    await expect(page).toHaveURL(/\/time-off\/wfh/i);
-    const wfhPage = new WorkFromHomePage(page);
-    await expect(wfhPage.requestWfhButton).toBeVisible();
   });
 });

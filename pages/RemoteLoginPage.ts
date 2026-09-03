@@ -352,15 +352,25 @@ export class RemoteLoginPage {
 
     const ensureFormOpen = async () => {
       const dialog = this.page.getByRole('dialog');
-      if (formOpen && (await dialog.isVisible().catch(() => false))) {
+      if (formOpen && (await this.workedDateInput.isVisible().catch(() => false))) {
         return dialog;
       }
-      await this.closeRequestDialogIfOpen();
-      if (!(await this.requestRemoteLoginButton.isVisible().catch(() => false))) {
-        await this.gotoWaitingForApproval();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await this.closeRequestDialogIfOpen();
+        if (!(await this.requestRemoteLoginButton.isVisible().catch(() => false))) {
+          await this.gotoWaitingForApproval();
+        }
+        await this.requestRemoteLoginButton.click();
+        try {
+          await this.workedDateInput.waitFor({ state: 'visible', timeout: 8000 });
+          formOpen = true;
+          return dialog;
+        } catch {
+          formOpen = false;
+          await this.page.keyboard.press('Escape');
+        }
       }
-      await this.requestRemoteLoginButton.click();
-      await dialog.waitFor({ state: 'visible', timeout: 15000 });
+      await this.workedDateInput.waitFor({ state: 'visible', timeout: 15000 });
       formOpen = true;
       return dialog;
     };
