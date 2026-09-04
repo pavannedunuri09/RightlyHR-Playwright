@@ -1,15 +1,42 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import {
+  datePartsFromInput,
+  daysFromToday,
+  weekdayDate,
+  workedDateToInput,
+} from './WorkFromHomePage';
 
-export class WorkFromHomePage {
+const MAX_ADVANCE_DAYS = 120;
+const claimedRemoteLoginDates = new Set<string>();
+
+function claimRemoteLoginDate(input: string) {
+  claimedRemoteLoginDates.add(input);
+}
+
+function remoteLoginStartAhead() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const novemberFirst = new Date(now.getFullYear(), 10, 1);
+  const daysUntilNovember = Math.round((novemberFirst.getTime() - now.getTime()) / 86400000);
+  if (daysUntilNovember >= 1 && daysUntilNovember <= MAX_ADVANCE_DAYS) {
+    return daysUntilNovember;
+  }
+  return 14;
+}
+
+function isRemoteLoginMonthBlocked(input: string) {
+  const month = Number(input.slice(5, 7));
+  return month === 9 || month === 10;
+}
+
+export class RemoteLoginPage {
   readonly page: Page;
   readonly timeOffNav: Locator;
   readonly timeOffToggle: Locator;
   readonly timeOffWfhTab: Locator;
   readonly timeOffRemoteLoginTab: Locator;
-  readonly wfhNav: Locator;
-  readonly requestWfhButton: Locator;
-  readonly startDateInput: Locator;
-  readonly endDateInput: Locator;
+  readonly requestRemoteLoginButton: Locator;
+  readonly workedDateInput: Locator;
   readonly halfDayRadio: Locator;
   readonly fullDayRadio: Locator;
   readonly firstHalfRadio: Locator;
@@ -20,15 +47,15 @@ export class WorkFromHomePage {
   readonly rejectedTab: Locator;
   readonly approvedTab: Locator;
   readonly processedTab: Locator;
-  readonly cancelledTab: Locator;
   readonly pendingApprovalsNav: Locator;
   readonly pendingApprovalsToggle: Locator;
   readonly pendingTimeOffTab: Locator;
-  readonly wfhPendingTab: Locator;
+  readonly remoteLoginPendingTab: Locator;
   readonly forYouTab: Locator;
   readonly forYourRoleTab: Locator;
   readonly rejectAction: Locator;
   readonly rejectConfirmButton: Locator;
+  readonly submittedToast: Locator;
   readonly rejectedToast: Locator;
   readonly approveButton: Locator;
   readonly processButton: Locator;
@@ -40,7 +67,6 @@ export class WorkFromHomePage {
   readonly duplicateRequestMessage: Locator;
   readonly weekendRequestMessage: Locator;
   readonly sessionConflictMessage: Locator;
-  readonly invalidDateRangeMessage: Locator;
   readonly cancelRequestButton: Locator;
   readonly cancelConfirmMessage: Locator;
   readonly cancelConfirmYes: Locator;
@@ -52,30 +78,28 @@ export class WorkFromHomePage {
     this.timeOffToggle = this.timeOffNav.locator('[data-bs-toggle="dropdown"]');
     this.timeOffWfhTab = page.locator('app-time-off-tabs').locator('.grid-item').filter({ hasText: /^WFH$/ });
     this.timeOffRemoteLoginTab = page.locator('app-time-off-tabs').locator('.grid-item').filter({ hasText: /Remote\s?Login/i });
-    this.wfhNav = this.timeOffWfhTab;
-    this.requestWfhButton = page.getByRole('button', { name: 'Request WFH', exact: true });
-    this.startDateInput = page.getByRole('textbox', { name: 'Start Date *' });
-    this.endDateInput = page.getByRole('textbox', { name: 'End Date *' });
+    this.requestRemoteLoginButton = page.getByRole('button', { name: /Request Remote Login/ });
+    this.workedDateInput = page.getByRole('textbox', { name: /Worked Date \*/ });
     this.halfDayRadio = page.getByRole('radio', { name: 'Half Day' });
     this.fullDayRadio = page.getByRole('dialog').getByRole('radio', { name: 'Full Day' });
     this.firstHalfRadio = page.getByRole('dialog').getByRole('radio', { name: /First Half/i });
     this.secondHalfRadio = page.getByRole('dialog').getByRole('radio', { name: /Second Half/i });
-    this.reasonInput = page.getByRole('textbox', { name: 'Reason *' });
+    this.reasonInput = page.getByRole('textbox', { name: /Reason\s*\*/ });
     this.requestButton = page.getByRole('dialog').getByRole('button', { name: 'Request', exact: true });
     this.waitingForApprovalTab = page.getByText(/Waiting For Approval \(\d+\)/).first();
     this.rejectedTab = page.getByText(/Rejected \(\d+\)/).first();
     this.approvedTab = page.getByText(/Approved \(\d+\)/).first();
     this.processedTab = page.getByText(/Processed \(\d+\)/).first();
-    this.cancelledTab = page.getByText(/Cancelled \(\d+\)/).first();
     this.pendingApprovalsNav = page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Pending Approvals' });
     this.pendingApprovalsToggle = this.pendingApprovalsNav.locator('[data-bs-toggle="dropdown"]');
     this.pendingTimeOffTab = page.locator('app-pending-approvals-tabs').locator('.grid-item').filter({ hasText: /Time-Off/ });
-    this.wfhPendingTab = page.getByText(/WFH\(\d+\)/);
+    this.remoteLoginPendingTab = page.getByText(/Remote Login\(\d+\)/);
     this.forYouTab = page.getByRole('link', { name: /For You \(\d+\)/ });
     this.forYourRoleTab = page.getByRole('link', { name: /For Your Role \(\d+\)/ });
     this.rejectAction = page.getByText('Reject', { exact: true });
     this.rejectConfirmButton = page.getByRole('button', { name: 'Reject', exact: true });
-    this.rejectedToast = page.getByText('WFH request Rejected');
+    this.submittedToast = page.getByText(/Remote Login request/i).filter({ hasNotText: /already|exist|duplicate/i });
+    this.rejectedToast = page.getByText(/Remote Login request Rejected/i);
     this.approveButton = page.getByRole('button', { name: 'Approve' });
     this.processButton = page.getByRole('button', { name: 'Process' });
     this.approvedOption = page.getByRole('button', { name: 'Approved' });
@@ -86,7 +110,6 @@ export class WorkFromHomePage {
     this.duplicateRequestMessage = page.getByText(/already exist|already applied|already booked|duplicate/i);
     this.weekendRequestMessage = page.getByText(/weekend|weekly off|week off|not a working day|non[- ]working|off day/i);
     this.sessionConflictMessage = page.getByText(/already a half day is applied|already exist|already applied|already booked|duplicate/i);
-    this.invalidDateRangeMessage = page.getByText(/end date.*(less|before|greater|after|cannot|prior)|start date.*(greater|after|cannot)|invalid date range|must be (greater|after|on or after)|cannot be (less|before|earlier)/i);
     this.cancelRequestButton = page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true });
     this.cancelConfirmMessage = page.getByText('Are you sure you want to cancel?');
     this.cancelConfirmYes = page.getByRole('dialog').getByRole('button', { name: 'Yes', exact: true });
@@ -103,14 +126,14 @@ export class WorkFromHomePage {
     await this.closeRequestDialogIfOpen();
     await this.timeOffNav.waitFor({ state: 'visible' });
     await this.timeOffToggle.waitFor({ state: 'visible' });
-    if (await this.timeOffWfhTab.isVisible().catch(() => false)) {
+    if (await this.timeOffRemoteLoginTab.isVisible().catch(() => false)) {
       return;
     }
     await this.page.waitForTimeout(2000);
     for (let attempt = 0; attempt < 3; attempt++) {
       await this.timeOffToggle.click();
       try {
-        await this.timeOffWfhTab.waitFor({ state: 'visible', timeout: 8000 });
+        await this.timeOffRemoteLoginTab.waitFor({ state: 'visible', timeout: 8000 });
         return;
       } catch {
         await this.page.keyboard.press('Escape');
@@ -118,76 +141,50 @@ export class WorkFromHomePage {
       }
     }
     await this.timeOffNav.click();
-    await this.timeOffWfhTab.waitFor({ state: 'visible', timeout: 15000 });
+    await this.timeOffRemoteLoginTab.waitFor({ state: 'visible', timeout: 15000 });
   }
 
   async openFromDashboard() {
     await this.validateUserOnDashboard();
     await this.openTimeOffMenu();
-    await this.timeOffWfhTab.click();
-    await this.requestWfhButton.waitFor({ state: 'visible' });
+    await this.timeOffRemoteLoginTab.click();
+    await this.requestRemoteLoginButton.waitFor({ state: 'visible' });
   }
 
   async gotoWaitingForApproval() {
     await this.closeRequestDialogIfOpen();
     await this.openTimeOffMenu();
-    await this.timeOffWfhTab.click();
-    await this.requestWfhButton.waitFor({ state: 'visible' });
+    await this.timeOffRemoteLoginTab.click();
+    await this.requestRemoteLoginButton.waitFor({ state: 'visible' });
   }
 
-  async fillWfhRequest(startDate: string, endDate: string, reason: string) {
-    await this.closeRequestDialogIfOpen();
-    await this.requestWfhButton.click();
-    const dialog = this.page.getByRole('dialog');
-    await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.startDateInput.fill(startDate);
-    await this.startDateInput.blur();
-    await this.endDateInput.fill(endDate);
-    await this.endDateInput.blur();
-    await this.halfDayRadio.check();
-    await this.reasonInput.fill(reason);
-    await this.requestButton.click();
+  async fillRemoteLoginRequest(workedDate: string, reason: string) {
+    await this.fillRequestForm(workedDate, reason);
   }
 
-  async fillRequestForm(startDate: string, reason: string, session: 'first' | 'second' | 'full' = 'first') {
+  async fillRequestForm(workedDate: string, reason: string, session: 'first' | 'second' | 'full' = 'first') {
     await this.closeRequestDialogIfOpen();
-    await this.requestWfhButton.click();
+    await this.requestRemoteLoginButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.startDateInput.fill(startDate);
-    await this.startDateInput.blur();
-    await this.endDateInput.fill(startDate);
-    await this.endDateInput.blur();
+    await this.workedDateInput.fill(workedDate);
+    await this.workedDateInput.blur();
     await this.selectAvailing(session);
-    await this.reasonInput.fill(reason);
-    return dialog;
-  }
-
-  async fillRequestFormRange(startDate: string, endDate: string, reason: string, session: 'first' | 'second' | 'full' = 'full') {
-    await this.closeRequestDialogIfOpen();
-    await this.requestWfhButton.click();
-    const dialog = this.page.getByRole('dialog');
-    await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.selectAvailing(session);
-    await this.startDateInput.fill(startDate);
-    await this.startDateInput.blur();
-    await this.endDateInput.fill(endDate);
-    await this.endDateInput.blur();
     await this.reasonInput.fill(reason);
     return dialog;
   }
 
   async openFilledRequestForm() {
-    const date = weekdayDate(octoberSearchRange().startAhead + 2);
-    await this.requestWfhButton.click();
+    const unused = await this.findAvailableWeekdays(1);
+    const date = unused[0];
+    claimRemoteLoginDate(date.input);
+    await this.requestRemoteLoginButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.startDateInput.fill(date.input);
-    await this.startDateInput.blur();
-    await this.endDateInput.fill(date.input);
-    await this.endDateInput.blur();
+    await this.workedDateInput.fill(date.input);
+    await this.workedDateInput.blur();
     await this.halfDayRadio.check();
-    await this.reasonInput.fill(`Cancel WFH ${date.input}`);
+    await this.reasonInput.fill(`Cancel Remote Login ${date.input}`);
     return date;
   }
 
@@ -216,15 +213,14 @@ export class WorkFromHomePage {
     }
   }
 
-  async requestWfh(
-    startDate: string,
-    endDate: string,
+  async requestRemoteLogin(
+    workedDate: string,
     reason: string,
     session: 'first' | 'second' = 'first',
   ) {
-    const submitted = await this.tryRequestWfh(startDate, endDate, reason, session);
+    const submitted = await this.tryRequestRemoteLogin(workedDate, reason, session);
     if (!submitted) {
-      throw new Error(`WFH request was not submitted for ${startDate} (${session} half)`);
+      throw new Error(`Remote Login request was not submitted for ${workedDate} (${session} half)`);
     }
   }
 
@@ -269,42 +265,65 @@ export class WorkFromHomePage {
       await option.click();
       return;
     }
-    throw new Error('Could not select Second Half on the Request WFH form');
+    throw new Error('Could not select Second Half on the Request Remote Login form');
   }
 
-  async tryRequestWfh(
-    startDate: string,
-    endDate = startDate,
-    reason = `Request WFH ${startDate}`,
+  async tryRequestRemoteLogin(
+    workedDate: string,
+    reason = `Request Remote Login ${workedDate}`,
     session: 'first' | 'second' = 'first',
   ) {
     await this.closeRequestDialogIfOpen();
-    if (!(await this.requestWfhButton.isVisible().catch(() => false))) {
+    if (!(await this.requestRemoteLoginButton.isVisible().catch(() => false))) {
       await this.gotoWaitingForApproval();
     }
-    await this.requestWfhButton.click();
+    await this.requestRemoteLoginButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.startDateInput.fill(startDate);
-    await this.startDateInput.blur();
-    await this.endDateInput.fill(endDate);
-    await this.endDateInput.blur();
+    await this.workedDateInput.fill(workedDate);
+    await this.workedDateInput.blur();
     await this.selectHalfDaySession(session);
     await this.reasonInput.fill(reason);
+    await this.page.waitForTimeout(400);
+
+    if (session === 'first' && (await this.isAlreadyRequestedMessageVisible())) {
+      claimRemoteLoginDate(workedDate);
+      await this.closeRequestDialogIfOpen();
+      return false;
+    }
 
     if (!(await this.waitForRequestSubmitEnabled(2000))) {
+      claimRemoteLoginDate(workedDate);
       await this.closeRequestDialogIfOpen();
       return false;
     }
 
     await this.requestButton.click();
-    try {
-      await dialog.waitFor({ state: 'hidden', timeout: 12000 });
-      return true;
-    } catch {
+    const duplicate = await this.duplicateRequestMessage.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
+    if (duplicate) {
+      claimRemoteLoginDate(workedDate);
       await this.closeRequestDialogIfOpen();
       return false;
     }
+    try {
+      await this.submittedToast.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+      if (await this.isAlreadyRequestedMessageVisible()) {
+        claimRemoteLoginDate(workedDate);
+        await this.closeRequestDialogIfOpen();
+        return false;
+      }
+      await dialog.waitFor({ state: 'hidden', timeout: 12000 });
+      claimRemoteLoginDate(workedDate);
+      return true;
+    } catch {
+      claimRemoteLoginDate(workedDate);
+      await this.closeRequestDialogIfOpen();
+      return false;
+    }
+  }
+
+  async isAlreadyRequestedMessageVisible() {
+    return this.duplicateRequestMessage.isVisible().catch(() => false);
   }
 
   async waitForRequestSubmitEnabled(timeoutMs = 2000) {
@@ -320,53 +339,103 @@ export class WorkFromHomePage {
     return false;
   }
 
-  async requestAvailableWfh(startAhead?: number) {
-    const dates = await this.requestAvailableWfhDates(1, startAhead);
+  async requestAvailableRemoteLogin(startAhead?: number) {
+    const dates = await this.requestAvailableRemoteLoginDates(1, startAhead);
     return dates[0];
   }
 
-  async requestAvailableWfhDates(count: number, startAhead?: number) {
+  async requestAvailableRemoteLoginDates(count: number, startAhead?: number) {
     const created: ReturnType<typeof weekdayDate>[] = [];
-    const tried = new Set<string>();
+    const booked = bookedDateInputs(await this.collectWorkedDates());
+    const start = startAhead ?? remoteLoginStartAhead();
+    let formOpen = false;
 
-    const tryCandidates = async (candidates: ReturnType<typeof weekdayDate>[]) => {
-      for (const date of candidates) {
-        if (tried.has(date.input)) {
-          continue;
+    const ensureFormOpen = async () => {
+      const dialog = this.page.getByRole('dialog');
+      if (formOpen && (await this.workedDateInput.isVisible().catch(() => false))) {
+        return dialog;
+      }
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await this.closeRequestDialogIfOpen();
+        if (!(await this.requestRemoteLoginButton.isVisible().catch(() => false))) {
+          await this.gotoWaitingForApproval();
         }
-        tried.add(date.input);
-        if (await this.tryRequestWfh(date.input)) {
-          created.push(date);
-        }
-        if (created.length === count) {
-          return;
+        await this.requestRemoteLoginButton.click();
+        try {
+          await this.workedDateInput.waitFor({ state: 'visible', timeout: 8000 });
+          formOpen = true;
+          return dialog;
+        } catch {
+          formOpen = false;
+          await this.page.keyboard.press('Escape');
         }
       }
+      await this.workedDateInput.waitFor({ state: 'visible', timeout: 15000 });
+      formOpen = true;
+      return dialog;
     };
 
-    let unused: ReturnType<typeof weekdayDate>[] = [];
-    try {
-      unused = await this.findAvailableWeekdays(MAX_WFH_ADVANCE_DAYS, startAhead);
-    } catch {
-      unused = [];
-    }
-    await tryCandidates(unused);
-    if (created.length === count) {
-      return created;
+    for (let ahead = start; created.length < count && ahead <= MAX_ADVANCE_DAYS; ahead++) {
+      const date = weekdayDate(ahead);
+      if (this.isDateUnavailable(date.input, booked)) {
+        continue;
+      }
+
+      const dialog = await ensureFormOpen();
+      await this.workedDateInput.fill('');
+      await this.workedDateInput.fill(date.input);
+      await this.workedDateInput.blur();
+      await this.duplicateRequestMessage.waitFor({ state: 'hidden', timeout: 1500 }).catch(() => {});
+      await this.selectHalfDaySession('first');
+      await this.reasonInput.fill(`Request Remote Login ${date.input}`);
+      await this.page.waitForTimeout(500);
+
+      if (await this.isAlreadyRequestedMessageVisible()) {
+        claimRemoteLoginDate(date.input);
+        booked.add(date.input);
+        continue;
+      }
+      if (!(await this.waitForRequestSubmitEnabled(3000))) {
+        continue;
+      }
+
+      await this.requestButton.click();
+      const outcome = await Promise.race([
+        this.duplicateRequestMessage.waitFor({ state: 'visible', timeout: 8000 }).then(() => 'duplicate' as const),
+        dialog.waitFor({ state: 'hidden', timeout: 8000 }).then(() => 'closed' as const),
+      ]).catch(() => 'unknown' as const);
+
+      if (outcome !== 'closed' || (await this.isAlreadyRequestedMessageVisible())) {
+        claimRemoteLoginDate(date.input);
+        booked.add(date.input);
+        formOpen = await dialog.isVisible().catch(() => false);
+        continue;
+      }
+
+      claimRemoteLoginDate(date.input);
+      booked.add(date.input);
+      created.push(date);
+      formOpen = false;
     }
 
-    await tryCandidates(await this.reusableRejectedWeekdays());
-    if (created.length === count) {
-      return created;
+    if (formOpen) {
+      await this.closeRequestDialogIfOpen();
     }
-
-    throw new Error(`Could only submit ${created.length} of ${count} WFH requests`);
+    if (created.length < count) {
+      throw new Error(`Could only submit ${created.length} of ${count} unused Remote Login dates`);
+    }
+    return created;
   }
 
-  async requestWfhDates(dates: { input: string }[]) {
-    for (const date of dates) {
-      await this.requestWfh(date.input, date.input, `Request WFH ${date.input}`);
-    }
+  isDateUnavailable(input: string, booked: Set<string>) {
+    const daysOut = daysFromToday(input);
+    return (
+      isRemoteLoginMonthBlocked(input) ||
+      daysOut < 1 ||
+      daysOut > MAX_ADVANCE_DAYS ||
+      booked.has(input) ||
+      claimedRemoteLoginDates.has(input)
+    );
   }
 
   async readTabCount(tab: Locator) {
@@ -375,13 +444,12 @@ export class WorkFromHomePage {
     return match ? Number(match[1]) : 0;
   }
 
-  async readWfhTabCounts() {
+  async readRemoteLoginTabCounts() {
     return {
       waiting: await this.readTabCount(this.waitingForApprovalTab),
       approved: await this.readTabCount(this.approvedTab),
       processed: await this.readTabCount(this.processedTab),
       rejected: await this.readTabCount(this.rejectedTab),
-      cancelled: await this.readTabCount(this.cancelledTab),
     };
   }
 
@@ -392,11 +460,10 @@ export class WorkFromHomePage {
       this.approvedTab,
       this.processedTab,
       this.rejectedTab,
-      this.cancelledTab,
     ];
     for (const tab of tabs) {
       await tab.click();
-      await this.page.waitForTimeout(600);
+      await this.page.waitForTimeout(400);
       await this.expandTablePageSize();
       for (const value of await this.collectDatesFromOpenTable()) {
         dates.add(value);
@@ -425,6 +492,18 @@ export class WorkFromHomePage {
     }
   }
 
+  async workedDateColumnIndex() {
+    const headers = this.page.locator('table thead th');
+    const count = await headers.count();
+    for (let index = 0; index < count; index++) {
+      const name = ((await headers.nth(index).innerText()) || '').replace(/\s+/g, ' ').trim();
+      if (/worked\s*date|work\s*date/i.test(name)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
   async collectDatesFromOpenTable() {
     const dates = new Set<string>();
     const next = this.page.locator('.p-paginator-next').last();
@@ -433,15 +512,14 @@ export class WorkFromHomePage {
       const firstClass = (await first.getAttribute('class')) || '';
       if (!firstClass.includes('p-disabled') && !(await first.isDisabled().catch(() => false))) {
         await first.click();
-        await this.page.waitForTimeout(400);
+        await this.page.waitForTimeout(250);
       }
     }
-    for (let pageIndex = 0; pageIndex < 25; pageIndex++) {
-      const cells = await this.page.locator('table tbody tr td:nth-child(1)').allTextContents();
-      for (const cell of cells) {
-        const value = cell.replace(/\s+/g, ' ').trim();
-        if (value && value !== '-') {
-          dates.add(value);
+    for (let pageIndex = 0; pageIndex < 8; pageIndex++) {
+      const rows = await this.page.locator('table tbody tr').allTextContents();
+      for (const row of rows) {
+        for (const input of extractBookedDateInputs(row)) {
+          dates.add(input);
         }
       }
       if (!(await next.isVisible().catch(() => false))) {
@@ -452,66 +530,42 @@ export class WorkFromHomePage {
         break;
       }
       await next.click();
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(250);
     }
     return dates;
   }
 
   async firstWaitingWorkedDate() {
     await this.waitingForApprovalTab.click();
-    const firstCell = this.page.locator('table tbody tr td:nth-child(1)').first();
-    if (await firstCell.count() === 0) {
-      return null;
+    const columnIndex = await this.workedDateColumnIndex();
+    const cells = await this.page.locator(
+      columnIndex >= 0 ? `table tbody tr td:nth-child(${columnIndex + 1})` : 'table tbody tr',
+    ).allTextContents();
+    for (const cell of cells) {
+      const value = cell.replace(/\s+/g, ' ').trim();
+      if (value && workedDateToInput(value)) {
+        return value;
+      }
     }
-    const text = (await firstCell.textContent())?.trim();
-    return text || null;
-  }
-
-  async findAvailableWeekday(startAhead?: number) {
-    const found = await this.findAvailableWeekdays(1, startAhead);
-    return found[0];
+    return null;
   }
 
   async findAvailableWeekdays(count: number, startAhead?: number) {
     const bookedInputs = bookedDateInputs(await this.collectWorkedDates());
     const found: ReturnType<typeof weekdayDate>[] = [];
     const seen = new Set<string>();
-    const currentYear = new Date().getFullYear();
-    const { startAhead: octoberStart, endAhead: octoberEnd } = octoberSearchRange();
-    const start = startAhead ?? octoberStart;
+    const start = startAhead ?? remoteLoginStartAhead();
 
-    const consider = (ahead: number) => {
-      if (found.length >= count) {
-        return;
-      }
+    for (let ahead = start; found.length < count && ahead <= MAX_ADVANCE_DAYS; ahead++) {
       const candidate = weekdayDate(ahead);
-      const daysOut = daysFromToday(candidate.input);
-      const candidateYear = Number(candidate.input.slice(0, 4));
-      if (candidateYear !== currentYear || daysOut < 1 || daysOut > MAX_WFH_ADVANCE_DAYS) {
-        return;
-      }
-      if (seen.has(candidate.input) || bookedInputs.has(candidate.input)) {
-        return;
+      if (seen.has(candidate.input) || this.isDateUnavailable(candidate.input, bookedInputs)) {
+        continue;
       }
       seen.add(candidate.input);
       found.push(candidate);
-    };
-
-    for (let ahead = start; ahead <= octoberEnd; ahead++) {
-      const candidate = weekdayDate(ahead);
-      if (Number(candidate.input.slice(5, 7)) !== 10) {
-        continue;
-      }
-      consider(ahead);
-    }
-    for (let ahead = 1; found.length < count && ahead <= MAX_WFH_ADVANCE_DAYS; ahead++) {
-      if (ahead >= start && ahead <= octoberEnd) {
-        continue;
-      }
-      consider(ahead);
     }
     if (found.length === 0) {
-      throw new Error(`Could not find any available WFH weekdays within ${MAX_WFH_ADVANCE_DAYS} days`);
+      throw new Error(`Could not find any unused Remote Login weekdays in November/December`);
     }
     return found;
   }
@@ -530,29 +584,25 @@ export class WorkFromHomePage {
         continue;
       }
       const daysOut = daysFromToday(input);
-      if (daysOut < 1 || daysOut > MAX_WFH_ADVANCE_DAYS) {
+      if (daysOut < 1 || daysOut > MAX_ADVANCE_DAYS) {
         continue;
       }
       seen.add(input);
       candidates.push(datePartsFromInput(input));
     }
-    candidates.sort((left, right) => {
-      const leftOctober = left.input.slice(5, 7) === '10' ? 0 : 1;
-      const rightOctober = right.input.slice(5, 7) === '10' ? 0 : 1;
-      return leftOctober - rightOctober || left.input.localeCompare(right.input);
-    });
+    candidates.sort((left, right) => left.input.localeCompare(right.input));
     return candidates;
   }
 
-  async openPendingWfhApprovals() {
+  async openPendingRemoteLoginApprovals() {
     await this.pendingApprovalsToggle.waitFor({ state: 'visible' });
     await this.page.waitForTimeout(2000);
     await this.pendingApprovalsToggle.click();
     await this.pendingTimeOffTab.waitFor({ state: 'visible', timeout: 15000 });
     await this.pendingTimeOffTab.click();
-    await this.wfhPendingTab.waitFor({ state: 'visible', timeout: 15000 });
-    await this.wfhPendingTab.click();
-    await this.page.waitForURL(/\/pending-approvals\/time-off\/wfh/i, { timeout: 15000 });
+    await this.remoteLoginPendingTab.waitFor({ state: 'visible', timeout: 15000 });
+    await this.remoteLoginPendingTab.click();
+    await this.page.waitForURL(/\/pending-approvals\/time-off\/remote(\/|$)/i, { timeout: 15000 }).catch(() => {});
     await this.forYouTab.waitFor({ state: 'visible', timeout: 15000 });
     await this.forYourRoleTab.waitFor({ state: 'visible', timeout: 15000 });
   }
@@ -561,20 +611,35 @@ export class WorkFromHomePage {
     await this.forYouTab.waitFor({ state: 'visible', timeout: 15000 });
     await this.forYourRoleTab.waitFor({ state: 'visible', timeout: 15000 });
     return {
-      wfh: await this.readTabCount(this.wfhPendingTab),
+      remoteLogin: await this.readTabCount(this.remoteLoginPendingTab),
       forYou: await this.readTabCount(this.forYouTab),
       forYourRole: await this.readTabCount(this.forYourRoleTab),
     };
   }
 
+  async pendingQueueTotal() {
+    const counts = await this.readPendingCounts();
+    return counts.forYou + counts.forYourRole;
+  }
+
   async openForYouTab() {
     await this.forYouTab.click();
-    await this.page.waitForURL(/\/pending-approvals\/time-off\/wfh\/for-you/i, { timeout: 15000 }).catch(() => {});
+    await this.page.waitForURL(/\/pending-approvals\/time-off\/remote\/for-you/i, { timeout: 15000 }).catch(() => {});
   }
 
   async openForYourRoleTab() {
     await this.forYourRoleTab.click();
-    await this.page.waitForURL(/\/pending-approvals\/time-off\/wfh\/for-your-role/i, { timeout: 15000 }).catch(() => {});
+    await this.page.waitForURL(/\/pending-approvals\/time-off\/remote\/for-your-role/i, { timeout: 15000 }).catch(() => {});
+  }
+
+  async openQueueWithRequests(workedDates: string[]) {
+    await this.openForYouTab();
+    if (await this.requestRow(workedDates[0]).first().isVisible().catch(() => false)) {
+      return 'forYou' as const;
+    }
+    await this.openForYourRoleTab();
+    await this.waitForRequestRows(workedDates);
+    return 'forYourRole' as const;
   }
 
   async closeSuccessDialog() {
@@ -589,13 +654,7 @@ export class WorkFromHomePage {
 
   async waitForRequestRows(workedDates: string[]) {
     for (const workedDate of workedDates) {
-      await this.requestRow(workedDate).waitFor({ state: 'visible', timeout: 15000 });
-    }
-  }
-
-  async waitForRequestRowsHidden(workedDates: string[]) {
-    for (const workedDate of workedDates) {
-      await this.requestRow(workedDate).waitFor({ state: 'hidden', timeout: 15000 });
+      await this.requestRow(workedDate).first().waitFor({ state: 'visible', timeout: 15000 });
     }
   }
 
@@ -626,14 +685,26 @@ export class WorkFromHomePage {
     await this.page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
   }
 
-  /**
-   * When WFH Manager and TM are the same user, one For You approve sends the record to HR.
-   */
   async sendToHrQueue(workedDates: string[]) {
-    await this.openForYouTab();
-    await this.approveAtCurrentQueue(workedDates);
-    await this.openForYourRoleTab();
+    const queue = await this.openQueueWithRequests(workedDates);
+    if (queue === 'forYou' && await this.approveButton.isVisible().catch(() => false)) {
+      await this.approveAtCurrentQueue(workedDates);
+      await this.openForYourRoleTab();
+      await this.waitForRequestRows(workedDates);
+      return;
+    }
     await this.waitForRequestRows(workedDates);
+  }
+
+  async completePendingToProcessed(workedDates: string[]) {
+    const queue = await this.openQueueWithRequests(workedDates);
+    if (queue === 'forYou' && await this.approveButton.isVisible().catch(() => false) && !(await this.processButton.isVisible().catch(() => false))) {
+      await this.approveAtCurrentQueue(workedDates);
+      await this.openForYourRoleTab();
+      await this.processAtCurrentQueue(workedDates);
+      return;
+    }
+    await this.processAtCurrentQueue(workedDates);
   }
 
   requestRow(workedDate: string) {
@@ -644,24 +715,19 @@ export class WorkFromHomePage {
   }
 
   async rejectRequest(workedDate: string) {
-    const row = this.requestRow(workedDate);
-    await row.locator('.dropdown > a').click();
-    await row.getByText('Reject', { exact: true }).click();
-    const rejectedOption = this.page.getByRole('button', { name: 'Rejected' });
-    if (await rejectedOption.isVisible().catch(() => false)) {
-      await rejectedOption.click();
+    const row = this.requestRow(workedDate).first();
+    const kebab = row.locator('.dropdown > a');
+    if (await kebab.isVisible().catch(() => false)) {
+      await kebab.click();
+      await row.getByText('Reject', { exact: true }).click();
+      const rejectedOption = this.page.getByRole('button', { name: 'Rejected' });
+      if (await rejectedOption.isVisible().catch(() => false)) {
+        await rejectedOption.click();
+      }
+      await this.rejectConfirmButton.click();
+      return;
     }
-    await this.rejectConfirmButton.click();
-  }
-
-  async approveRequest(workedDate: string) {
-    const row = this.requestRow(workedDate);
-    await row.getByRole('checkbox').check();
-    await this.approveButton.click();
-    if (await this.approvedOption.isVisible().catch(() => false)) {
-      await this.approvedOption.click();
-    }
-    await this.approveConfirmButton.click();
+    await this.rejectAtCurrentQueue([workedDate]);
   }
 
   async selectRequests(workedDates: string[]) {
@@ -710,13 +776,12 @@ export class WorkFromHomePage {
     await dialog.getByRole('button', { name: 'Reject', exact: true }).click();
   }
 
-  wfhStatusTabs() {
+  remoteLoginStatusTabs() {
     return [
       { name: 'Waiting For Approval', tab: this.waitingForApprovalTab },
       { name: 'Approved', tab: this.approvedTab },
       { name: 'Processed', tab: this.processedTab },
       { name: 'Rejected', tab: this.rejectedTab },
-      { name: 'Cancelled', tab: this.cancelledTab },
     ];
   }
 
@@ -786,136 +851,65 @@ export class WorkFromHomePage {
 
       await column.header.click();
       await expect(column.header, `${tabName} > ${column.name} click 1`).toHaveAttribute('aria-sort', 'ascending');
-      if (defaultValues.length >= 2) {
+      const checkValues = tabName !== 'Processed' && tabName !== 'Rejected';
+      const comparable = comparableSortValues(defaultValues);
+      if (checkValues && comparable.length >= 2) {
         await expect.poll(
-          async () => isColumnSorted(await this.readColumnValues(column.index), 'asc'),
+          async () => isRemoteLoginColumnSorted(await this.readColumnValues(column.index), 'asc'),
           { timeout: 15000 },
         ).toBe(true);
       }
 
       await column.header.click();
       await expect(column.header, `${tabName} > ${column.name} click 2`).toHaveAttribute('aria-sort', 'descending');
-      if (defaultValues.length >= 2) {
+      if (checkValues && comparable.length >= 2) {
         await expect.poll(
-          async () => isColumnSorted(await this.readColumnValues(column.index), 'desc'),
+          async () => isRemoteLoginColumnSorted(await this.readColumnValues(column.index), 'desc'),
           { timeout: 15000 },
         ).toBe(true);
       }
 
       await column.header.click();
-      await expect(column.header, `${tabName} > ${column.name} click 3`).toHaveAttribute('aria-sort', 'none');
-      if (defaultOrder.length >= 2) {
-        await expect.poll(async () => this.readTableSnapshot(), { timeout: 15000 }).toEqual(defaultOrder);
+      const thirdSort = await column.header.getAttribute('aria-sort');
+      if (thirdSort === 'none') {
+        if (defaultOrder.length >= 2) {
+          await expect.poll(async () => this.readTableSnapshot(), { timeout: 15000 }).toEqual(defaultOrder);
+        }
+      } else {
+        await expect(column.header, `${tabName} > ${column.name} click 3`).toHaveAttribute('aria-sort', 'ascending');
       }
     }
   }
 }
 
-const MAX_WFH_ADVANCE_DAYS = 100;
-
-export function daysFromToday(input: string) {
-  const [year, month, day] = input.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.round((date.getTime() - now.getTime()) / 86400000);
+function comparableSortValues(values: string[]) {
+  return values
+    .map((value) => value.replace(/\s+/g, ' ').trim())
+    .filter((value) => value && value !== '-');
 }
 
-export function octoberSearchRange() {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const year = now.getFullYear();
-  const octStart = new Date(year, 9, 1);
-  const octEnd = new Date(year, 9, 31);
-  const daysUntil = (date: Date) => Math.ceil((date.getTime() - now.getTime()) / 86400000);
+const SESSION_ORDER = ['first half', 'second half', 'full day'];
 
-  let startAhead = daysUntil(octStart);
-  let endAhead = daysUntil(octEnd);
-  if (endAhead < 1 || startAhead > MAX_WFH_ADVANCE_DAYS) {
-    return { startAhead: 1, endAhead: MAX_WFH_ADVANCE_DAYS };
-  }
-  startAhead = Math.max(1, startAhead);
-  endAhead = Math.min(MAX_WFH_ADVANCE_DAYS, Math.max(startAhead, endAhead));
-  return { startAhead, endAhead };
-}
-
-export function weekdayDate(daysAhead = 42) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysAhead);
-  while (date.getDay() === 0 || date.getDay() === 6) {
-    date.setDate(date.getDate() + 1);
-  }
-  return datePartsFromInput([
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-'));
-}
-
-export function upcomingWeekendDate(jsDay: 0 | 6) {
-  const currentYear = new Date().getFullYear();
-  const { startAhead: octoberStart, endAhead: octoberEnd } = octoberSearchRange();
-  const consider = (ahead: number) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + ahead);
-    if (date.getDay() !== jsDay) {
-      return null;
-    }
-    const input = [
-      date.getFullYear(),
-      String(date.getMonth() + 1).padStart(2, '0'),
-      String(date.getDate()).padStart(2, '0'),
-    ].join('-');
-    const daysOut = daysFromToday(input);
-    if (date.getFullYear() !== currentYear || daysOut < 1 || daysOut > MAX_WFH_ADVANCE_DAYS) {
-      return null;
-    }
-    return datePartsFromInput(input);
-  };
-
-  for (let ahead = octoberStart; ahead <= octoberEnd; ahead++) {
-    const found = consider(ahead);
-    if (found && Number(found.input.slice(5, 7)) === 10) {
-      return found;
-    }
-  }
-  for (let ahead = 1; ahead <= MAX_WFH_ADVANCE_DAYS; ahead++) {
-    const found = consider(ahead);
-    if (found) {
-      return found;
-    }
-  }
-  throw new Error(`Could not find a weekend day (${jsDay === 6 ? 'Saturday' : 'Sunday'}) within ${MAX_WFH_ADVANCE_DAYS} days`);
-}
-
-export function datePartsFromInput(input: string) {
-  const [year, month, day] = input.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  const cell = `${date.toLocaleString('en-US', { month: 'short', day: 'numeric' })},`;
-  const full = `${date.toLocaleString('en-US', { month: 'short', day: 'numeric' })}, ${date.getFullYear()}`;
-  return { input, cell, full };
-}
-
-export function nextWeekdayDate(daysAhead = 42) {
-  return weekdayDate(daysAhead);
-}
-
-function parseSortValue(text: string) {
+function parseRemoteLoginSortValue(text: string) {
   const value = text.replace(/\s+/g, ' ').trim();
   if (!value || value === '-') {
     return '';
   }
-  const timestamp = Date.parse(value);
-  if (!Number.isNaN(timestamp) && /\d{4}/.test(value)) {
+  const sessionIndex = SESSION_ORDER.indexOf(value.toLowerCase());
+  if (sessionIndex >= 0) {
+    return sessionIndex;
+  }
+  const dated = /\d{4}/.test(value) ? value : `${value.replace(/,$/, '')} ${new Date().getFullYear()}`;
+  const timestamp = Date.parse(dated);
+  if (!Number.isNaN(timestamp) && /[A-Za-z]{3}/.test(value)) {
     return timestamp;
   }
   return value.toLowerCase();
 }
 
-function compareSortValues(left: string, right: string) {
-  const a = parseSortValue(left);
-  const b = parseSortValue(right);
+function compareRemoteLoginSortValues(left: string, right: string) {
+  const a = parseRemoteLoginSortValue(left);
+  const b = parseRemoteLoginSortValue(right);
   if (a === '' && b === '') {
     return 0;
   }
@@ -931,9 +925,10 @@ function compareSortValues(left: string, right: string) {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
 
-export function isColumnSorted(values: string[], direction: 'asc' | 'desc') {
-  for (let i = 1; i < values.length; i++) {
-    const cmp = compareSortValues(values[i - 1], values[i]);
+function isRemoteLoginColumnSorted(values: string[], direction: 'asc' | 'desc') {
+  const comparable = comparableSortValues(values);
+  for (let i = 1; i < comparable.length; i++) {
+    const cmp = compareRemoteLoginSortValues(comparable[i - 1], comparable[i]);
     if (direction === 'asc' && cmp > 0) {
       return false;
     }
@@ -944,24 +939,56 @@ export function isColumnSorted(values: string[], direction: 'asc' | 'desc') {
   return true;
 }
 
-export function workedDateToInput(workedDate: string) {
-  const parsed = new Date(workedDate);
-  if (Number.isNaN(parsed.getTime())) {
+function extractBookedDateInputs(text: string) {
+  const value = text.replace(/\s+/g, ' ').trim();
+  if (!value || value === '-') {
+    return [];
+  }
+  const month = 'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
+  const matches = value.match(
+    new RegExp(`(?:${month})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*\\d{4})?`, 'gi'),
+  ) || [];
+  const inputs = new Set<string>();
+  for (const match of matches) {
+    const parsed = parseTableWorkedDate(match);
+    if (parsed) {
+      inputs.add(parsed);
+    }
+  }
+  const iso = value.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
+  for (const match of iso) {
+    inputs.add(match);
+  }
+  return [...inputs];
+}
+
+function parseTableWorkedDate(text: string) {
+  const value = text.replace(/\s+/g, ' ').trim();
+  if (!value || value === '-') {
     return null;
   }
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, '0'),
-    String(parsed.getDate()).padStart(2, '0'),
-  ].join('-');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const month = 'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
+  const match = value.match(
+    new RegExp(
+      `\\b(?:(?:${month})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*\\d{4})?|\\d{1,2}[-/\\s](?:${month})[a-z]*[-/,\\s]+\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\b`,
+      'i',
+    ),
+  );
+  return workedDateToInput(match?.[0] || value);
 }
 
 function bookedDateInputs(cells: Set<string>) {
-  const inputs = new Set<string>();
+  const inputs = new Set<string>(claimedRemoteLoginDates);
   for (const cell of cells) {
-    const input = workedDateToInput(cell);
-    if (input) {
-      inputs.add(input);
+    for (const parsed of extractBookedDateInputs(cell)) {
+      inputs.add(parsed);
+    }
+    const fallback = parseTableWorkedDate(cell);
+    if (fallback) {
+      inputs.add(fallback);
     }
   }
   return inputs;

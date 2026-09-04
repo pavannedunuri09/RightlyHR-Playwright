@@ -26,7 +26,8 @@ export class LoginPage {
   }
 
   async goto() {
-    await this.page.goto('/login');
+    await this.page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await this.emailInput.waitFor({ state: 'visible' });
   }
 
   async login(email: string, password: string) {
@@ -47,6 +48,28 @@ export class LoginPage {
     }
     await this.goto();
     await this.login(email, password);
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    try {
+      await this.page.waitForURL(/\/dashboard\/emp/, {
+        timeout: 45000,
+        waitUntil: 'domcontentloaded',
+      });
+    } catch {
+      await this.goto();
+      await this.login(email, password);
+      await this.page.waitForURL(/\/dashboard\/emp/, {
+        timeout: 45000,
+        waitUntil: 'domcontentloaded',
+      });
+    }
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
+  }
+
+  async validateUserSession() {
+    await this.page.context().clearCookies();
+    await this.page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    }).catch(() => {});
+    await this.loginFromEnv();
   }
 }
