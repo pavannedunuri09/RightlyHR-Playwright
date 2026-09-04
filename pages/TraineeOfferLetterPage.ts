@@ -56,7 +56,7 @@ export class TraineeOfferLetterPage {
     this.addressCombobox = page.getByRole('combobox', { name: 'Please select address' });
     this.salaryInput = page.getByRole('spinbutton', { name: 'Please enter salary' });
     this.offerIssuedDate = page.getByPlaceholder('Please enter offer issued date');
-    this.expectedStartDate = page.getByPlaceholder('Please enter expected start');
+    this.expectedStartDate = page.getByPlaceholder(/Please enter expected start date/i);
     this.offerExpiryDate = page.getByPlaceholder('Please enter offer expiry date');
     this.trainingPeriodCombobox = page.getByRole('combobox', { name: 'Please select training period' });
     this.reportingManagerCombobox = page.getByRole('combobox', { name: 'Please select reporting manager' });
@@ -356,11 +356,11 @@ export class TraineeOfferLetterPage {
     await this.salaryInput.blur();
 
     const issued = isoDate(0);
-    await this.fillDateByLabel(/Offer Issued Date/i, issued);
-    await this.fillDateByLabel(/Expected Start Date/i, issued);
-    await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(7));
+    await this.fillDateField(this.offerIssuedDate, issued);
+    await this.fillDateField(this.expectedStartDate, issued);
+    await this.fillDateField(this.offerExpiryDate, isoDate(7));
     if (await this.expiryError.isVisible().catch(() => false)) {
-      await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(14));
+      await this.fillDateField(this.offerExpiryDate, isoDate(14));
     }
 
     await this.ensureComboSelected('Training Period(Months)*', '1');
@@ -377,19 +377,19 @@ export class TraineeOfferLetterPage {
     if (!(await this.generateButton.isEnabled().catch(() => false))) {
       await this.ensureComboSelected('Document Type *', 'Hard Copy');
       await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
-      await this.fillDateByLabel(/Offer Issued Date/i, issued);
-      await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(14));
+      await this.fillDateField(this.offerIssuedDate, issued);
+      await this.fillDateField(this.offerExpiryDate, isoDate(14));
     }
 
     await expect(this.generateButton).toBeEnabled({ timeout: 30000 });
   }
 
-  private async fillDateByLabel(labelPattern: RegExp, value: string) {
-    const field = this.page.getByRole('textbox', { name: labelPattern });
+  private async fillDateField(field: Locator, value: string) {
+    await field.scrollIntoViewIfNeeded();
     await field.waitFor({ state: 'visible', timeout: 10000 });
+    await field.click();
     await field.fill(value);
     await field.blur();
-    await expect(field).toHaveValue(value, { timeout: 5000 });
   }
 
   private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {

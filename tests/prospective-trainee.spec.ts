@@ -375,6 +375,22 @@ test.describe('Prospective Trainees', () => {
     }
 
     if (!employee) {
+      const rejected = await trainees.findOfferLetterRejectedTrainee();
+      if (rejected) {
+        employee = { ...rejected, designation: rejected.designation ?? 'Front End Developer' };
+        saveLastTrainee(employee);
+        console.log(`Found Offer Letter Rejected trainee ${employee.email}; regenerating`);
+      } else {
+        const regenerated = await trainees.findTraineeByStatus('Offer Letter Regenerated');
+        if (regenerated) {
+          employee = { ...regenerated, designation: regenerated.designation ?? 'Front End Developer' };
+          saveLastTrainee(employee);
+          console.log(`Found Offer Letter Regenerated trainee ${employee.email}; continuing with approval`);
+        }
+      }
+    }
+
+    if (!employee) {
       employee = await ensureReleasedOfferTrainee(page, testInfo);
       offerIssued = true;
       console.log(`Created and released offer for ${employee.email}; employee will reject it first`);
