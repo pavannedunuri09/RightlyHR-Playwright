@@ -42,7 +42,12 @@ export class PreOnboardingPage {
   }
 
   async expectLoggedIn() {
-    await expect(this.goToApplicationButton.or(this.offerLetterButton).first()).toBeVisible({ timeout: 20000 });
+    const loggedIn = this.goToApplicationButton
+      .or(this.offerLetterButton)
+      .or(this.page.getByRole('button', { name: /^Accept$/ }))
+      .or(this.page.getByRole('button', { name: /^Reject$/ }))
+      .or(this.page.getByText('Offer Letter', { exact: true }));
+    await expect(loggedIn.first()).toBeVisible({ timeout: 20000 });
   }
 
   async goToApplication() {

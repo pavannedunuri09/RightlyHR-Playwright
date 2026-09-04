@@ -1,4 +1,4 @@
-import { type Page } from '@playwright/test';
+import { type Locator, type Page } from '@playwright/test';
 
 type MailMessage = {
   id: string;
@@ -115,7 +115,7 @@ export class YopmailPage {
       }
     }
 
-    for (const mail of await this.listMailsUi()) {
+    for (const mail of await this.listAllMailsUi()) {
       const parsed = parseCredentials(mail.body);
       if (parsed) {
         this.cachedMail = mail;
@@ -140,6 +140,16 @@ export class YopmailPage {
   }
 
   async openOnboardingPortal() {
+    for (const mail of await this.listAllMailsUi()) {
+      const portalUrl = extractPortalUrl(mail.body);
+      if (portalUrl && parseCredentials(mail.body)) {
+        this.cachedMail = mail;
+        const onboardingPage = await this.page.context().newPage();
+        await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
+        return onboardingPage;
+      }
+    }
+
     if (!this.cachedMail) {
       await this.listMailsUi();
     }
@@ -176,41 +186,73 @@ export class YopmailPage {
   private async listMailsUi() {
     await this.ensureInboxVisible();
 
-    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
-    const items = inbox.locator('button, .m, div[class*="m"]');
-    const count = await items.count();
+    const openBody = await this.readOpenMailBody();
+    if (openBody.length > 20) {
+      const subject =
+        openBody.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
+        (await this.readOpenMailSubject()) ||
+        openBody.slice(0, 120);
+      return [{ id: 'open', subject, body: openBody }];
+    }
+
+    return this.listAllMailsUi();
+  }
+
+  private async listAllMailsUi() {
+    await this.ensureInboxVisible();
+
+    const rows = this.mailRows();
+    const count = await rows.count();
     const limit = count > 0 ? Math.min(count, 12) : 0;
     const messages: MailMessage[] = [];
 
-    if (limit === 0) {
-      const inboxText = (await inbox.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
-      if (inboxText) {
-        await this.openLatestInboxMail();
-        const body = (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
-        if (body) {
-          messages.push({ id: 'latest', subject: inboxText.slice(0, 120), body });
-        }
-      }
-      return messages;
-    }
-
     for (let index = 0; index < limit; index += 1) {
-      const item = items.nth(index);
-      if (!(await item.isVisible().catch(() => false))) {
+      const row = rows.nth(index);
+      if (!(await row.isVisible().catch(() => false))) {
         continue;
       }
-      const preview = ((await item.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-      await item.click();
+      const preview = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!preview) {
+        continue;
+      }
+
+      await this.openMailRow(row);
       await sleep(900);
-      const body = (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      const body = await this.readOpenMailBody();
       if (!body) {
         continue;
       }
-      const subject = preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() || body.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() || preview.slice(0, 120);
+      const subject =
+        preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() ||
+        body.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
+        preview.slice(0, 120);
       messages.push({ id: `mail-${index}`, subject, body });
     }
 
     return messages;
+  }
+
+  private mailRows() {
+    return this.inboxFrame().locator('div.m[id]');
+  }
+
+  private async readOpenMailBody() {
+    return (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+  }
+
+  private async readOpenMailSubject() {
+    const selected = this.inboxFrame().locator('div.m[id].s, div.m[id][class*=" s"]');
+    const preview = ((await selected.first().innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    return preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() || preview.slice(0, 120) || null;
+  }
+
+  private async openMailRow(row: Locator) {
+    const subjectLink = row.locator('.lms, .lsub, button.lm, .lm').first();
+    if (await subjectLink.isVisible().catch(() => false)) {
+      await subjectLink.click({ timeout: 5000 });
+      return;
+    }
+    await row.evaluate((el) => (el as HTMLElement).click());
   }
 
   private async gotoInbox() {
@@ -241,16 +283,18 @@ export class YopmailPage {
     if (!(await this.inboxReady())) {
       await this.gotoInbox();
     }
-    await this.handleCaptchaIfVisible();
   }
 
   private async openLatestInboxMail() {
-    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
-    const firstMail = inbox.locator('button, .m, div[class*="m"]').first();
+    const firstMail = this.mailRows().first();
     if (await firstMail.isVisible().catch(() => false)) {
-      await firstMail.click();
+      await this.openMailRow(firstMail);
       await sleep(900);
     }
+  }
+
+  private inboxFrame() {
+    return this.page.frameLocator('iframe[name="ifinbox"]');
   }
 
   private mailFrame() {
@@ -292,7 +336,9 @@ export class YopmailPage {
     if (await this.page.locator('#r_parent.r_popup, .r_popup').isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
-    const captchaText = this.page.getByText(/I'm not a robot|verify you are human|just a moment|checking your browser|complete the captcha|are you a robot/i);
+    const captchaText = this.page.getByText(
+      /I'm not a robot|verify you are human|just a moment|checking your browser|complete the captcha|are you a robot/i,
+    );
     return captchaText.first().isVisible({ timeout: 1000 }).catch(() => false);
   }
 
@@ -315,9 +361,11 @@ export class YopmailPage {
       if (!/recaptcha|challenges\.cloudflare|turnstile/i.test(frame.url())) {
         continue;
       }
-      const checkbox = frame.locator(
-        '#recaptcha-anchor, .recaptcha-checkbox-border, .ctp-checkbox-label, input[type="checkbox"], [role="checkbox"]',
-      ).first();
+      const checkbox = frame
+        .locator(
+          '#recaptcha-anchor, .recaptcha-checkbox-border, .ctp-checkbox-label, input[type="checkbox"], [role="checkbox"]',
+        )
+        .first();
       if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
         await checkbox.click({ timeout: 3000 }).catch(() => {});
         await sleep(1500);
@@ -350,7 +398,7 @@ export class YopmailPage {
   }
 
   private async inboxReady() {
-    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
+    const inbox = this.inboxFrame();
     if (await inbox.locator('body').isVisible().catch(() => false)) {
       return true;
     }
@@ -384,8 +432,9 @@ function namePattern(fullName: string) {
 }
 
 function parseCredentials(body: string) {
-  const username = body.match(/Username\s*:\s*(\S+)/i)?.[1];
-  const password = body.match(/Password\s*:\s*(\S+)/i)?.[1];
+  const normalized = body.replace(/&nbsp;/gi, ' ').replace(/&amp;/g, '&');
+  const username = normalized.match(/Username\s*:\s*(\S+)/i)?.[1];
+  const password = normalized.match(/Password\s*:\s*([^\s<]+)/i)?.[1]?.replace(/[.,;]+$/, '');
   if (!username || !password) {
     return null;
   }

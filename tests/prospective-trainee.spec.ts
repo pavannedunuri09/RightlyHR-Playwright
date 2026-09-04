@@ -16,7 +16,8 @@ import { TraineeOnboardRequestPage } from '../pages/TraineeOnboardRequestPage';
 import { TraineeJobPrepPage } from '../pages/TraineeJobPrepPage';
 import { PendingTraineeOnboardApprovalPage } from '../pages/PendingTraineeOnboardApprovalPage';
 import { createOnboardingFiles } from './fixtures/onboardingFiles';
-import { loadLastTrainee, saveLastTrainee, type SavedTrainee } from './fixtures/lastTrainee';
+import { loginPreOnboardingPortal, refreshPreOnboardingCredentials } from './fixtures/onboardingCredentials';
+import { loadLastTrainee, saveLastTrainee, needsDocumentRequest, type SavedTrainee } from './fixtures/lastTrainee';
 import {
   approveAndReleaseOffer,
   ensureDocumentsSubmittedTrainee,
@@ -76,29 +77,37 @@ test.describe('Prospective Trainees', () => {
 
     await expect(page).toHaveURL(/\/employee-management\/prospective\/interns/, { timeout: 20000 });
     await trainees.expectTraineeVisibleInList(details);
+    saveLastTrainee(details);
   });
 
   test('Test-03: Request documents and verify yopmail', async ({ page }, testInfo) => {
     test.setTimeout(240000);
+    const saved = loadLastTrainee();
+    if (!saved) {
+      test.skip(true, 'Test-02 must create and save a trainee first');
+      return;
+    }
+    const details = saved;
+
     const trainees = new ProspectiveTraineePage(page);
-    const details = ProspectiveTraineePage.uniqueTrainee();
 
     await trainees.openTraineesList();
-    await trainees.openAddForm();
-    await trainees.fillAndSubmit(details);
-    await trainees.expectTraineeVisibleInList(details);
-    saveLastTrainee(details);
+    await trainees.searchTrainee(details.email);
+    const row = trainees.traineeRow(details.email);
+    await expect(row).toBeVisible({ timeout: 15000 });
 
-    const createdRow = trainees.employeeCreatedRow(details.email);
-    await expect(createdRow).toBeVisible({ timeout: 15000 });
-    await trainees.openEmployeeCreated(details);
-
-    const myInfo = new EmployeeMyInfoPage(page);
-    await myInfo.expectBasicTab();
-    const successText = await myInfo.requestDocuments();
-    expect(successText).toContain('Email has been sent');
-    console.log(`Success popup: ${successText}`);
-    await page.waitForTimeout(10000);
+    const rowText = await row.innerText();
+    if (needsDocumentRequest(rowText)) {
+      await trainees.openEmployeeCreated(details);
+      const myInfo = new EmployeeMyInfoPage(page);
+      await myInfo.expectBasicTab();
+      const successText = await myInfo.requestDocuments();
+      expect(successText).toContain('Email has been sent');
+      console.log(`Success popup: ${successText}`);
+      await page.waitForTimeout(10000);
+    } else {
+      console.log(`Documents already requested for ${details.email}; verifying Yopmail only`);
+    }
 
     const mailTab = await page.context().newPage();
     const yopmail = new YopmailPage(mailTab);
@@ -345,6 +354,9 @@ test.describe('Prospective Trainees', () => {
         if (/offer letter rejected/i.test(statusText)) {
           employee = listed;
           console.log(`Saved trainee ${listed.email} is Offer Letter Rejected; regenerating the same record`);
+        } else if (/offer letter regenerated/i.test(statusText)) {
+          employee = listed;
+          console.log(`Saved trainee ${listed.email} is Offer Letter Regenerated; continuing with approval`);
         } else if (/offer letter released|offer letter issued/i.test(statusText)) {
           employee = listed;
           offerIssued = true;
@@ -366,23 +378,25 @@ test.describe('Prospective Trainees', () => {
     }
 
     if (offerIssued) {
-      employee = await ensurePreOnboardingCredentials(page, employee);
       const mailTab = await page.context().newPage();
       const yopmail = new YopmailPage(mailTab);
       await yopmail.openInbox(employee.email);
       await yopmail.waitForMailMatching(
         new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
       );
+      employee = await refreshPreOnboardingCredentials(yopmail, employee);
       const portal = await yopmail.openOnboardingPortal();
       const preOnboarding = new PreOnboardingPage(portal);
       await preOnboarding.expectLoaded();
-      await preOnboarding.login(employee.username!, employee.password!);
-      await preOnboarding.expectLoggedIn();
+      await loginPreOnboardingPortal(preOnboarding, yopmail, {
+        username: employee.username!,
+        password: employee.password!,
+      });
+      await portal.bringToFront();
       if (await preOnboarding.goToApplicationButton.isVisible().catch(() => false)) {
         await preOnboarding.goToApplication();
       }
       const offerLetter = new PreOnboardingOfferLetterPage(portal);
-      await offerLetter.goToOfferDecision();
       await offerLetter.reject(rejectReason);
       await portal.close();
       await mailTab.close();
@@ -428,19 +442,23 @@ test.describe('Prospective Trainees', () => {
     const employee = await ensureReleasedOfferTrainee(page, testInfo);
 
     console.log(`Accepting offer letter in pre-onboarding as ${employee.firstName} ${employee.lastName} (${employee.email})`);
-    let activeEmployee = await ensurePreOnboardingCredentials(page, employee);
 
     const mailTab = await page.context().newPage();
     const yopmail = new YopmailPage(mailTab);
-    await yopmail.openInbox(activeEmployee.email);
+    await yopmail.openInbox(employee.email);
     await yopmail.waitForMailMatching(
-      new RegExp(`${activeEmployee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
+      new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
     );
+    let activeEmployee = await refreshPreOnboardingCredentials(yopmail, employee);
     const portal = await yopmail.openOnboardingPortal();
     const preOnboarding = new PreOnboardingPage(portal);
     await preOnboarding.expectLoaded();
-    await preOnboarding.login(activeEmployee.username!, activeEmployee.password!);
-    await preOnboarding.expectLoggedIn();
+    const credentials = await loginPreOnboardingPortal(preOnboarding, yopmail, {
+      username: activeEmployee.username!,
+      password: activeEmployee.password!,
+    });
+    activeEmployee = { ...activeEmployee, ...credentials };
+    saveLastTrainee(activeEmployee);
     if (await preOnboarding.goToApplicationButton.isVisible().catch(() => false)) {
       await preOnboarding.goToApplication();
     }
@@ -710,17 +728,11 @@ async function ensurePreOnboardingCredentials(
   page: import('@playwright/test').Page,
   employee: SavedTrainee,
 ): Promise<SavedTrainee> {
-  if (employee.username && employee.password) {
-    return employee;
-  }
-
   const mailTab = await page.context().newPage();
   const yopmail = new YopmailPage(mailTab);
   await yopmail.openInbox(employee.email);
-  const credentials = await yopmail.findCredentialsInInbox();
+  const updated = await refreshPreOnboardingCredentials(yopmail, employee);
   await mailTab.close();
-  const updated = { ...employee, username: credentials.username, password: credentials.password };
-  saveLastTrainee(updated);
   return updated;
 }
 

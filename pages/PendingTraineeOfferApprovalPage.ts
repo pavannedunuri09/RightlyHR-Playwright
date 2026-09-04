@@ -127,7 +127,7 @@ export class PendingTraineeOfferApprovalPage {
     await expect(row).toContainText('Hyderabad');
     await expect(row).toContainText('Jai Hind Enclave');
     await expect(row).toContainText('Waiting For Approval');
-    await expect(row).toContainText('Offer Letter Generated');
+    await expect(row).toContainText(/Offer Letter Generated|Offer Letter Regenerated/i);
 
     console.log(`Pending offer row: ${(await row.innerText()).replace(/\s+/g, ' ').trim()}`);
   }

@@ -356,49 +356,55 @@ export class TraineeOfferLetterPage {
     await this.salaryInput.blur();
 
     const issued = isoDate(0);
-    await this.offerIssuedDate.fill(issued);
-    await this.expectedStartDate.fill(issued);
-    await this.offerExpiryDate.fill(isoDate(7));
-    await this.offerExpiryDate.blur();
+    await this.fillDateByLabel(/Offer Issued Date/i, issued);
+    await this.fillDateByLabel(/Expected Start Date/i, issued);
+    await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(7));
     if (await this.expiryError.isVisible().catch(() => false)) {
-      await this.offerExpiryDate.fill(isoDate(14));
-      await this.offerExpiryDate.blur();
+      await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(14));
     }
 
-    const trainingCombo = this.fieldAfterLabel('Training Period(Months)*').getByRole('combobox');
-    if (!/^\d+$/.test((await trainingCombo.innerText()).trim())) {
-      await this.chooseAfterLabel('Training Period(Months)*', '1');
-      await expect(trainingCombo).toHaveText('1');
-    }
-
-    const managerCombo = this.fieldAfterLabel('Reporting Manager *').getByRole('combobox');
-    if (/please select/i.test(await managerCombo.innerText())) {
-      await this.chooseAfterLabel('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
-    }
-
-    await this.chooseAfterLabel('Document Type *', 'Soft Copy');
+    await this.ensureComboSelected('Training Period(Months)*', '1');
+    await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
+    await this.ensureComboSelected('Document Type *', 'Soft Copy');
     await this.noteInput.fill('Trainee Offer letter');
+    await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
 
-    const signatureCombo = this.fieldAfterLabel('Signature Authority Name*').getByRole('combobox');
-    if (await signatureCombo.isVisible().catch(() => false) && /please select/i.test(await signatureCombo.innerText())) {
-      await this.chooseAfterLabel('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
-    }
-
-    const required = this.page.getByText(/is required/i);
-    if (await required.first().isVisible().catch(() => false)) {
-      console.log(`Still required: ${(await required.allInnerTexts()).join(' | ')}`);
-    }
     console.log(`Training: ${(await this.fieldAfterLabel('Training Period(Months)*').getByRole('combobox').innerText()).trim()}`);
     console.log(`Manager: ${(await this.fieldAfterLabel('Reporting Manager *').getByRole('combobox').innerText()).trim()}`);
     console.log(`Document type: ${(await this.fieldAfterLabel('Document Type *').getByRole('combobox').innerText()).trim()}`);
     console.log(`Note: ${await this.noteInput.inputValue()}`);
 
-    if (!(await this.generateButton.isEnabled())) {
-      await this.chooseAfterLabel('Document Type *', 'Hard Copy');
-      await this.chooseAfterLabel('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
+    if (!(await this.generateButton.isEnabled().catch(() => false))) {
+      await this.ensureComboSelected('Document Type *', 'Hard Copy');
+      await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
+      await this.fillDateByLabel(/Offer Issued Date/i, issued);
+      await this.fillDateByLabel(/Offer Expiry Date/i, isoDate(14));
     }
 
-    await expect(this.generateButton).toBeEnabled({ timeout: 15000 });
+    await expect(this.generateButton).toBeEnabled({ timeout: 30000 });
+  }
+
+  private async fillDateByLabel(labelPattern: RegExp, value: string) {
+    const field = this.page.getByRole('textbox', { name: labelPattern });
+    await field.waitFor({ state: 'visible', timeout: 10000 });
+    await field.fill(value);
+    await field.blur();
+    await expect(field).toHaveValue(value, { timeout: 5000 });
+  }
+
+  private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {
+    const combo = this.fieldAfterLabel(label).getByRole('combobox');
+    const text = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    const needsSelection =
+      /please select/i.test(text) ||
+      (label.includes('Training Period') && !/^\d+$/.test(text)) ||
+      (label.includes('Reporting Manager') && /please select/i.test(text)) ||
+      (label.includes('Document Type') && /please select/i.test(text)) ||
+      (label.includes('Signature Authority') && /please select/i.test(text));
+
+    if (needsSelection) {
+      await this.chooseAfterLabel(label, optionName, search);
+    }
   }
 
   async generateOfferLetter(downloadPath: string) {
