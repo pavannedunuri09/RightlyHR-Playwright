@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/codegen-wfh.ts', '**/codegen-wfh-settings.ts', '**/codegent-wfh.ts', '**/codegen-remote-login.ts'],
+  testIgnore: ['**/codegen-wfh*.ts', '**/codegen-remote-login.ts'],
   timeout: 120000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -17,12 +17,13 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
+    baseURL: process.env.BASE_URL || 'https://hrmsqasnad.onpremise.cluster.rightlyhr.com',
     headless: !!process.env.CI,
     launchOptions: {
-      slowMo: process.env.CI ? 0 : 1000,
+      slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
     trace: 'on-first-retry',
+    video: 'on',
     actionTimeout: 15000,
     navigationTimeout: 45000,
   },
@@ -51,6 +52,16 @@ export default defineConfig({
     {
       name: '05-wfh-settings',
       testMatch: /wfh-entitlement-criteria\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '06-holidays',
+      testMatch: /holidays\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '07-codegen-holidays',
+      testMatch: /codegen-holidays\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
