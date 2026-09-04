@@ -53,6 +53,11 @@ export default defineConfig({
       testMatch: /wfh-entitlement-criteria\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+  name: '06-manage-shifts',
+  testMatch: /manage-shifts\.spec\.ts$/,
+  use: { ...devices['Desktop Chrome'] },
+},
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
