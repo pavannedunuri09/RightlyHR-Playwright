@@ -287,7 +287,10 @@ export class ManageWeekendsPage {
       .nth(rowIndex);
     const dayDropdown = dayCell.getByRole('combobox');
 
-    if ((await dayDropdown.textContent())?.trim() === day) {
+    const selectedDay = await dayDropdown.getAttribute('aria-label')
+      ?? (await dayDropdown.textContent())?.trim();
+
+    if (selectedDay === day) {
       return;
     }
 

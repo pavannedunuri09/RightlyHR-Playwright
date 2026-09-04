@@ -997,21 +997,8 @@ test('TC29 - Change Day in Cloned Record', async ({ page }) => {
     exact: true,
   }).click();
 
-  // Change Day: Sunday → Monday
-  const dayCell = page
-    .getByRole('cell', {
-      name: /Day.*dropdown trigger/i,
-    })
-    .first();
-
-  await dayCell
-    .getByLabel('dropdown trigger')
-    .click();
-
-  await page.getByRole('option', {
-    name: 'Monday',
-    exact: true,
-  }).click();
+  // Monday is already a second cloned row and is disabled for this row.
+  await weekendsPage.setDay('Saturday');
 
   // Verify changed day
   await expect(
@@ -1084,21 +1071,8 @@ test('TC30 - Select Occurrences in Cloned Record', async ({ page }) => {
     exact: true,
   }).click();
 
-  // Change Day
-  const dayCell = page
-    .getByRole('cell', {
-      name: /Day.*dropdown trigger/i,
-    })
-    .first();
-
-  await dayCell
-    .getByLabel('dropdown trigger')
-    .click();
-
-  await page.getByRole('option', {
-    name: 'Monday',
-    exact: true,
-  }).click();
+  // Monday is already a second cloned row and is disabled for this row.
+  await weekendsPage.setDay('Saturday');
 
   // Select 1st–4th occurrences
   await weekendsPage.selectOccurrences(0, [1, 2, 3, 4]);
@@ -1170,21 +1144,8 @@ test('TC31 - Submit Cloned Weekend Record', async ({ page }) => {
     exact: true,
   }).click();
 
-  // Change Day: Sunday → Monday
-  const dayCell = page
-    .getByRole('cell', {
-      name: /Day.*dropdown trigger/i,
-    })
-    .first();
-
-  await dayCell
-    .getByLabel('dropdown trigger')
-    .click();
-
-  await page.getByRole('option', {
-    name: 'Monday',
-    exact: true,
-  }).click();
+  // Monday is already a second cloned row and is disabled for this row.
+  await weekendsPage.setDay('Saturday');
 
   // Select occurrences
   await weekendsPage.selectOccurrences(0, [1, 2, 3, 4]);
@@ -1230,14 +1191,15 @@ test('TC33 - Verify Cloned Weekend Day', async ({ page }) => {
   // Open Update page
   await weekendsPage.clickUpdate();
 
-  // Verify Day is Monday
+  // Verify the first cloned day. Monday remains in the second cloned row.
   const dayCell = page
     .getByRole('cell', {
       name: /Day.*dropdown trigger/i,
     })
     .first();
 
-  await expect(dayCell).toContainText('Monday');
+  await expect(dayCell.getByRole('combobox'))
+    .toHaveAttribute('aria-label', 'Saturday');
 });
 // TC34 - Verify Published Weekend Record
 test('TC34 - Verify Published Weekend Record', async ({ page }) => {
