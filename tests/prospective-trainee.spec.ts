@@ -15,6 +15,9 @@ import { SettingsServingPeriodPage } from '../pages/SettingsServingPeriodPage';
 import { TraineeOnboardRequestPage } from '../pages/TraineeOnboardRequestPage';
 import { TraineeJobPrepPage } from '../pages/TraineeJobPrepPage';
 import { PendingTraineeOnboardApprovalPage } from '../pages/PendingTraineeOnboardApprovalPage';
+
+declare const process: { env: Record<string, string | undefined> };
+
 import { createOnboardingFiles } from './fixtures/onboardingFiles';
 import { loginPreOnboardingPortal, refreshPreOnboardingCredentials } from './fixtures/onboardingCredentials';
 import { loadLastTrainee, saveLastTrainee, needsDocumentRequest, type SavedTrainee } from './fixtures/lastTrainee';
