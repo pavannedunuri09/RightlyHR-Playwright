@@ -15,6 +15,8 @@ export default defineConfig({
     '**/codegent-wfh.ts',
     '**/codegen-remote-login.ts',
     '**/codegen-onbehalf-remote-login.ts',
+    '**/codegen-onbehalf-wfh.ts',
+    '**/codegen-onbehalf-remote.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -62,6 +64,11 @@ export default defineConfig({
     {
       name: '06-onbehalf-remote-login',
       testMatch: /on-behalf-remote-login\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '07-onbehalf-wfh',
+      testMatch: /on-behalf-wfh\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {

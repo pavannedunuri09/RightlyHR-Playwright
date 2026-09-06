@@ -9,6 +9,7 @@ const projects = [
   '04-wfh',
   '05-wfh-settings',
   '06-onbehalf-remote-login',
+  '07-onbehalf-wfh',
 ];
 
 let failed = false;
