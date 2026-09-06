@@ -38,7 +38,7 @@ export class OnboardingDocumentsHrPage {
     const count = await docs.count();
     await (count > 1 ? docs.nth(1) : docs.first()).click();
 
-    await this.page.getByRole('columnheader', { name: 'Document Type' }).waitFor({
+    await this.page.getByRole('columnheader', { name: /Document/ }).first().waitFor({
       state: 'visible',
       timeout: 20000,
     });
@@ -76,7 +76,9 @@ export class OnboardingDocumentsHrPage {
   async rejectOneDocument(reason: string) {
     for (const documentName of DOCUMENTS) {
       const row = this.documentRow(documentName);
-      await row.waitFor({ state: 'visible', timeout: 15000 });
+      if (!(await row.isVisible().catch(() => false))) {
+        continue;
+      }
       const text = await row.innerText();
       if (/rejected/i.test(text) && !/waiting for verification/i.test(text)) {
         console.log(`${documentName} already rejected`);
@@ -86,6 +88,9 @@ export class OnboardingDocumentsHrPage {
 
     for (const documentName of DOCUMENTS) {
       const row = this.documentRow(documentName);
+      if (!(await row.isVisible().catch(() => false))) {
+        continue;
+      }
       const text = await row.innerText();
       if (/verified/i.test(text) && !/waiting for verification/i.test(text)) {
         continue;
@@ -148,24 +153,15 @@ export class OnboardingDocumentsHrPage {
   }
 
   private async openRowAction(row: Locator, action: 'Verify' | 'Reject') {
-    const dropdown = row.locator('.dropdown > a, .dropdown.ng-star-inserted').first();
-    const actionCell = row.getByRole('cell').filter({ hasText: new RegExp(action) }).first();
-
-    if (await dropdown.isVisible().catch(() => false)) {
-      await dropdown.click();
-    } else {
-      await actionCell.click();
-    }
-
-    const menuItem = this.page
-      .locator('.dropdown-menu.show, .dropdown-menu')
-      .getByText(action, { exact: true })
-      .last();
-    if (await menuItem.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await menuItem.click();
+    const actionInRow = row.getByText(action, { exact: true });
+    if (await actionInRow.isVisible().catch(() => false)) {
+      await actionInRow.click();
       return;
     }
 
-    await this.page.getByText(action, { exact: true }).last().click();
+    const kebab = row.getByRole('cell').last().locator('a, button, [class*="dropdown"]').first();
+    await kebab.click();
+    await expect(actionInRow).toBeVisible({ timeout: 5000 });
+    await actionInRow.click();
   }
 }

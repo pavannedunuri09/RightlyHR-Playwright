@@ -101,13 +101,39 @@ export class YopmailPage {
   }
 
   async readCredentials() {
-    const body = (await this.mailFrame().locator('body').innerText()).replace(/\s+/g, ' ');
+    const fromCurrent = this.parseCredentials(
+      await this.mailFrame().locator('body').innerText().catch(() => ''),
+    );
+    if (fromCurrent) {
+      console.log(`Yopmail username: ${fromCurrent.username}`);
+      return fromCurrent;
+    }
+
+    const inbox = this.page.frameLocator('iframe[name="ifinbox"]');
+    const mails = inbox.locator('button, .m, div[class*="m"]');
+    const count = await mails.count();
+    for (let i = 0; i < Math.min(count, 10); i++) {
+      await mails.nth(i).click();
+      await this.page.waitForTimeout(1000);
+      const parsed = this.parseCredentials(
+        await this.mailFrame().locator('body').innerText().catch(() => ''),
+      );
+      if (parsed) {
+        console.log(`Yopmail username: ${parsed.username}`);
+        return parsed;
+      }
+    }
+
+    throw new Error('Could not read Username/Password from Yopmail');
+  }
+
+  private parseCredentials(raw: string) {
+    const body = raw.replace(/\s+/g, ' ');
     const username = body.match(/Username\s*:\s*(\S+)/i)?.[1];
     const password = body.match(/Password\s*:\s*(\S+)/i)?.[1];
     if (!username || !password) {
-      throw new Error(`Could not read Username/Password from Yopmail. Mail text: ${body}`);
+      return null;
     }
-    console.log(`Yopmail username: ${username}`);
     return { username, password };
   }
 

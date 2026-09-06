@@ -5,8 +5,10 @@ export type SavedTrainee = {
   firstName: string;
   lastName: string;
   email: string;
+  employeeId?: string;
   username?: string;
   password?: string;
+  rejectedDoc?: string;
 };
 
 const STORE_PATH = path.resolve(process.cwd(), 'tests', 'fixtures', 'last-trainee.json');

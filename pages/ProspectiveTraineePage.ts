@@ -179,22 +179,16 @@ export class ProspectiveTraineePage {
     await row.getByText(`${details.firstName} ${details.lastName}`).click();
   }
 
-  async findDocumentsSubmittedTrainee(): Promise<{ firstName: string; lastName: string; email: string } | null> {
-    await this.searchTrainee('Documents Submitted');
-    const row = this.page.getByRole('row').filter({
-      has: this.page.getByRole('cell', { name: 'Documents Submitted', exact: true }),
-    }).first();
-    if (!(await row.isVisible({ timeout: 8000 }).catch(() => false))) {
-      return null;
-    }
-    const name = (await row.getByRole('cell').nth(1).innerText()).trim();
-    const email = (await row.getByRole('cell').nth(3).innerText()).trim();
-    const parts = name.split(/\s+/).filter(Boolean);
-    return {
-      firstName: parts[0] ?? name,
-      lastName: parts.slice(1).join(' ') || parts[0] || name,
-      email,
-    };
+  async readEmployeeId(email: string) {
+    const row = this.traineeRow(email);
+    await row.waitFor({ state: 'visible', timeout: 15000 });
+    return (await row.getByRole('cell').first().innerText()).trim();
+  }
+
+  async expectStatus(email: string, status: RegExp) {
+    const row = this.traineeRow(email);
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(row).toContainText(status);
   }
 
   async openEmployeeFromRow(row: Locator) {
