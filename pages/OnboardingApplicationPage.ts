@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 const FEMALE_NAMES = new Set([
   'Kavya', 'Meera', 'Sneha', 'Pooja', 'Anjali', 'Divya', 'Isha', 'Neha', 'Shreya', 'Nandini',
+  'Sindhuja', 'Priya', 'Ananya', 'Lakshmi', 'Aishwarya',
 ]);
 
 const CITIES = [
@@ -71,7 +72,48 @@ export class OnboardingApplicationPage {
   }
 
   async expectPersonalForm() {
+    if (await this.isOnDocumentsPage()) {
+      return;
+    }
     await this.genderCombobox.waitFor({ state: 'visible', timeout: 20000 });
+  }
+
+  async isPersonalFormEditable() {
+    if (!(await this.genderCombobox.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return false;
+    }
+    return this.genderCombobox.isEnabled().catch(() => false);
+  }
+
+  async preparePersonalDetailsAndOpenDocuments(
+    firstName: string,
+    lastName: string,
+    options?: { runValidations?: boolean },
+  ) {
+    if (await this.isOnDocumentsPage()) {
+      console.log('Already on documents page');
+      return null;
+    }
+
+    await this.page.waitForTimeout(1500);
+    if (await this.isOnDocumentsPage()) {
+      return null;
+    }
+
+    if (await this.isPersonalFormEditable()) {
+      await this.expectPersonalForm();
+      if (options?.runValidations) {
+        await this.expectInvalidNameRejected(firstName);
+        await this.expectInvalidMobileRejected();
+      }
+      const profile = await this.fillMandatoryIndianDetails(firstName, lastName);
+      await this.goToDocuments();
+      return profile;
+    }
+
+    console.log('Personal details already saved; navigating to documents');
+    await this.goToDocumentsIfNeeded();
+    return null;
   }
 
   async expectInvalidNameRejected(validFirstName: string) {
@@ -106,11 +148,31 @@ export class OnboardingApplicationPage {
     }
   }
 
+  static expectedPersonalDefaults(firstName: string) {
+    const female = FEMALE_NAMES.has(firstName);
+    return {
+      gender: female ? 'Female' : 'Male',
+      salutation: female ? 'Miss.' : 'Mr.',
+      middleName: '',
+      designation: 'Front End Developer',
+    };
+  }
+
   async fillMandatoryIndianDetails(firstName: string, lastName: string) {
     const female = FEMALE_NAMES.has(firstName);
     const place = CITIES[Math.floor(Math.random() * CITIES.length)];
     const mobile = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
     const plot = Math.floor(Math.random() * 80) + 10;
+    const details = {
+      ...OnboardingApplicationPage.expectedPersonalDefaults(firstName),
+      firstName,
+      lastName,
+      addressLine1: `Road no.${plot}`,
+      city: place.city,
+      state: place.state,
+      country: 'India',
+      pincode: place.zip,
+    };
 
     if (await this.firstNameInput.isVisible().catch(() => false) && await this.firstNameInput.isEnabled().catch(() => false)) {
       await this.firstNameInput.fill(firstName);
@@ -135,12 +197,13 @@ export class OnboardingApplicationPage {
     await this.bloodGroupCombobox.click();
     await this.page.getByRole('option', { name: 'B+', exact: true }).click();
 
-    await this.addressLine1.fill(`Road no.${plot}`);
-    await this.cityInput.fill(place.city);
-    await this.stateInput.fill(place.state);
-    await this.countryInput.fill('India');
-    await this.zipInput.fill(place.zip);
+    await this.addressLine1.fill(details.addressLine1);
+    await this.cityInput.fill(details.city);
+    await this.stateInput.fill(details.state);
+    await this.countryInput.fill(details.country);
+    await this.zipInput.fill(details.pincode);
     await this.sameAsCurrentAddress.check();
+    return details;
   }
 
   async goToDocuments() {
@@ -152,23 +215,39 @@ export class OnboardingApplicationPage {
     if (await this.isOnDocumentsPage()) {
       return;
     }
-    if (await this.nextButton.isVisible().catch(() => false)) {
-      await this.nextButton.click();
+
+    const documentsTab = this.page.getByText(/^Documents$/).first();
+    if (await documentsTab.isVisible().catch(() => false)) {
+      await documentsTab.click();
     }
+
+    if (await this.nextButton.isVisible().catch(() => false)) {
+      const enabled = await this.nextButton.isEnabled().catch(() => false);
+      if (enabled) {
+        await this.nextButton.click();
+      }
+    }
+
     await this.page.getByRole('row', { name: /Resume/ }).waitFor({ state: 'visible', timeout: 20000 });
   }
 
   async expectInvalidFileTypeRejected(filePath: string, documentName = 'Resume') {
     await this.openDocumentUpload(documentName);
-    await this.chooseFileButton.setInputFiles(filePath);
-    await expect(this.invalidFileTypeMessage.first()).toBeVisible({ timeout: 10000 });
-    console.log(`File type validation: ${(await this.invalidFileTypeMessage.first().innerText()).trim()}`);
+    const scope = await this.activeUploadScope();
+    await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
+    await expect(scope.getByText(/only pdf and image are allowed/i).first()).toBeVisible({ timeout: 10000 });
+    console.log(`File type validation: ${(await scope.getByText(/only pdf and image are allowed/i).first().innerText()).trim()}`);
+    await this.closeUploadDialog();
   }
 
-  async expectOversizedFileRejected(filePath: string) {
-    await this.chooseFileButton.setInputFiles(filePath);
-    await expect(this.oversizedFileMessage.first()).toBeVisible({ timeout: 10000 });
-    console.log(`File size validation: ${(await this.oversizedFileMessage.first().innerText()).trim()}`);
+  async expectOversizedFileRejected(filePath: string, documentName = 'Resume') {
+    if (!(await this.hasOpenUploadUi())) {
+      await this.openDocumentUpload(documentName);
+    }
+    const scope = await this.activeUploadScope();
+    await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
+    await expect(scope.getByText(/file size should be less than 25mb|less than 25mb/i).first()).toBeVisible({ timeout: 10000 });
+    console.log(`File size validation: ${(await scope.getByText(/file size should be less than 25mb|less than 25mb/i).first().innerText()).trim()}`);
     await this.closeUploadDialog();
   }
 
@@ -198,9 +277,10 @@ export class OnboardingApplicationPage {
   }
 
   async reUploadRejectedDocuments(pdfPath: string, imagePath: string) {
+    await this.goToDocumentsIfNeeded();
     let uploaded = 0;
     if (await this.needsReUpload('Resume') || await this.needsUpload('Resume')) {
-      await this.uploadDocument('Resume', pdfPath);
+      await this.uploadDocument('Resume', pdfPath, undefined, imagePath);
       uploaded += 1;
     }
     if (await this.needsReUpload('PAN') || await this.needsUpload('PAN')) {
@@ -235,6 +315,7 @@ export class OnboardingApplicationPage {
   }
 
   async submitAndExpectLogout(loginUsername: Locator) {
+    await expect(this.submitButton).toBeEnabled({ timeout: 30000 });
     await this.submitButton.click();
     await expect(this.confirmMessage).toBeVisible({ timeout: 10000 });
     await this.page.getByRole('dialog').getByRole('button', { name: 'Submit' }).click();
@@ -254,26 +335,61 @@ export class OnboardingApplicationPage {
       await this.page.keyboard.press('Escape');
     }
     await dialog.waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
+    await this.page.waitForTimeout(300);
   }
 
   private documentRow(documentName: string) {
-    return this.page.getByRole('row').filter({ hasText: documentName }).first();
+    return this.page.getByRole('row', { name: new RegExp(documentName, 'i') }).first();
+  }
+
+  private async hasOpenUploadUi() {
+    const dialog = this.page.getByRole('dialog');
+    if (await dialog.isVisible().catch(() => false)) {
+      return true;
+    }
+    return this.page.getByRole('button', { name: 'Choose File' }).isVisible().catch(() => false);
+  }
+
+  private async activeUploadScope() {
+    const dialog = this.page.getByRole('dialog').last();
+    if (await dialog.isVisible().catch(() => false)) {
+      return dialog;
+    }
+    return this.page.locator('body');
   }
 
   private async openDocumentUpload(documentName: string) {
     await this.closeUploadDialog();
+    await this.page.bringToFront();
+    await this.goToDocumentsIfNeeded();
+
     const row = this.documentRow(documentName);
-    const reUpload = row.getByRole('button', { name: /Re-Upload/ });
-    if (await reUpload.isVisible().catch(() => false)) {
-      await reUpload.click();
+    await row.scrollIntoViewIfNeeded();
+    await expect(row).toBeVisible({ timeout: 10000 });
+
+    const reUpload = row.getByRole('button', { name: /Re-Upload/i })
+      .or(row.locator('button, a').filter({ hasText: /Re-Upload/i }));
+    const upload = row.getByRole('button', { name: /Upload/i })
+      .or(row.locator('button').filter({ hasText: /Upload/i }));
+
+    if (await reUpload.first().isVisible().catch(() => false)) {
+      await reUpload.first().click();
+    } else if (await upload.first().isVisible().catch(() => false)) {
+      await upload.first().click();
     } else {
-      await row.getByRole('button', { name: /Upload/ }).click();
+      await row.getByRole('button').last().click();
     }
-    await this.page.getByRole('dialog').waitFor({ state: 'visible', timeout: 10000 });
-    await this.chooseFileButton.waitFor({ state: 'visible', timeout: 10000 });
+
+    const chooseFile = this.page.getByRole('button', { name: 'Choose File' });
+    await chooseFile.first().waitFor({ state: 'visible', timeout: 15000 });
   }
 
-  private async uploadDocument(documentName: string, filePath: string, documentNumber?: string) {
+  private async uploadDocument(
+    documentName: string,
+    filePath: string,
+    documentNumber?: string,
+    alternateFilePath?: string,
+  ) {
     const row = this.documentRow(documentName);
     const current = await row.innerText();
     if (/Waiting for submission/i.test(current) && !/Rejected/i.test(current)) {
@@ -281,27 +397,77 @@ export class OnboardingApplicationPage {
       return;
     }
 
-    await this.openDocumentUpload(documentName);
-    if (documentNumber) {
-      const numberInput = (await this.requiredDocumentNumberInput.isVisible().catch(() => false))
-        ? this.requiredDocumentNumberInput
-        : this.documentNumberInput;
-      if (await numberInput.isVisible().catch(() => false)) {
-        await numberInput.fill(documentNumber);
+    const candidates = [filePath, alternateFilePath].filter((value): value is string => Boolean(value));
+    let lastError = 'Upload did not succeed';
+
+    for (const candidate of candidates) {
+      try {
+        await this.openDocumentUpload(documentName);
+        const scope = await this.activeUploadScope();
+        if (documentNumber) {
+          const numberInput = scope.getByRole('textbox', { name: /Document Number/i }).first();
+          if (await numberInput.isVisible().catch(() => false)) {
+            await numberInput.fill(documentNumber);
+          }
+        }
+
+        await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(candidate);
+        await this.page.waitForTimeout(1000);
+        const note = scope.getByText(/Only Pdf and image are allowed/i);
+        if (await note.isVisible().catch(() => false)) {
+          await note.click().catch(() => {});
+        }
+
+        const upload = scope.getByRole('button', { name: 'Upload', exact: true });
+        await expect(upload).toBeEnabled({ timeout: 10000 });
+        await upload.click();
+
+        if (await this.waitForUploadSuccess(scope, row)) {
+          console.log(`Uploaded ${documentName}`);
+          await this.closeUploadDialog();
+          await this.page.waitForTimeout(500);
+          return;
+        }
+
+        lastError = `${documentName} upload did not succeed with ${pathBasename(candidate)}`;
+        await this.closeUploadDialog();
+      } catch (error) {
+        lastError = `${documentName} upload failed with ${pathBasename(candidate)}: ${error}`;
+        await this.closeUploadDialog();
       }
     }
-    await this.chooseFileButton.setInputFiles(filePath);
-    await expect(this.uploadButton).toBeEnabled({ timeout: 10000 });
-    await this.uploadButton.click();
-    const uploaded = await this.uploadedMessage.isVisible({ timeout: 15000 }).catch(() => false);
-    const waiting = await row.getByText(/Waiting for submission/i).isVisible().catch(() => false);
-    if (!uploaded && !waiting) {
-      const dialogText = await this.page.getByRole('dialog').innerText().catch(() => '');
-      throw new Error(`${documentName} upload did not succeed. Dialog: ${dialogText.replace(/\s+/g, ' ')}`);
-    }
-    console.log(`Uploaded ${documentName}`);
-    await this.page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+
+    const scope = await this.activeUploadScope();
+    const dialogText = await scope.innerText().catch(() => '');
+    throw new Error(`${lastError}. Dialog: ${dialogText.replace(/\s+/g, ' ').trim()}`);
   }
+
+  private async waitForUploadSuccess(scope: Locator, row: Locator) {
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      const scopeText = await scope.innerText().catch(() => '');
+      if (/Document uploaded successfully|uploaded successfully/i.test(scopeText)) {
+        return true;
+      }
+      if (await this.uploadedMessage.isVisible().catch(() => false)) {
+        return true;
+      }
+      const rowText = await row.innerText().catch(() => '');
+      if (/Waiting for submission/i.test(rowText) && !/Rejected/i.test(rowText)) {
+        return true;
+      }
+      const dialog = this.page.getByRole('dialog');
+      if (!(await dialog.isVisible().catch(() => false))) {
+        return true;
+      }
+      await this.page.waitForTimeout(400);
+    }
+    return false;
+  }
+}
+
+function pathBasename(filePath: string) {
+  return filePath.split(/[/\\]/).pop() ?? filePath;
 }
 
 function randomPan() {

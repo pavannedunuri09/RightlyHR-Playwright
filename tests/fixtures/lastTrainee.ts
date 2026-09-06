@@ -9,6 +9,16 @@ export type SavedTrainee = {
   username?: string;
   password?: string;
   rejectedDoc?: string;
+  designation?: string;
+  salutation?: string;
+  middleName?: string;
+  gender?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
 };
 
 const STORE_PATH = path.resolve(process.cwd(), 'tests', 'fixtures', 'last-trainee.json');

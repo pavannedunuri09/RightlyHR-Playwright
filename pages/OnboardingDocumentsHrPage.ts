@@ -159,9 +159,17 @@ export class OnboardingDocumentsHrPage {
       return;
     }
 
-    const kebab = row.getByRole('cell').last().locator('a, button, [class*="dropdown"]').first();
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+
+    const kebab = row.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted').last();
+    await kebab.scrollIntoViewIfNeeded();
+    await kebab.waitFor({ state: 'visible', timeout: 10000 });
     await kebab.click();
-    await expect(actionInRow).toBeVisible({ timeout: 5000 });
-    await actionInRow.click();
+
+    const menuItem = this.page.locator('.dropdown-menu.show').getByText(action, { exact: true })
+      .or(this.page.getByText(action, { exact: true }).filter({ visible: true }));
+    await menuItem.last().waitFor({ state: 'visible', timeout: 8000 });
+    await menuItem.last().click();
   }
 }

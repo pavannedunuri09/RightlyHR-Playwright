@@ -8,6 +8,7 @@
     "test:login": "playwright test tests/login.spec.ts --project=chromium --headed --workers=1",
     "test:wfh": "playwright test tests/work-from-home.spec.ts --project=chromium --headed --workers=1",
     "test:trainee": "playwright test tests/prospective-trainee.spec.ts --project=chromium --headed --workers=1",
+    "test:trainee:from07": "playwright test tests/prospective-trainee.spec.ts --grep \"Test-(0[7-9]|1[0-7])\" --project=chromium --headed --workers=1",
     "test:headed": "playwright test --headed --project=chromium --workers=1",
     "report": "playwright show-report"
   },
