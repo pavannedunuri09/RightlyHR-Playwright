@@ -86,7 +86,6 @@ test('Test-03: Verify Employee can update Salutation', async ({ page }) => {
     // Login as Employee
     await loginPage.goto();
     await loginPage.login(email!, password!);
-    await page.waitForURL(/\/dashboard\/emp/, { timeout: 45000, waitUntil: 'commit' });
 
     // Navigate to My Info
     await myInfoPage.openMyInfo();
@@ -94,9 +93,13 @@ test('Test-03: Verify Employee can update Salutation', async ({ page }) => {
     // Click Edit
     await myInfoPage.clickEdit();
 
-    // Select a value different from the current one so this test proves an update.
-    const selectedSalutation = 'Mr.';
-    await myInfoPage.selectSalutation(selectedSalutation);
+    // Toggle salutation/gender pair: Mr. -> Miss./Female, Miss. -> Mr./Male
+    const currentSalutation = await myInfoPage.readCurrentSalutation();
+    const { salutation: selectedSalutation, gender: selectedGender } = myInfoPage.alternateSalutationPair(
+      currentSalutation,
+    );
+    console.log(`Updating salutation from ${currentSalutation || 'unknown'} to ${selectedSalutation} / ${selectedGender}`);
+    await myInfoPage.selectSalutationWithGender(selectedSalutation, selectedGender);
 
     // Save changes
     await myInfoPage.saveChanges();
@@ -104,8 +107,9 @@ test('Test-03: Verify Employee can update Salutation', async ({ page }) => {
     // Verify success message
     await expect(myInfoPage.successMessage).toBeVisible();
 
-    // Verify updated Salutation
+    // Verify updated Salutation and matching Gender
     await expect(myInfoPage.salutationValue).toContainText(selectedSalutation);
+    await expect(myInfoPage.genderValue).toContainText(selectedGender);
 
 });
 
