@@ -554,13 +554,12 @@ test('TC19 - Verify Existing Weekend Values', async ({ page }) => {
   ).not.toHaveText('');
 });
 // TC20 - Change Day in Update Weekend
+// TC20 - Change Day in Update Weekend
 test('TC20 - Change Day in Update Weekend', async ({ page }) => {
-
   const loginPage = new LoginPage(page);
   const weekendsPage = new ManageWeekendsPage(page);
 
   await loginPage.loginFromEnv();
-
   await weekendsPage.openEmployeeFields();
   await weekendsPage.openManageWeekends();
 
@@ -572,26 +571,22 @@ test('TC20 - Change Day in Update Weekend', async ({ page }) => {
   );
 
   await weekendsPage.clickUpdate();
-
-  // A selected value is not listed as an option. Set Saturday only when it
-  // differs from the persisted value, so reruns remain stable.
   await weekendsPage.setDay('Saturday');
 
-  // Verify changed value
-  await expect(
-    page.getByRole('cell', { name: /Day.*dropdown trigger/i })
-      .first()
-      .getByRole('combobox')
-  ).toHaveText('Saturday');
+  const day = page
+    .getByRole('cell', { name: /Day.*dropdown trigger/i })
+    .first()
+    .getByRole('combobox');
+
+  await expect(day).toHaveAccessibleName('Saturday');
 });
 // TC21 - Submit Updated Weekend Record
+// TC21 - Submit Updated Weekend Record
 test('TC21 - Submit Updated Weekend Record', async ({ page }) => {
-
   const loginPage = new LoginPage(page);
   const weekendsPage = new ManageWeekendsPage(page);
 
   await loginPage.loginFromEnv();
-
   await weekendsPage.openEmployeeFields();
   await weekendsPage.openManageWeekends();
 
@@ -603,25 +598,25 @@ test('TC21 - Submit Updated Weekend Record', async ({ page }) => {
   );
 
   await weekendsPage.clickUpdate();
-
-  // Persist a deterministic value for TC22; this is also safe when a prior
-  // run has already set the record to Saturday.
   await weekendsPage.setDay('Saturday');
 
-  // Submit update
   await page.getByRole('button', {
-  name: 'Update',
-  exact: true,
-}).click();
+    name: 'Update',
+    exact: true,
+  }).click();
+
+  await expect(page).toHaveURL(
+    /\/settings\/employee-fields\/update-weekends/
+  );
 });
 // TC22 - Verify Updated Weekend Record
-test('TC22 - Verify Updated Weekend Record', async ({ page }) => {
+// ...existing code...
 
+test('TC22 - Verify Updated Weekend Record', async ({ page }) => {
   const loginPage = new LoginPage(page);
   const weekendsPage = new ManageWeekendsPage(page);
 
   await loginPage.loginFromEnv();
-
   await weekendsPage.openEmployeeFields();
   await weekendsPage.openManageWeekends();
 
@@ -633,22 +628,24 @@ test('TC22 - Verify Updated Weekend Record', async ({ page }) => {
   );
 
   await weekendsPage.clickUpdate();
+  await weekendsPage.setDay('Saturday');
+
+  await page.getByRole('button', {
+    name: 'Update',
+    exact: true,
+  }).click();
 
   await expect(page).toHaveURL(
     /\/settings\/employee-fields\/update-weekends/
   );
 
-  // Get the existing Day cell
-  const dayCell = page
-    .getByRole('cell', {
-      name: /Day.*dropdown trigger/i,
-    })
-    .first();
-
-  // Verify the updated Day
-  await expect(dayCell).toContainText('Saturday');
+  await expect(
+    page
+      .getByRole('cell', { name: /Day.*dropdown trigger/i })
+      .first()
+      .getByRole('combobox')
+  ).toHaveAccessibleName('Saturday');
 });
-// TC23 - Clone Weekend Record
 // TC23 - Clone Weekend Record
 test('TC23 - Clone Weekend Record', async ({ page }) => {
 
@@ -665,6 +662,7 @@ test('TC23 - Clone Weekend Record', async ({ page }) => {
     'Hyderabad',
     'Ayyappa Society',
     'Holiday shift'
+
   );
 
   // Open Update page
@@ -931,12 +929,10 @@ test('TC28 - Change Shift in Cloned Record', async ({ page }) => {
 
 // TC29 - Change Day in Cloned Record
 test('TC29 - Change Day in Cloned Record', async ({ page }) => {
-
   const loginPage = new LoginPage(page);
   const weekendsPage = new ManageWeekendsPage(page);
 
   await loginPage.loginFromEnv();
-
   await weekendsPage.openEmployeeFields();
   await weekendsPage.openManageWeekends();
 
@@ -947,63 +943,50 @@ test('TC29 - Change Day in Cloned Record', async ({ page }) => {
     'Holiday shift'
   );
 
-  // Open Update page
   await weekendsPage.clickUpdate();
-
-  // Clone record
   await weekendsPage.clone();
 
-  // Change Year: 2025 → 2026
   await page.getByText('2025', { exact: true }).click();
-
   await page.getByRole('option', {
     name: '2026',
     exact: true,
   }).click();
 
-  // Change Location: Hyderabad → Gujarat
-  await page
-    .getByRole('combobox', {
-      name: 'Please select location',
-    })
-    .click();
-
+  await page.getByRole('combobox', {
+    name: 'Please select location',
+  }).click();
   await page.getByRole('option', {
     name: 'Gujarat',
     exact: true,
   }).click();
 
-  // Change Sub Location: Ayyappa Society → Gandhi Nagar
-  await page
-    .getByRole('combobox', {
-      name: 'Please select sub location',
-    })
-    .click();
-
+  await page.getByRole('combobox', {
+    name: 'Please select sub location',
+  }).click();
   await page.getByRole('option', {
     name: 'Gandhi Nagar',
     exact: true,
   }).click();
 
-  // Change Shift: Holiday shift → Gen
-  await page
-    .getByRole('combobox', {
-      name: 'Please select shift',
-    })
-    .click();
-
+  await page.getByRole('combobox', {
+    name: 'Please select shift',
+  }).click();
   await page.getByRole('option', {
     name: 'Gen',
     exact: true,
   }).click();
 
-  // Monday is already a second cloned row and is disabled for this row.
   await weekendsPage.setDay('Saturday');
 
-  // Verify changed day
-  await expect(
-    page.getByText('Monday', { exact: true })
-  ).toBeVisible();
+  const dayRows = page.getByRole('row', {
+    name: /Day.*dropdown trigger/i,
+  });
+
+  await expect(dayRows.nth(0).getByRole('combobox'))
+    .toHaveAccessibleName('Saturday');
+
+  await expect(dayRows.nth(1).getByRole('combobox'))
+    .toHaveAccessibleName('Monday');
 });
 // TC30 - Select Occurrences in Cloned Record
 test('TC30 - Select Occurrences in Cloned Record', async ({ page }) => {
@@ -1188,18 +1171,14 @@ test('TC33 - Verify Cloned Weekend Day', async ({ page }) => {
     'Gen'
   );
 
-  // Open Update page
   await weekendsPage.clickUpdate();
 
-  // Verify the first cloned day. Monday remains in the second cloned row.
-  const dayCell = page
-    .getByRole('cell', {
-      name: /Day.*dropdown trigger/i,
-    })
-    .first();
+  const day = page
+    .getByRole('cell', { name: /Day.*dropdown trigger/i })
+    .first()
+    .getByRole('combobox');
 
-  await expect(dayCell.getByRole('combobox'))
-    .toHaveAttribute('aria-label', 'Saturday');
+  await expect(day).toHaveAccessibleName('Saturday');
 });
 // TC34 - Verify Published Weekend Record
 test('TC34 - Verify Published Weekend Record', async ({ page }) => {
