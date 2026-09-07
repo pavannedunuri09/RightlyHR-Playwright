@@ -8,13 +8,16 @@ export type OnboardingFiles = {
   oversized: string;
 };
 
-export function createOnboardingFiles(dir: string): OnboardingFiles {
-  fs.mkdirSync(dir, { recursive: true });
+const DEFAULT_ONBOARDING_FILES_DIR = path.join(process.cwd(), 'test-results', '.onboarding-files');
 
-  const pdf = path.join(dir, 'resume.pdf');
-  const image = path.join(dir, 'document.png');
-  const invalidType = path.join(dir, 'invalid.txt');
-  const oversized = path.join(dir, 'oversized.pdf');
+export function createOnboardingFiles(dir?: string): OnboardingFiles {
+  const targetDir = path.resolve(dir ?? DEFAULT_ONBOARDING_FILES_DIR);
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const pdf = path.join(targetDir, 'resume.pdf');
+  const image = path.join(targetDir, 'document.png');
+  const invalidType = path.join(targetDir, 'invalid.txt');
+  const oversized = path.join(targetDir, 'oversized.pdf');
 
   fs.writeFileSync(
     pdf,
@@ -34,6 +37,12 @@ export function createOnboardingFiles(dir: string): OnboardingFiles {
   );
   fs.writeFileSync(invalidType, 'this is not a pdf or image');
   fs.writeFileSync(oversized, Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(26 * 1024 * 1024, 65)]));
+
+  for (const file of [pdf, image, invalidType, oversized]) {
+    if (!fs.existsSync(file)) {
+      throw new Error(`Failed to create onboarding fixture file: ${file}`);
+    }
+  }
 
   return { pdf, image, invalidType, oversized };
 }

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 export class PreOnboardingPostOfferPage {
@@ -20,6 +21,7 @@ export class PreOnboardingPostOfferPage {
   }
 
   async addAcademicRecordIfNeeded(attachmentPath: string) {
+    await this.ensureAcademicStep();
     if (await this.isEmergencyPage() || await this.isEmploymentPage() || await this.isReviewPage()) {
       return;
     }
@@ -33,6 +35,24 @@ export class PreOnboardingPostOfferPage {
       return;
     }
     await this.addAcademicRecord(attachmentPath);
+  }
+
+  private async ensureAcademicStep() {
+    for (let step = 0; step < 8; step += 1) {
+      if (await this.isEmergencyPage() || await this.isEmploymentPage() || await this.isReviewPage()) {
+        return;
+      }
+      if (await this.addButton.isVisible().catch(() => false)
+        || await this.page.getByRole('textbox', { name: 'University*' }).isVisible().catch(() => false)) {
+        return;
+      }
+      if ((await this.nextButton.isVisible().catch(() => false)) && (await this.nextButton.isEnabled().catch(() => false))) {
+        await this.nextButton.click();
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      break;
+    }
   }
 
   async fillEmergencyContactsIfNeeded() {
@@ -149,6 +169,9 @@ export class PreOnboardingPostOfferPage {
       await this.page.getByRole('textbox').nth(2).fill('2026-01-12');
     }
     await this.page.getByRole('textbox', { name: 'Job Role' }).fill('QA');
+    if (!fs.existsSync(attachmentPath)) {
+      throw new Error(`Employment attachment missing: ${attachmentPath}`);
+    }
     await this.page.getByRole('button', { name: 'Choose File' }).setInputFiles(attachmentPath);
 
     await this.addButton.click();

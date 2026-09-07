@@ -19,10 +19,12 @@ export class EmployeeMyInfoPage {
   }
 
   async requestDocuments() {
+    await expect(this.requestDocumentsButton).toBeEnabled({ timeout: 10000 });
     await this.requestDocumentsButton.click();
-    await expect(this.successPopup).toBeVisible({ timeout: 15000 });
-    const text = (await this.successPopup.innerText()).trim();
+    await expect(this.successPopup.first()).toBeVisible({ timeout: 15000 });
+    const text = (await this.successPopup.first().innerText()).trim();
     console.log(`Success popup: ${text}`);
+    await this.page.keyboard.press('Escape').catch(() => {});
     return text;
   }
 }

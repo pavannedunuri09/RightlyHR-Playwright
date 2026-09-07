@@ -7,8 +7,14 @@ import { OnboardingApplicationPage } from '../../pages/OnboardingApplicationPage
 import { OnboardingDocumentsHrPage } from '../../pages/OnboardingDocumentsHrPage';
 import { TraineeOfferLetterPage } from '../../pages/TraineeOfferLetterPage';
 import { PendingTraineeOfferApprovalPage } from '../../pages/PendingTraineeOfferApprovalPage';
+import { TraineeOnboardRequestPage } from '../../pages/TraineeOnboardRequestPage';
+import { TraineeJobPrepPage } from '../../pages/TraineeJobPrepPage';
+import { EmployeeOnboardingInfoPage } from '../../pages/EmployeeOnboardingInfoPage';
+import { PreOnboardingOfferLetterPage } from '../../pages/PreOnboardingOfferLetterPage';
+import { PreOnboardingPostOfferPage } from '../../pages/PreOnboardingPostOfferPage';
 import { loadLastTrainee, saveLastTrainee, isTraineeReusable, needsDocumentRequest, type SavedTrainee } from './lastTrainee';
 import { createOnboardingFiles } from './onboardingFiles';
+import { openPreOnboardingFromYopmail } from './onboardingCredentials';
 
 export function withOfferDefaults(trainee: SavedTrainee): SavedTrainee {
   const defaults = OnboardingApplicationPage.expectedPersonalDefaults(trainee.firstName);
@@ -21,28 +27,582 @@ export function withOfferDefaults(trainee: SavedTrainee): SavedTrainee {
   };
 }
 
+export function resolveTraineeEmail(trainee: SavedTrainee): string {
+  if (/@yopmail\.com/i.test(trainee.email)) {
+    return trainee.email;
+  }
+  if (trainee.username && /@yopmail\.com/i.test(trainee.username)) {
+    return trainee.username;
+  }
+  return trainee.email;
+}
+
+export function isTraineeEmailExcluded(email: string, exclude?: string | string[]) {
+  const excludes = (Array.isArray(exclude) ? exclude : exclude ? [exclude] : [])
+    .map((value) => value.toLowerCase())
+    .filter(Boolean);
+  if (excludes.length === 0) {
+    return false;
+  }
+  const normalized = email.toLowerCase();
+  const local = normalized.split('@')[0]?.replace(/\d+$/, '') ?? normalized;
+  return excludes.some((excludeEmail) => {
+    const excludeLocal = excludeEmail.split('@')[0]?.replace(/\d+$/, '') ?? excludeEmail;
+    return normalized === excludeEmail || local === excludeLocal;
+  });
+}
+
+export function hasValidEmployeeId(employeeId?: string) {
+  if (!employeeId) {
+    return false;
+  }
+  const trimmed = employeeId.trim();
+  if (!trimmed || /^[-–—]+$/i.test(trimmed) || /^NA$/i.test(trimmed)) {
+    return false;
+  }
+  const numeric = trimmed.replace(/\D/g, '');
+  return numeric.length > 0;
+}
+
+export async function resolveProspectiveTraineeForDocuments(
+  page: Page,
+): Promise<SavedTrainee> {
+  const saved = loadLastTrainee();
+  const trainees = new ProspectiveTraineePage(page);
+  await trainees.openTraineesList();
+
+  if (saved) {
+    await trainees.searchTrainee(saved.email);
+    const row = trainees.traineeRow(saved.email);
+    if (await row.isVisible({ timeout: 8000 }).catch(() => false)) {
+      const fromRow = await trainees.readTraineeFromRow(row);
+      const details = withOfferDefaults({ ...saved, ...fromRow, email: resolveTraineeEmail(saved) });
+      saveLastTrainee(details);
+      console.log(`Reusing saved prospective trainee ${details.email}`);
+      return details;
+    }
+    console.log(`Saved trainee ${saved.email} is not in prospective list; creating a new trainee for Test-03`);
+  } else {
+    console.log('No saved trainee found; creating a new trainee for Test-03');
+  }
+
+  const details = ProspectiveTraineePage.uniqueTrainee();
+  await trainees.openAddForm();
+  await trainees.fillAndSubmit(details);
+  await trainees.expectTraineeVisibleInList(details);
+  saveLastTrainee(details);
+  return details;
+}
+
 export async function tryLoadSavedTraineeFromList(
   trainees: ProspectiveTraineePage,
   saved: SavedTrainee,
+  options?: { matchByName?: boolean },
 ): Promise<SavedTrainee | null> {
-  await trainees.searchTrainee(saved.email);
-  let row = trainees.traineeRow(saved.email);
-  if (!(await row.isVisible({ timeout: 8000 }).catch(() => false))) {
-    await trainees.searchTrainee(saved.firstName);
-    row = trainees.traineeRow(saved.email);
+  const matchByName = options?.matchByName ?? true;
+  const fullName = `${saved.firstName} ${saved.lastName}`.trim();
+  const searches = [saved.email, saved.username, saved.employeeId, saved.firstName, fullName].filter(
+    (value, index, all): value is string => !!value && all.indexOf(value) === index,
+  );
+
+  for (const query of searches) {
+    await trainees.searchTrainee(query);
+
+    const rowCandidates = [saved.email, saved.username, saved.employeeId].filter(
+      (value): value is string => !!value,
+    );
+    if (matchByName && fullName.length > 1) {
+      rowCandidates.push(fullName);
+    }
+    for (const email of [saved.email, saved.username].filter((value): value is string => !!value)) {
+      const localPart = email.split('@')[0]?.replace(/\d+$/, '');
+      if (localPart && !rowCandidates.includes(localPart)) {
+        rowCandidates.push(localPart);
+      }
+    }
+
+    let row: Awaited<ReturnType<typeof trainees.traineeRow>> | null = null;
+    for (const candidate of rowCandidates) {
+      const match = trainees.traineeRow(candidate);
+      if (await match.isVisible({ timeout: 3000 }).catch(() => false)) {
+        row = match;
+        break;
+      }
+    }
+
+    if (!row) {
+      continue;
+    }
+
+    const fromSaved = await trainees.readTraineeFromRow(row);
+    const savedEmployeeId = saved.employeeId?.replace(/\D/g, '') || '';
+    const rowEmployeeId = fromSaved.employeeId?.replace(/\D/g, '') || '';
+    if (savedEmployeeId && rowEmployeeId && savedEmployeeId !== rowEmployeeId) {
+      console.log(
+        `Skipping ${fromSaved.firstName} ${fromSaved.lastName}; employeeId ${fromSaved.employeeId} does not match saved ${saved.employeeId}`,
+      );
+      continue;
+    }
+
+    const identityEmail = saved.username ?? saved.email;
+    const identityLocal = identityEmail.split('@')[0]?.replace(/\d+$/, '').toLowerCase() ?? '';
+    const rowText = (await row.innerText()).toLowerCase();
+    if (saved.firstName && fromSaved.firstName && saved.firstName.toLowerCase() !== fromSaved.firstName.toLowerCase()) {
+      const savedEmail = resolveTraineeEmail(saved).toLowerCase();
+      const rowEmail = resolveTraineeEmail(fromSaved).toLowerCase();
+      const sameTrainee =
+        savedEmail === rowEmail ||
+        rowText.includes(savedEmail.split('@')[0] ?? '') ||
+        rowText.includes(rowEmail.split('@')[0] ?? '');
+      if (!sameTrainee) {
+        console.log(`Skipping ${fromSaved.firstName}; first name does not match saved ${saved.firstName}`);
+        continue;
+      }
+      console.log(
+        `Correcting stale saved name ${saved.firstName} ${saved.lastName} to ${fromSaved.firstName} ${fromSaved.lastName}`,
+      );
+    }
+    if (identityLocal && !matchByName) {
+      const rowEmail = fromSaved.email.toLowerCase();
+      const matchesIdentity =
+        rowEmail.includes(identityLocal) ||
+        rowText.includes(identityLocal) ||
+        (
+          !!saved.firstName &&
+          !!saved.lastName &&
+          rowText.includes(saved.firstName.toLowerCase()) &&
+          rowText.includes(saved.lastName.toLowerCase())
+        );
+      if (!matchesIdentity) {
+        console.log(`Skipping ${fromSaved.email || fromSaved.firstName}; does not match identity ${identityEmail}`);
+        continue;
+      }
+    }
+
+    console.log(`Reusing ${fromSaved.email} (${(await row.innerText()).replace(/\s+/g, ' ').trim()})`);
+    return {
+      ...saved,
+      ...fromSaved,
+      email: resolveTraineeEmail({ ...saved, ...fromSaved }),
+    };
   }
-  if (!(await row.isVisible({ timeout: 8000 }).catch(() => false))) {
-    return null;
+
+  return null;
+}
+
+export async function resolveActiveSavedTrainee(
+  trainees: ProspectiveTraineePage,
+  saved: SavedTrainee,
+): Promise<SavedTrainee> {
+  await trainees.openActiveTraineesList();
+
+  const lookupOrder: Array<{ trainee: SavedTrainee; matchByName: boolean }> = [
+    { trainee: saved, matchByName: true },
+  ];
+  if (saved.username && saved.username.toLowerCase() !== saved.email.toLowerCase()) {
+    lookupOrder.unshift({
+      trainee: { ...saved, email: saved.username },
+      matchByName: true,
+    });
   }
-  const fromSaved = await trainees.readTraineeFromRow(row);
-  console.log(`Reusing ${saved.email} (${(await row.innerText()).replace(/\s+/g, ' ').trim()})`);
-  return { ...saved, ...fromSaved };
+
+  for (const { trainee, matchByName } of lookupOrder) {
+    const listed = await tryLoadSavedTraineeFromList(trainees, trainee, { matchByName });
+    if (listed) {
+      return withOfferDefaults(listed);
+    }
+  }
+
+  throw new Error(
+    `Active trainee not found for ${saved.email}${saved.employeeId ? ` (employeeId ${saved.employeeId})` : ''}. Run Test-13 first.`,
+  );
+}
+
+export async function findActiveTraineeWithOnboardRequest(
+  page: Page,
+  trainees: ProspectiveTraineePage,
+  options?: { excludeEmail?: string | string[]; maxPages?: number },
+): Promise<SavedTrainee | null> {
+  const exclude = options?.excludeEmail;
+  await trainees.openActiveTraineesList();
+  await trainees.clearTraineeSearch();
+  await trainees.expandTablePageSize();
+
+  for (let pageIndex = 0; pageIndex < (options?.maxPages ?? 5); pageIndex++) {
+    const rows = page.getByRole('row').filter({ has: page.getByRole('cell') });
+    const count = await rows.count();
+    for (let index = 0; index < count; index++) {
+      const row = rows.nth(index);
+      const rowText = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!rowText || /Request Date|Username|Showing \d+/i.test(rowText)) {
+        continue;
+      }
+
+      const fromRow = await trainees.readTraineeFromRow(row);
+      const email = resolveTraineeEmail(fromRow);
+      if (!/@yopmail\.com/i.test(email)) {
+        continue;
+      }
+      if (isTraineeEmailExcluded(email, exclude)) {
+        continue;
+      }
+
+      try {
+        await row.getByRole('cell').nth(1).click();
+        await page.getByText('Personal', { exact: true }).or(page.getByText('Job', { exact: true })).first()
+          .waitFor({ state: 'visible', timeout: 10000 });
+
+        const manager = (await page.getByText('Reporting Manager', { exact: true })
+          .locator('xpath=following-sibling::*[1]')
+          .innerText()
+          .catch(() => 'NA')).trim();
+        if (/^NA$/i.test(manager)) {
+          console.log(`${email} has no reporting manager; skipping`);
+          await trainees.openActiveTraineesList();
+          continue;
+        }
+
+        const resolved = withOfferDefaults({ ...fromRow, email });
+        const onboard = new TraineeOnboardRequestPage(page);
+        await onboard.openFromProfile();
+        if (await onboard.requestButton.last().isVisible().catch(() => false)) {
+          console.log(`Found onboard-ready trainee: ${resolved.firstName} ${resolved.lastName} (${email})`);
+          return resolved;
+        }
+
+        const tableText = await page.locator('table').innerText().catch(() => '');
+        if (/No Data Found/i.test(tableText)) {
+          await prepareActiveTraineeForOnboard(page, resolved);
+          await onboard.openFromProfile();
+          if (await onboard.requestButton.last().isVisible().catch(() => false)) {
+            console.log(`Prepared onboard-ready trainee: ${resolved.firstName} ${resolved.lastName} (${email})`);
+            return resolved;
+          }
+        }
+
+        console.log(`${email} does not have Request For Onboard; trying next active trainee`);
+        await trainees.openActiveTraineesList();
+      } catch (error) {
+        console.log(`Could not evaluate ${email} for onboard request: ${error}`);
+        await trainees.openActiveTraineesList();
+      }
+    }
+
+    const next = page.locator('.p-paginator-next').last();
+    if (!(await next.isVisible().catch(() => false))) {
+      break;
+    }
+    const nextClass = (await next.getAttribute('class')) || '';
+    if (nextClass.includes('p-disabled') || (await next.isDisabled().catch(() => false))) {
+      break;
+    }
+    await next.click();
+    await page.waitForTimeout(500);
+  }
+
+  return null;
+}
+
+export async function findActiveTraineeWithPendingOnboardRequest(
+  page: Page,
+  trainees: ProspectiveTraineePage,
+  options?: { excludeEmail?: string | string[]; maxPages?: number },
+): Promise<SavedTrainee | null> {
+  const exclude = options?.excludeEmail;
+  await trainees.openActiveTraineesList();
+  await trainees.clearTraineeSearch();
+  await trainees.expandTablePageSize();
+
+  for (let pageIndex = 0; pageIndex < (options?.maxPages ?? 3); pageIndex++) {
+    const rows = page.getByRole('row').filter({ has: page.getByRole('cell') });
+    const count = await rows.count();
+    for (let index = 0; index < count; index++) {
+      const row = rows.nth(index);
+      const rowText = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!rowText || /Request Date|Username|Showing \d+/i.test(rowText)) {
+        continue;
+      }
+
+      const fromRow = await trainees.readTraineeFromRow(row);
+      const email = resolveTraineeEmail(fromRow);
+      if (!/@yopmail\.com/i.test(email)) {
+        continue;
+      }
+      if (isTraineeEmailExcluded(email, exclude)) {
+        continue;
+      }
+
+      try {
+        await row.getByRole('cell').nth(1).click();
+        await page.getByText('Personal', { exact: true }).or(page.getByText('Job', { exact: true })).first()
+          .waitFor({ state: 'visible', timeout: 10000 });
+
+        const onboard = new TraineeOnboardRequestPage(page);
+        await onboard.openFromProfile();
+        const tableText = await page.locator('table').innerText().catch(() => '');
+        if (/Waiting for Approval/i.test(tableText)) {
+          const resolved = withOfferDefaults({ ...fromRow, email });
+          console.log(`Found pending onboard request for ${resolved.firstName} ${resolved.lastName} (${email})`);
+          return resolved;
+        }
+
+        await trainees.openActiveTraineesList();
+      } catch (error) {
+        console.log(`Could not evaluate pending onboard for ${email}: ${error}`);
+        await trainees.openActiveTraineesList();
+      }
+    }
+
+    const next = page.locator('.p-paginator-next').last();
+    if (!(await next.isVisible().catch(() => false))) {
+      break;
+    }
+    const nextClass = (await next.getAttribute('class')) || '';
+    if (nextClass.includes('p-disabled') || (await next.isDisabled().catch(() => false))) {
+      break;
+    }
+    await next.click();
+    await page.waitForTimeout(500);
+  }
+
+  return null;
+}
+
+export async function activateProspectiveTraineeToActive(
+  page: Page,
+  trainees: ProspectiveTraineePage,
+  employee: SavedTrainee,
+): Promise<SavedTrainee> {
+  await openSavedTraineeProfile(trainees, employee);
+  const onboardingInfo = new EmployeeOnboardingInfoPage(page);
+  await onboardingInfo.openFromProfile();
+  await onboardingInfo.setStatusTraineeActiveAndSave();
+
+  await trainees.goToTraineesList();
+  await trainees.expectTraineeHiddenInList(employee.email);
+  console.log(`${employee.email} removed from prospective trainees`);
+
+  await trainees.openActiveTraineesList();
+  await trainees.searchTrainee(employee.email);
+  let activeRow = trainees.traineeRow(`${employee.firstName} ${employee.lastName}`);
+  if (!(await activeRow.isVisible({ timeout: 5000 }).catch(() => false))) {
+    await trainees.searchTrainee(employee.firstName);
+    activeRow = trainees.traineeRow(`${employee.firstName} ${employee.lastName}`);
+  }
+  await expect(activeRow).toBeVisible({ timeout: 15000 });
+  const fromRow = await trainees.readTraineeFromRow(activeRow);
+  await trainees.openActiveTraineeProfile({ ...employee, ...fromRow, email: resolveTraineeEmail(employee) });
+
+  let employeeId = fromRow.employeeId ?? employee.employeeId;
+  if (hasValidEmployeeId(employeeId)) {
+    console.log(`Using employee ID from active list: ${employeeId}`);
+  } else {
+    try {
+      employeeId = await onboardingInfo.setEmployeeIdOnBasicInfo(employeeId);
+    } catch (error) {
+      console.log(`Could not set employee ID on Basic Info; continuing with list data. ${error}`);
+    }
+  }
+
+  const resolved = withOfferDefaults({
+    ...employee,
+    ...fromRow,
+    employeeId: hasValidEmployeeId(employeeId) ? employeeId : fromRow.employeeId ?? employee.employeeId,
+    email: resolveTraineeEmail(employee),
+  });
+  saveLastTrainee(resolved);
+  console.log(`${resolved.email} is in active trainees with employee ID ${resolved.employeeId}`);
+  return resolved;
+}
+
+export async function ensureActiveTraineeEmployeeId(
+  page: Page,
+  trainees: ProspectiveTraineePage,
+  employee: SavedTrainee,
+): Promise<SavedTrainee> {
+  let updated = await syncTraineeFromActiveList(trainees, employee);
+  if (hasValidEmployeeId(updated.employeeId)) {
+    saveLastTrainee(updated);
+    console.log(`Using employee ID from active list: ${updated.employeeId}`);
+    return updated;
+  }
+
+  await trainees.openActiveTraineeProfile(updated);
+  const onboardingInfo = new EmployeeOnboardingInfoPage(page);
+  try {
+    const employeeId = await onboardingInfo.setEmployeeIdOnBasicInfo(updated.employeeId);
+    if (hasValidEmployeeId(employeeId)) {
+      updated = withOfferDefaults({ ...updated, employeeId });
+    }
+  } catch (error) {
+    console.log(`Could not set employee ID on Basic Info; continuing with list data. ${error}`);
+  }
+  await page.keyboard.press('Escape').catch(() => {});
+
+  updated = await syncTraineeFromActiveList(trainees, updated);
+  if (!hasValidEmployeeId(updated.employeeId)) {
+    console.log(`No employee ID available for ${updated.email}; continuing onboard flow without one`);
+  } else {
+    console.log(`Synced active trainee identity: ${updated.firstName} ${updated.lastName} (${updated.employeeId})`);
+  }
+  saveLastTrainee(updated);
+  return updated;
+}
+
+export async function syncTraineeFromActiveList(
+  trainees: ProspectiveTraineePage,
+  employee: SavedTrainee,
+): Promise<SavedTrainee> {
+  await trainees.openActiveTraineesList();
+  await trainees.searchTrainee(employee.email);
+  let row = trainees.traineeRow(employee.email);
+  if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
+    await trainees.searchTrainee(employee.firstName);
+    row = trainees.traineeRow(`${employee.firstName} ${employee.lastName}`);
+  }
+  if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
+    return employee;
+  }
+  const fromRow = await trainees.readTraineeFromRow(row);
+  return withOfferDefaults({ ...employee, ...fromRow, email: resolveTraineeEmail(employee) });
+}
+
+export async function prepareActiveTraineeForOnboard(page: Page, employee: SavedTrainee) {
+  if (!employee.employeeId) {
+    const onboardingInfo = new EmployeeOnboardingInfoPage(page);
+    const basicTab = page.getByText('Personal', { exact: true }).or(page.getByText('Basic Info', { exact: true }));
+    if (await basicTab.first().isVisible().catch(() => false)) {
+      try {
+        employee.employeeId = await onboardingInfo.setEmployeeIdOnBasicInfo(employee.employeeId);
+      } catch (error) {
+        console.log(`Could not update employee ID on Basic Info; continuing onboard prep. ${error}`);
+      }
+    }
+  }
+  saveLastTrainee({ ...loadLastTrainee(), ...employee, employeeId: employee.employeeId });
+
+  const prep = new TraineeJobPrepPage(page);
+  const personalEmail = resolveTraineeEmail(employee);
+  const workEmail = personalEmail.replace('@', '1@');
+  await prep.ensureWorkEmail(workEmail);
+  await prep.ensureJobInfo();
+  await page.keyboard.press('Escape').catch(() => {});
+}
+
+export async function submitFreshOnboardRequest(page: Page, employee: SavedTrainee) {
+  await prepareActiveTraineeForOnboard(page, employee);
+  const onboard = new TraineeOnboardRequestPage(page);
+  await onboard.openFromProfile();
+  await onboard.expectRequestButtonVisible();
+  try {
+    await onboard.submitRequest();
+  } catch (error) {
+    if (!/job details are not updated/i.test(String(error))) {
+      throw error;
+    }
+    console.log('Onboard request needs Job Info update; retrying preparation');
+    await prepareActiveTraineeForOnboard(page, employee);
+    await onboard.openFromProfile();
+    await onboard.submitRequest();
+  }
+}
+
+export async function ensureOnboardRequestPending(page: Page, employee: SavedTrainee) {
+  const trainees = new ProspectiveTraineePage(page);
+  const onboard = new TraineeOnboardRequestPage(page);
+  await trainees.openActiveTraineeProfile(employee);
+  await onboard.openFromProfile();
+  const tableText = await page.locator('table').innerText().catch(() => '');
+  if (/Waiting for Approval/i.test(tableText)) {
+    console.log(`Using existing pending onboard request for ${employee.email}`);
+    return;
+  }
+  if (await onboard.requestButton.last().isVisible().catch(() => false)) {
+    await submitFreshOnboardRequest(page, employee);
+    return;
+  }
+  throw new Error(`${employee.email} has no pending onboard request and cannot submit a new one`);
+}
+
+export async function ensurePendingOnboardRequestTrainee(
+  page: Page,
+  testInfo: TestInfo,
+  options?: { excludeEmail?: string | string[] },
+): Promise<SavedTrainee> {
+  const trainees = new ProspectiveTraineePage(page);
+  const excludeEmail = options?.excludeEmail;
+
+  const pending = await findActiveTraineeWithPendingOnboardRequest(page, trainees, { excludeEmail });
+  if (pending) {
+    return pending;
+  }
+
+  const ready = await findActiveTraineeWithOnboardRequest(page, trainees, { excludeEmail });
+  if (ready) {
+    await submitFreshOnboardRequest(page, ready);
+    return ready;
+  }
+
+  console.log('No pending or onboard-ready trainee found; creating a new active trainee with onboard request');
+  return bootstrapActiveTraineeWithPendingOnboardRequest(page, testInfo);
+}
+
+async function bootstrapActiveTraineeWithPendingOnboardRequest(
+  page: Page,
+  testInfo: TestInfo,
+): Promise<SavedTrainee> {
+  const trainees = new ProspectiveTraineePage(page);
+  const employee = await ensureReleasedOfferTrainee(page, testInfo);
+
+  const mailTab = await page.context().newPage();
+  const yopmail = new YopmailPage(mailTab);
+  await yopmail.openInbox(employee.email);
+  await yopmail.waitForMailMatching(
+    new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
+    45000,
+  );
+  const { portal, preOnboarding, employee: activeEmployee } = await openPreOnboardingFromYopmail(yopmail, employee, {
+    preferLatestMailCredentials: true,
+  });
+  saveLastTrainee(activeEmployee);
+  if (await preOnboarding.goToApplicationButton.isVisible().catch(() => false)) {
+    await preOnboarding.goToApplication();
+  }
+
+  const offerLetter = new PreOnboardingOfferLetterPage(portal);
+  await offerLetter.goToOfferDecision();
+  await offerLetter.acceptIfNeeded();
+
+  const files = createOnboardingFiles(testInfo.outputDir);
+  const postOffer = new PreOnboardingPostOfferPage(portal);
+  await postOffer.addAcademicRecordIfNeeded(files.image);
+  await postOffer.fillEmergencyContactsIfNeeded();
+  await postOffer.addEmploymentHistoryIfNeeded(files.pdf);
+  await postOffer.expectReviewPage();
+  await postOffer.submitApplication();
+  await portal.close();
+  await mailTab.close();
+
+  await page.bringToFront();
+  await trainees.goToTraineesList();
+  const listed = await loadSavedTraineeFromList(trainees, activeEmployee);
+  const resolved = await activateProspectiveTraineeToActive(page, trainees, listed);
+  await submitFreshOnboardRequest(page, resolved);
+  saveLastTrainee(resolved);
+  console.log(`Bootstrapped active trainee with pending onboard request: ${resolved.email}`);
+  return resolved;
 }
 
 export async function readTraineeStatus(trainees: ProspectiveTraineePage, email: string) {
+  await trainees.searchTrainee(email);
   const row = trainees.traineeRow(email);
   if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
-    return '';
+    await trainees.searchTrainee(email.split('@')[0] ?? email);
+    const fallback = trainees.traineeRow(email);
+    if (!(await fallback.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return '';
+    }
+    return (await fallback.innerText()).replace(/\s+/g, ' ').trim();
   }
   return (await row.innerText()).replace(/\s+/g, ' ').trim();
 }
@@ -96,7 +656,20 @@ export async function ensureDocumentsSubmittedTrainee(
         console.log(`${listed.email} exists but documents are not submitted yet; continuing onboarding`);
         return withOfferDefaults(listed);
       }
+      if (status) {
+        console.log(`${listed.email} found with status "${status}"; reusing saved trainee`);
+        saveLastTrainee(withOfferDefaults(listed));
+        return withOfferDefaults(listed);
+      }
     }
+  }
+
+  const submitted = await trainees.findDocumentsSubmittedTrainee();
+  if (submitted) {
+    const resolved = withOfferDefaults(submitted);
+    console.log(`Using Documents Submitted trainee ${resolved.email} from list scan`);
+    saveLastTrainee(resolved);
+    return resolved;
   }
 
   console.log('No reusable Documents Submitted trainee found; creating a new trainee');
@@ -369,7 +942,8 @@ export async function prepareSubmittedTrainee(
   testInfo: TestInfo,
 ) {
   const { details, yopmail } = await requestDocumentsAndOpenMail(page);
-  const requestSubject = await yopmail.waitForMailSubject(`${details.firstName} ${details.lastName}`);
+  const requestSubject = await yopmail.waitForMailSubject(`${details.firstName} ${details.lastName}`, 240000, details.email);
+  await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
   const credentials = await yopmail.readCredentials();
   saveLastTrainee({
     ...details,

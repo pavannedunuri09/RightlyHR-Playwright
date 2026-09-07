@@ -18,22 +18,72 @@ export class YopmailPage {
   async openInbox(email: string) {
     this.mailbox = mailboxFromEmail(email);
     this.cachedMail = null;
-    await this.gotoInbox();
+    if (!this.pageUsable()) {
+      return;
+    }
+
+    const onMailbox = /yopmail\.com/i.test(this.page.url());
+    if (onMailbox) {
+      await this.bringPageToFront().catch(() => {});
+      if (await this.hasCaptcha()) {
+        console.log('Yopmail already open with CAPTCHA; waiting for manual solve.');
+        return;
+      }
+      if (await this.inboxReady()) {
+        return;
+      }
+    }
+
+    await this.gotoInbox({ soft: true }).catch((error) => {
+      console.log(`Yopmail open inbox soft-failed: ${error}`);
+    });
   }
 
-  async waitForMailSubject(fullName: string, timeoutMs = 180000) {
-    const pattern = namePattern(fullName);
+  async waitForMailSubject(fullName: string, timeoutMs = 180000, email?: string) {
+    const patterns = [namePattern(fullName)];
+    if (email) {
+      const localPart = mailboxFromEmail(email);
+      patterns.push(new RegExp(`RightlyHR[\\s\\S]*${escapeRegExp(localPart)}`, 'i'));
+      patterns.push(/Request for Documents Upload|Request for Documents/i);
+    }
+
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const mail = await this.findMailUi(pattern);
-      if (mail) {
-        this.cachedMail = mail;
-        console.log(`Mail subject: ${mail.subject}`);
-        return mail.subject;
+      if (!this.pageUsable()) {
+        throw new Error('Yopmail tab was closed while waiting for mail');
       }
-      await this.reloadInbox();
-      await sleep(8000);
+      await this.bringPageToFront();
+
+      if (await this.hasCaptcha()) {
+        await this.handleCaptchaIfVisible(isHeadedRun() ? 180000 : 30000);
+      } else if (!(await this.inboxReady())) {
+        const onYopmail = /yopmail\.com/i.test(this.page.url());
+        if (!onYopmail) {
+          await this.gotoInbox({ soft: true }).catch((error) => {
+            console.log(`Yopmail inbox refresh failed: ${error}`);
+          });
+        } else {
+          await sleep(5000);
+        }
+      }
+
+      try {
+        for (const pattern of patterns) {
+          const mail = await this.findMailUi(pattern);
+          if (mail) {
+            this.cachedMail = mail;
+            console.log(`Mail subject: ${mail.subject}`);
+            return mail.subject;
+          }
+        }
+        if (!(await this.hasCaptcha())) {
+          await this.reloadInbox({ soft: true });
+        }
+      } catch (error) {
+        console.log(`Yopmail mail wait interrupted: ${error}`);
+      }
+      await sleep(5000);
     }
     throw new Error(`Yopmail did not receive mail for ${fullName}`);
   }
@@ -61,7 +111,7 @@ export class YopmailPage {
         console.log(`Mail subject: ${mail.subject}`);
         return mail.subject;
       }
-      await this.reloadInbox();
+      await this.reloadInboxIfAllowed();
       await sleep(8000);
     }
     throw new Error(`No re-request Yopmail message for ${fullName}`);
@@ -70,65 +120,116 @@ export class YopmailPage {
   async waitForMailMatching(pattern: RegExp, timeoutMs = 120000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      for (const mail of await this.listMailsUi()) {
+      const matches: MailMessage[] = [];
+      for (const mail of await this.listAllMailsUi()) {
         const combined = `${mail.subject}\n${mail.body}`;
         if (pattern.test(combined)) {
-          this.cachedMail = mail;
-          const subject = (await this.readCurrentSubjectFromBody(combined)) || mail.subject;
-          console.log(`Mail subject: ${subject.replace(/\s+/g, ' ').trim()}`);
-          return subject.replace(/\s+/g, ' ').trim();
+          matches.push(mail);
         }
       }
-      await this.reloadInbox();
-      await sleep(8000);
+      if (matches.length > 0) {
+        this.cachedMail = pickBestPortalMail(matches);
+        const subject =
+          (await this.readCurrentSubjectFromBody(`${this.cachedMail.subject}\n${this.cachedMail.body}`)) ||
+          this.cachedMail.subject;
+        console.log(`Mail subject: ${subject.replace(/\s+/g, ' ').trim()}`);
+        return subject.replace(/\s+/g, ' ').trim();
+      }
+      await this.reloadInboxIfAllowed();
+      await sleep(5000);
     }
     throw new Error(`Yopmail did not receive mail matching ${pattern}`);
   }
 
-  async waitForNewMail(fullName: string, previousSubject: string, timeoutMs = 120000) {
-    const pattern = namePattern(fullName);
+  async waitForNewMail(fullName: string, previousSubject: string, timeoutMs = 240000) {
+    const namePat = namePattern(fullName);
+    const submitPat = /Document Submitted Successfully|Documents Submitted|Submitted successfully|Thank you for submitting/i;
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const mail = await this.findMailUi(pattern);
-      if (
-        mail &&
-        mail.subject !== previousSubject &&
-        !/Request for Documents Upload/i.test(mail.subject)
-      ) {
+      for (const mail of await this.listAllMailsUi()) {
+        const combined = `${mail.subject}\n${mail.body}`;
+        if (!namePat.test(combined)) {
+          continue;
+        }
+
+        if (submitPat.test(combined)) {
+          this.cachedMail = mail;
+          console.log(`Mail subject: ${mail.subject}`);
+          return mail.subject;
+        }
+
+        const isRequestMail =
+          mail.subject === previousSubject ||
+          (/Request for Documents Upload|Request for Documents/i.test(mail.subject) &&
+            !submitPat.test(combined));
+        if (isRequestMail) {
+          continue;
+        }
+
         this.cachedMail = mail;
         console.log(`Mail subject: ${mail.subject}`);
         return mail.subject;
       }
-      await this.reloadInbox();
+      await this.reloadInboxIfAllowed();
       await sleep(8000);
     }
     throw new Error(`No new Yopmail message after document submit for ${fullName}`);
   }
 
-  async readCredentials() {
-    if (this.cachedMail) {
-      const parsed = parseCredentials(this.cachedMail.body);
+  async readCredentials(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
+    if (!options?.skipCached && this.cachedMail) {
+      await this.ensureCachedMailOpen();
+      const liveBody = await this.readLiveMailContent();
+      const parsed = parseCredentials(liveBody) ?? parseCredentials(this.cachedMail.body);
       if (parsed) {
         console.log(`Yopmail username: ${parsed.username}`);
         return parsed;
       }
     }
 
-    for (const mail of await this.listAllMailsUi()) {
-      const parsed = parseCredentials(mail.body);
-      if (parsed) {
-        this.cachedMail = mail;
-        console.log(`Yopmail username: ${parsed.username}`);
-        return parsed;
+    const ranked = await this.collectCredentialMails();
+    if (options?.preferPattern) {
+      const preferred = ranked.find((entry) => options.preferPattern!.test(`${entry.mail.subject}\n${entry.mail.body}`));
+      if (preferred) {
+        this.cachedMail = preferred.mail;
+        console.log(`Yopmail username: ${preferred.credentials.username}`);
+        return preferred.credentials;
       }
+    }
+
+    if (ranked.length > 0) {
+      this.cachedMail = ranked[0].mail;
+      console.log(`Yopmail username: ${ranked[0].credentials.username}`);
+      return ranked[0].credentials;
     }
 
     throw new Error('Could not read Username/Password from Yopmail');
   }
 
-  async findCredentialsInInbox() {
-    return this.readCredentials();
+  async findCredentialsInInbox(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
+    return this.readCredentials(options);
+  }
+
+  private async collectCredentialMails() {
+    const messages = await this.listAllMailsUi();
+    const results: Array<{ mail: MailMessage; credentials: { username: string; password: string }; score: number }> = [];
+
+    for (let index = 0; index < messages.length; index += 1) {
+      const mail = messages[index];
+      const parsed = parseCredentials(mail.body);
+      if (!parsed) {
+        continue;
+      }
+      const combined = `${mail.subject}\n${mail.body}`;
+      results.push({
+        mail,
+        credentials: parsed,
+        score: credentialMailScore(combined, index),
+      });
+    }
+
+    return results.sort((left, right) => right.score - left.score);
   }
 
   async mailBody() {
@@ -140,51 +241,391 @@ export class YopmailPage {
   }
 
   async openOnboardingPortal() {
+    const cachedCombined = this.cachedMail ? `${this.cachedMail.subject}\n${this.cachedMail.body}` : '';
+    if (/Offer Letter Issued/i.test(cachedCombined)) {
+      try {
+        return await this.openOnboardingPortalFromDocumentRequestMail();
+      } catch (error) {
+        console.log(`Document-request portal open failed; trying offer mail. ${error}`);
+      }
+    }
+
+    if (this.cachedMail) {
+      await this.ensureCachedMailOpen();
+      const fromCachedFrame = await this.openPortalViaMailFrame();
+      if (fromCachedFrame) {
+        return fromCachedFrame;
+      }
+      const fromCached = await this.openPortalFromMailBody(this.cachedMail.body);
+      if (fromCached) {
+        return fromCached;
+      }
+    }
+
     for (const mail of await this.listAllMailsUi()) {
+      this.cachedMail = mail;
+      const fromFrame = await this.openPortalViaMailFrame();
+      if (fromFrame) {
+        return fromFrame;
+      }
       const portalUrl = extractPortalUrl(mail.body);
-      if (portalUrl && parseCredentials(mail.body)) {
-        this.cachedMail = mail;
+      if (portalUrl) {
         const onboardingPage = await this.page.context().newPage();
         await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
         return onboardingPage;
       }
     }
 
-    if (!this.cachedMail) {
-      await this.listMailsUi();
+    try {
+      return await this.openOnboardingPortalFromDocumentRequestMail();
+    } catch (error) {
+      console.log(`Document-request portal fallback failed: ${error}`);
     }
-    const body = this.cachedMail?.body ?? '';
-    const portalUrl = extractPortalUrl(body);
+
+    try {
+      return await this.openOnboardingPortalFromCredentialMails();
+    } catch (error) {
+      console.log(`Credential-mail portal fallback failed: ${error}`);
+    }
+
+    const portalUrl = await this.findPortalUrlInInbox();
     if (portalUrl) {
       const onboardingPage = await this.page.context().newPage();
       await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
       return onboardingPage;
     }
 
-    const popupPromise = this.page.waitForEvent('popup');
-    const clickHere = this.mailFrame().getByRole('link', { name: 'Click here' });
-    const portalLink = this.mailFrame().getByRole('link', { name: /portal|onboarding|click here/i }).first();
-    if (await clickHere.isVisible().catch(() => false)) {
-      await clickHere.click();
-    } else {
-      await portalLink.click();
+    throw new Error('Could not open onboarding portal from Yopmail');
+  }
+
+  async openOnboardingPortalFromDocumentRequestMail() {
+    await this.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
+    const fromOpenMail = await this.openPortalFromOpenMail();
+    if (fromOpenMail) {
+      return fromOpenMail;
     }
+    const fromBody = await this.openPortalFromMailBody(await this.readLiveMailContent());
+    if (fromBody) {
+      return fromBody;
+    }
+    throw new Error('Could not open portal from document request mail');
+  }
+
+  async findPortalUrlInInbox(): Promise<string | null> {
+    try {
+      await this.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
+      const url = extractPortalUrl(await this.readLiveMailContent());
+      if (url) {
+        return url;
+      }
+    } catch {
+      // Try scanning the rest of the inbox below.
+    }
+
+    for (const mail of await this.listAllMailsUi()) {
+      const url = extractPortalUrl(`${mail.subject}\n${mail.body}`);
+      if (url) {
+        return url;
+      }
+    }
+
+    return null;
+  }
+
+  async openOnboardingPortalFromCredentialMails() {
+    try {
+      return await this.openOnboardingPortalFromDocumentRequestMail();
+    } catch {
+      // Continue with ranked credential mails.
+    }
+
+    const mails = await this.listAllMailsUi();
+    const ranked = mails
+      .map((mail, index) => ({
+        mail,
+        index,
+        combined: `${mail.subject}\n${mail.body}`,
+      }))
+      .filter(
+        ({ combined }) =>
+          parseCredentials(combined) ||
+          /Offer Letter Issued|Request for Documents|Onboarding Portal/i.test(combined),
+      )
+      .sort((left, right) => scorePortalMail(right.combined, right.index) - scorePortalMail(left.combined, left.index));
+
+    for (const { mail } of ranked) {
+      this.cachedMail = mail;
+      await this.ensureCachedMailOpen();
+      const fromFrame = await this.openPortalViaMailFrame();
+      if (fromFrame) {
+        return fromFrame;
+      }
+      const portalUrl = extractPortalUrl(`${mail.body}\n${await this.readOpenMailHtml()}`);
+      if (portalUrl) {
+        const onboardingPage = await this.page.context().newPage();
+        await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
+        return onboardingPage;
+      }
+    }
+
+    throw new Error('Could not open onboarding portal from credential mails');
+  }
+
+  async openMatchingMailInViewer(pattern: RegExp) {
+    await this.ensureInboxVisible();
+    const rows = this.mailRows();
+    const count = await rows.count();
+
+    for (let index = 0; index < count; index += 1) {
+      const row = rows.nth(index);
+      if (!(await row.isVisible().catch(() => false))) {
+        continue;
+      }
+      const preview = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      await this.openMailRow(row);
+      await sleep(900);
+      const body = await this.readOpenMailBody();
+      const html = await this.readOpenMailHtml();
+      const combined = `${preview}\n${body}\n${html}`;
+      if (pattern.test(combined)) {
+        this.cachedMail = {
+          id: `mail-${index}`,
+          subject: preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() || preview.slice(0, 120),
+          body: `${body}\n${html}`,
+        };
+        console.log(`Opened Yopmail message in viewer: ${this.cachedMail.subject}`);
+        return this.cachedMail;
+      }
+    }
+
+    throw new Error(`Could not open Yopmail message matching ${pattern}`);
+  }
+
+  async findAllCredentialsInInbox() {
+    const ranked = await this.collectCredentialMails();
+    const unique: Array<{ username: string; password: string }> = [];
+    const seen = new Set<string>();
+
+    if (this.cachedMail) {
+      const parsed = parseCredentials(this.cachedMail.body);
+      if (parsed) {
+        const key = `${parsed.username}|${parsed.password}`;
+        seen.add(key);
+        unique.push(parsed);
+      }
+    }
+
+    for (const entry of ranked) {
+      const key = `${entry.credentials.username}|${entry.credentials.password}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(entry.credentials);
+    }
+
+    return unique;
+  }
+
+  private async openPortalFromOpenMail() {
+    await sleep(1200);
+    const portalUrl = await this.getPortalUrlFromOpenMail();
+    if (portalUrl) {
+      console.log(`Opening onboarding portal URL from mail: ${portalUrl}`);
+      const onboardingPage = await this.page.context().newPage();
+      await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
+      return onboardingPage;
+    }
+
+    const fromFrame = await this.clickPortalViaMailFrameDirect();
+    if (fromFrame) {
+      return fromFrame;
+    }
+
+    return this.openPortalViaMailFrame();
+  }
+
+  private async readAnchorHrefsFromMailFrame(): Promise<string[]> {
+    const frame = this.page.frame({ name: 'ifmail' });
+    if (!frame) {
+      return [];
+    }
+    return frame.evaluate(() =>
+      Array.from(document.querySelectorAll('a[href]'))
+        .map((anchor) => anchor.getAttribute('href') || '')
+        .filter(Boolean),
+    );
+  }
+
+  private async clickPortalViaMailFrameDirect(): Promise<Page | null> {
+    const frame = this.page.frame({ name: 'ifmail' });
+    if (!frame) {
+      return null;
+    }
+
+    const link = frame.getByRole('link', { name: 'Click here' });
+    if (!(await link.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return null;
+    }
+
+    const href = ((await link.getAttribute('href').catch(() => '')) || '').trim();
+    const normalized = href ? normalizePortalHref(href) : null;
+    if (normalized) {
+      const onboardingPage = await this.page.context().newPage();
+      await onboardingPage.goto(normalized, { waitUntil: 'domcontentloaded' });
+      return onboardingPage;
+    }
+
+    const popupPromise = this.page.context().waitForEvent('page', { timeout: 20000 }).catch(() => null);
+    await link.click();
     const onboardingPage = await popupPromise;
-    await onboardingPage.waitForLoadState('domcontentloaded');
+    if (onboardingPage) {
+      await onboardingPage.waitForLoadState('domcontentloaded');
+      return onboardingPage;
+    }
+
+    return null;
+  }
+
+  private async getPortalUrlFromOpenMail(): Promise<string | null> {
+    const live = await this.readLiveMailContent();
+    const fromBody = extractPortalUrl(live);
+    if (fromBody) {
+      return fromBody;
+    }
+
+    for (const href of await this.readAnchorHrefsFromMailFrame()) {
+      const normalized = normalizePortalHref(href);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const linkLocators = [
+      this.mailFrame().getByRole('link', { name: 'Click here' }),
+      this.mailFrame().locator('a').filter({ hasText: /click here/i }),
+    ];
+    for (const locator of linkLocators) {
+      const count = await locator.count();
+      for (let index = 0; index < count; index += 1) {
+        const href = ((await locator.nth(index).getAttribute('href').catch(() => '')) || '').trim();
+        const normalized = normalizePortalHref(href);
+        if (normalized) {
+          return normalized;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private async openPortalFromMailBody(body: string) {
+    let portalUrl = extractPortalUrl(body);
+    if (!portalUrl) {
+      portalUrl = extractPortalUrl(await this.readOpenMailHtml());
+    }
+    if (!portalUrl) {
+      return null;
+    }
+    console.log(`Opening onboarding portal URL from mail body: ${portalUrl}`);
+    const onboardingPage = await this.page.context().newPage();
+    await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
     return onboardingPage;
   }
 
+  private async openPortalViaMailFrame() {
+    const clickHereLinks = this.mailFrame().locator('a').filter({ hasText: /click here/i });
+    const clickHereCount = await clickHereLinks.count();
+    for (let index = 0; index < clickHereCount; index += 1) {
+      const opened = await this.clickPortalLink(clickHereLinks.nth(index), { allowUnknownHref: true });
+      if (opened) {
+        return opened;
+      }
+    }
+
+    const clickHere = this.mailFrame().getByRole('link', { name: 'Click here' });
+    const fromClickHere = await this.clickPortalLink(clickHere, { allowUnknownHref: true });
+    if (fromClickHere) {
+      return fromClickHere;
+    }
+
+    const namedPatterns = [/portal link/i, /onboarding portal/i, /view offer/i, /log in/i];
+    for (const pattern of namedPatterns) {
+      const opened = await this.clickPortalLink(this.mailFrame().getByRole('link', { name: pattern }).first());
+      if (opened) {
+        return opened;
+      }
+    }
+
+    const textClickHere = this.mailFrame().getByText(/click here/i).first();
+    const fromText = await this.clickPortalLink(textClickHere, { allowUnknownHref: true });
+    if (fromText) {
+      return fromText;
+    }
+
+    const portalLinks = this.mailFrame().locator('a[href]');
+    const linkCount = await portalLinks.count();
+    for (let index = 0; index < linkCount; index += 1) {
+      const link = portalLinks.nth(index);
+      const href = ((await link.getAttribute('href').catch(() => '')) || '').trim();
+      if (!href || !isPortalHref(href)) {
+        continue;
+      }
+      const opened = await this.clickPortalLink(link);
+      if (opened) {
+        return opened;
+      }
+    }
+
+    return null;
+  }
+
+  private async clickPortalLink(link: Locator, options?: { allowUnknownHref?: boolean }) {
+    if (!(await link.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return null;
+    }
+
+    const href = ((await link.getAttribute('href').catch(() => '')) || '').trim();
+    const normalizedHref = href ? normalizePortalHref(href) : null;
+    if (normalizedHref) {
+      const onboardingPage = await this.page.context().newPage();
+      await onboardingPage.goto(normalizedHref, { waitUntil: 'domcontentloaded' });
+      return onboardingPage;
+    }
+    if (href && isDocumentDownloadHref(href)) {
+      return null;
+    }
+    if (!options?.allowUnknownHref && href && !isPortalHref(href)) {
+      return null;
+    }
+
+    const popupPromise = this.page.waitForEvent('popup', { timeout: 20000 }).catch(() => null);
+    await link.click();
+    const onboardingPage = await popupPromise;
+    if (onboardingPage) {
+      await onboardingPage.waitForLoadState('domcontentloaded');
+      return onboardingPage;
+    }
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await sleep(500);
+      const pages = this.page.context().pages().filter((tab) => tab !== this.page);
+      const latest = pages.at(-1);
+      if (latest && /onboarding|portal|rightlyhr|pre-onboarding|snaddevelopers/i.test(latest.url())) {
+        await latest.waitForLoadState('domcontentloaded');
+        return latest;
+      }
+    }
+
+    return null;
+  }
+
   private async findMailUi(pattern: RegExp) {
-    for (const mail of await this.listMailsUi()) {
+    for (const mail of await this.listAllMailsUi()) {
       if (pattern.test(`${mail.subject}\n${mail.body}`)) {
         return mail;
       }
     }
-    return null;
-  }
-
-  private async listMailsUi() {
-    await this.ensureInboxVisible();
 
     const openBody = await this.readOpenMailBody();
     if (openBody.length > 20) {
@@ -192,9 +633,16 @@ export class YopmailPage {
         openBody.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
         (await this.readOpenMailSubject()) ||
         openBody.slice(0, 120);
-      return [{ id: 'open', subject, body: openBody }];
+      if (pattern.test(`${subject}\n${openBody}`)) {
+        return { id: 'open', subject, body: openBody };
+      }
     }
 
+    return null;
+  }
+
+  private async listMailsUi() {
+    await this.ensureInboxVisible();
     return this.listAllMailsUi();
   }
 
@@ -202,8 +650,13 @@ export class YopmailPage {
     await this.ensureInboxVisible();
 
     const rows = this.mailRows();
-    const count = await rows.count();
-    const limit = count > 0 ? Math.min(count, 12) : 0;
+    let count = await rows.count();
+    if (count === 0) {
+      await this.reloadInboxIfAllowed();
+      count = await rows.count();
+    }
+
+    const limit = count > 0 ? Math.min(count, 20) : 0;
     const messages: MailMessage[] = [];
 
     for (let index = 0; index < limit; index += 1) {
@@ -219,14 +672,15 @@ export class YopmailPage {
       await this.openMailRow(row);
       await sleep(900);
       const body = await this.readOpenMailBody();
-      if (!body) {
+      const html = await this.readOpenMailHtml();
+      if (!body && !html) {
         continue;
       }
       const subject =
         preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() ||
         body.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
         preview.slice(0, 120);
-      messages.push({ id: `mail-${index}`, subject, body });
+      messages.push({ id: `mail-${index}`, subject, body: `${body}\n${html}` });
     }
 
     return messages;
@@ -238,6 +692,50 @@ export class YopmailPage {
 
   private async readOpenMailBody() {
     return (await this.mailFrame().locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+  }
+
+  private async readOpenMailHtml() {
+    return (await this.mailFrame().locator('body').innerHTML().catch(() => '')) || '';
+  }
+
+  private async ensureCachedMailOpen() {
+    if (!this.cachedMail) {
+      return;
+    }
+
+    await this.ensureInboxVisible();
+    const subjectNeedle = this.cachedMail.subject.replace(/\s+/g, ' ').trim().slice(0, 40);
+    const rows = this.mailRows();
+    const count = await rows.count();
+
+    for (let index = 0; index < count; index += 1) {
+      const row = rows.nth(index);
+      const preview = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!preview) {
+        continue;
+      }
+      if (subjectNeedle && preview.includes(subjectNeedle.slice(0, 20))) {
+        await this.openMailRow(row);
+        await sleep(900);
+        return;
+      }
+      if (/Offer Letter Issued/i.test(this.cachedMail.subject) && /Offer Letter Issued/i.test(preview)) {
+        await this.openMailRow(row);
+        await sleep(900);
+        return;
+      }
+      if (/Request for Documents/i.test(this.cachedMail.subject) && /Request for Documents/i.test(preview)) {
+        await this.openMailRow(row);
+        await sleep(900);
+        return;
+      }
+    }
+  }
+
+  private async readLiveMailContent() {
+    const body = await this.readOpenMailBody();
+    const html = await this.readOpenMailHtml();
+    return `${body}\n${html}`;
   }
 
   private async readOpenMailSubject() {
@@ -255,34 +753,137 @@ export class YopmailPage {
     await row.evaluate((el) => (el as HTMLElement).click());
   }
 
-  private async gotoInbox() {
+  private async gotoInbox(options?: { soft?: boolean; captchaTimeoutMs?: number }) {
+    const headed = isHeadedRun();
+    const captchaTimeoutMs = options?.captchaTimeoutMs ?? (headed ? 45000 : 30000);
+
+    if (await this.hasCaptcha()) {
+      await this.handleCaptchaIfVisible(captchaTimeoutMs);
+      if (await this.inboxReady()) {
+        return;
+      }
+      if (await this.hasCaptcha()) {
+        console.log('Yopmail CAPTCHA visible; skipping page refresh.');
+        if (options?.soft) {
+          return;
+        }
+        throw new Error('Yopmail CAPTCHA blocked inbox access');
+      }
+    }
+
+    const onMailbox = /yopmail\.com/i.test(this.page.url());
+    if (onMailbox) {
+      if (await this.hasCaptcha()) {
+        console.log('Yopmail CAPTCHA visible; skipping page refresh.');
+        if (options?.soft) {
+          return;
+        }
+        throw new Error('Yopmail CAPTCHA blocked inbox access');
+      }
+      if (await this.inboxReady()) {
+        await this.handleCaptchaIfVisible(captchaTimeoutMs);
+        return;
+      }
+      if (options?.soft) {
+        await this.handleCaptchaIfVisible(captchaTimeoutMs);
+        console.log('Yopmail soft-open on existing tab; waiting for inbox.');
+        return;
+      }
+    }
+
     let lastError: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = options?.soft ? (headed ? 2 : 1) : 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (await this.hasCaptcha()) {
+        console.log('Yopmail CAPTCHA visible; skipping page refresh.');
+        if (options?.soft) {
+          return;
+        }
+        throw new Error('Yopmail CAPTCHA blocked inbox access');
+      }
+
       try {
         await this.page.goto(`https://yopmail.com/en/?login=${encodeURIComponent(this.mailbox)}`, {
           waitUntil: 'domcontentloaded',
         });
         await this.dismissConsent();
-        await this.handleCaptchaIfVisible();
-        await this.waitForInboxReady();
+        await this.handleCaptchaIfVisible(captchaTimeoutMs);
+        if (await this.hasCaptcha() && options?.soft) {
+          console.log('Yopmail CAPTCHA visible after open; waiting for manual solve.');
+          return;
+        }
+        await this.waitForInboxReady({ soft: options?.soft });
         return;
       } catch (error) {
         lastError = error;
         console.log(`Yopmail inbox open attempt ${attempt + 1} failed: ${error}`);
-        await sleep(5000);
+        await this.bringPageToFront().catch(() => {});
+        await sleep(3000);
       }
     }
-    throw lastError;
+    if (options?.soft) {
+      if (await this.hasCaptcha() || /yopmail\.com/i.test(this.page.url())) {
+        console.log('Yopmail soft-open continuing despite inbox not fully ready.');
+        return;
+      }
+    }
+    if (options?.soft && (await this.inboxReady())) {
+      console.log('Yopmail inbox is partially available despite CAPTCHA; continuing.');
+      return;
+    }
+    throw lastError ?? new Error('Yopmail inbox did not open');
   }
 
-  private async reloadInbox() {
-    await this.gotoInbox();
+  private async reloadInboxIfAllowed(options?: { soft?: boolean }) {
+    if (await this.hasCaptcha()) {
+      await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+      if (await this.hasCaptcha()) {
+        console.log('Yopmail CAPTCHA visible; skipping inbox refresh.');
+        return;
+      }
+    }
+    await this.reloadInbox(options);
+  }
+
+  private async reloadInbox(options?: { soft?: boolean }) {
+    await this.bringPageToFront().catch(() => {});
+    if (await this.hasCaptcha()) {
+      console.log('Yopmail CAPTCHA visible; skipping inbox refresh.');
+      return;
+    }
+
+    if (await this.inboxReady()) {
+      const refresh = this.page.locator('#refresh');
+      if (await refresh.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const clicked = await refresh.click({ timeout: 5000 }).then(() => true).catch(() => false);
+        if (!clicked) {
+          console.log('Yopmail refresh button blocked; skipping page reload.');
+          return;
+        }
+        await this.handleCaptchaIfVisible(isHeadedRun() ? 30000 : 15000);
+        await sleep(2500);
+        return;
+      }
+    }
+
+    if (await this.hasCaptcha()) {
+      console.log('Yopmail CAPTCHA visible; skipping goto inbox.');
+      return;
+    }
+    await this.gotoInbox(options);
   }
 
   private async ensureInboxVisible() {
-    if (!(await this.inboxReady())) {
-      await this.gotoInbox();
+    if (await this.inboxReady()) {
+      return;
     }
+    if (await this.hasCaptcha()) {
+      await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+      return;
+    }
+    await this.gotoInbox({ soft: true }).catch((error) => {
+      console.log(`Yopmail ensure inbox failed: ${error}`);
+    });
   }
 
   private async openLatestInboxMail() {
@@ -308,31 +909,34 @@ export class YopmailPage {
     }
   }
 
-  private async handleCaptchaIfVisible() {
+  private async handleCaptchaIfVisible(timeoutMs?: number) {
     if (!(await this.hasCaptcha())) {
-      return;
+      return true;
     }
 
     console.log('Yopmail CAPTCHA detected — trying automated checkbox click...');
     await this.tryClickRecaptcha();
 
-    const headed = process.env.HEADLESS !== 'true' && !(process.env.CI === 'true' || process.env.CI === '1');
+    const headed = isHeadedRun();
     if (headed) {
-      await this.page.bringToFront();
+      await this.bringPageToFront().catch(() => {});
       console.log('If CAPTCHA remains, click "I\'m not a robot" in the Yopmail tab.');
     }
 
-    const timeoutMs = headed ? 180000 : 45000;
-    const cleared = await this.waitForCaptchaCleared(timeoutMs);
+    const waitMs = timeoutMs ?? (headed ? 90000 : 30000);
+    const cleared = await this.waitForCaptchaCleared(waitMs);
     if (!cleared) {
-      throw new Error(
-        'Yopmail CAPTCHA blocked inbox access. Run with --headed and complete the checkbox, or retry after a short wait.',
-      );
+      console.log('Yopmail CAPTCHA still visible; will retry inbox access.');
+      return false;
     }
     console.log('Yopmail CAPTCHA cleared; continuing.');
+    return true;
   }
 
   private async hasCaptcha() {
+    if (!this.pageUsable()) {
+      return false;
+    }
     if (await this.page.locator('#r_parent.r_popup, .r_popup').isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
@@ -343,12 +947,21 @@ export class YopmailPage {
   }
 
   private async tryClickRecaptcha() {
-    const popup = this.page.locator('#r_parent, .r_popup');
+    const popup = this.page.locator('#r_parent, .r_popup').first();
+    if (await popup.isVisible({ timeout: 1500 }).catch(() => false)) {
+      const box = await popup.boundingBox().catch(() => null);
+      if (box) {
+        await this.page.mouse.click(box.x + Math.min(28, box.width / 4), box.y + box.height / 2);
+        await sleep(1500);
+      }
+    }
+
+    const popupTargets = this.page.locator('#r_parent, .r_popup');
     const popupClickTargets = [
-      popup.locator('input[type="checkbox"]'),
-      popup.locator('[role="checkbox"]'),
-      popup.getByText(/not a robot/i),
-      popup.locator('iframe').first(),
+      popupTargets.locator('input[type="checkbox"]'),
+      popupTargets.locator('[role="checkbox"]'),
+      popupTargets.getByText(/not a robot/i),
+      popupTargets.locator('iframe').first(),
     ];
     for (const target of popupClickTargets) {
       if (await target.isVisible({ timeout: 1500 }).catch(() => false)) {
@@ -385,19 +998,43 @@ export class YopmailPage {
     return false;
   }
 
-  private async waitForInboxReady() {
+  private async waitForInboxReady(options?: { soft?: boolean }) {
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline) {
       if (await this.inboxReady()) {
         return;
       }
-      await this.handleCaptchaIfVisible();
+      if (await this.hasCaptcha()) {
+        await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+        if (options?.soft && (await this.hasCaptcha())) {
+          console.log('Yopmail inbox waiting on CAPTCHA resolution.');
+          return;
+        }
+      }
       await sleep(1000);
+    }
+    if (options?.soft && ((await this.hasCaptcha()) || /yopmail\.com/i.test(this.page.url()))) {
+      console.log('Yopmail inbox not ready yet; continuing to wait on CAPTCHA.');
+      return;
     }
     throw new Error('Yopmail inbox did not load after login');
   }
 
+  private async bringPageToFront() {
+    if (this.page.isClosed()) {
+      throw new Error('Yopmail tab was closed');
+    }
+    await this.page.bringToFront();
+  }
+
+  private pageUsable() {
+    return !this.page.isClosed();
+  }
+
   private async inboxReady() {
+    if (await this.hasCaptcha()) {
+      return false;
+    }
     const inbox = this.inboxFrame();
     if (await inbox.locator('body').isVisible().catch(() => false)) {
       return true;
@@ -431,23 +1068,145 @@ function namePattern(fullName: string) {
     : new RegExp(`RightlyHR[\\s\\S]*${escapeRegExp(first)}`, 'i');
 }
 
+function pickBestPortalMail(mails: MailMessage[]) {
+  for (const mail of mails) {
+    const combined = `${mail.subject}\n${mail.body}`;
+    if (/Offer Letter Issued/i.test(combined) && parseCredentials(combined) && hasPortalLink(combined)) {
+      return mail;
+    }
+  }
+  for (const mail of mails) {
+    const combined = `${mail.subject}\n${mail.body}`;
+    if (/Offer Letter Issued/i.test(combined) && hasPortalLink(combined)) {
+      return mail;
+    }
+  }
+  for (const mail of mails) {
+    const combined = `${mail.subject}\n${mail.body}`;
+    if (/Request for Documents|Onboarding Portal/i.test(combined) && hasPortalLink(combined)) {
+      return mail;
+    }
+  }
+  return mails[0];
+}
+
+function scorePortalMail(combined: string, index: number) {
+  let score = 1000 - index;
+  if (/Request for Documents|Documents Upload/i.test(combined)) {
+    score += 900;
+  }
+  if (/Offer Letter Issued/i.test(combined) && parseCredentials(combined)) {
+    score += 700;
+  } else if (/Offer Letter Issued/i.test(combined)) {
+    score += 500;
+  }
+  if (/Onboarding Portal/i.test(combined)) {
+    score += 400;
+  }
+  if (hasPortalLink(combined)) {
+    score += 300;
+  }
+  return score;
+}
+
+function hasPortalLink(text: string) {
+  return !!extractPortalUrl(text) || /click here|portal link|onboarding portal/i.test(text);
+}
+
+function isDocumentDownloadHref(href: string) {
+  return /\.pdf|FusionDocuments|Documents\/Employee|Offer Letter\//i.test(href);
+}
+
+function isPortalHref(href: string) {
+  return !!normalizePortalHref(href);
+}
+
+function normalizePortalHref(href: string): string | null {
+  const decoded = href.replace(/&amp;/g, '&').trim();
+  if (!decoded || isDocumentDownloadHref(decoded)) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(decoded)) {
+    return /rightlyhr|snaddevelopers/i.test(decoded) ? decoded : null;
+  }
+  if (decoded.startsWith('/')) {
+    return `${defaultPreOnboardingBaseUrl()}${decoded}`;
+  }
+  if (/onboarding|portal|pre-onboarding|employeeportal|login/i.test(decoded)) {
+    return decoded;
+  }
+  return null;
+}
+
+function defaultPreOnboardingBaseUrl() {
+  return (
+    process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
+    process.env.RHR_BASE_URL?.trim() ||
+    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
+  ).replace(/\/$/, '');
+}
+
 function parseCredentials(body: string) {
-  const normalized = body.replace(/&nbsp;/gi, ' ').replace(/&amp;/g, '&');
-  const username = normalized.match(/Username\s*:\s*(\S+)/i)?.[1];
-  const password = normalized.match(/Password\s*:\s*([^\s<]+)/i)?.[1]?.replace(/[.,;]+$/, '');
+  const normalized = body
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+  const username =
+    normalized.match(/Username\s*:\s*([^\s]+@[^\s]+)/i)?.[1] ??
+    normalized.match(/Username\s*:\s*(\S+)/i)?.[1];
+  const password =
+    normalized.match(/Password\s*:\s*(\S+)/i)?.[1]?.replace(/[.,;]+$/, '') ??
+    normalized.match(/Password\s*:\s*([^\s<]+)/i)?.[1]?.replace(/[.,;]+$/, '');
   if (!username || !password) {
     return null;
   }
   return { username, password };
 }
 
-function extractPortalUrl(body: string) {
-  const href = body.match(/href="([^"]+)"/i)?.[1];
-  if (href && /onboarding|portal|rightlyhr|cluster\.rightlyhr/i.test(href)) {
-    return href.replace(/&amp;/g, '&');
+function isLikelyCredentialMail(text: string) {
+  return /Request for Documents|Documents Upload|Document Submitted|Onboarding Portal|pre-onboarding/i.test(text);
+}
+
+function credentialMailScore(text: string, index: number) {
+  let score = 1000 - index;
+  if (/Request for Documents|Documents Upload/i.test(text)) {
+    score += 500;
   }
-  const url = body.match(/(https?:\/\/[^\s"'<>]+(?:onboarding|portal|pre-onboarding)[^\s"'<>]*)/i)?.[1];
-  return url?.replace(/&amp;/g, '&') ?? null;
+  if (/Document Submitted Successfully/i.test(text)) {
+    score += 250;
+  }
+  if (/Offer Letter Issued/i.test(text)) {
+    score += 600;
+  }
+  if (/Offer Letter Approved|Offer Letter rejected/i.test(text)) {
+    score -= 200;
+  }
+  return score;
+}
+
+function extractPortalUrl(body: string) {
+  const hrefs = [...body.matchAll(/href=["']([^"']+)["']/gi)].map((match) => match[1].replace(/&amp;/g, '&'));
+  for (const href of hrefs) {
+    const normalized = normalizePortalHref(href);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const urls = body.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+  for (const url of urls) {
+    const normalized = normalizePortalHref(url);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function isHeadedRun() {
+  return process.env.HEADLESS !== 'true' && !(process.env.CI === 'true' || process.env.CI === '1');
 }
 
 function sleep(ms: number) {

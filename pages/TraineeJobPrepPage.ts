@@ -36,7 +36,12 @@ export class TraineeJobPrepPage {
     }
 
     await workMail.fill(workEmail);
-    await this.page.getByRole('button', { name: 'Save' }).click();
+    await workMail.blur();
+    const save = this.page.locator('ngb-modal-window.show, .modal.show')
+      .getByRole('button', { name: 'Save' })
+      .or(this.page.getByRole('button', { name: 'Save' }).last());
+    await expect(save).toBeEnabled({ timeout: 15000 });
+    await save.click();
     const toast = this.page.getByText(/Contact Information updated/i);
     await expect(toast.first()).toBeVisible({ timeout: 15000 }).catch(() => {});
     console.log(`Work email set to ${workEmail}`);
@@ -46,27 +51,44 @@ export class TraineeJobPrepPage {
   async ensureJobInfo() {
     const jobTab = this.page.getByText('Job', { exact: true });
     await jobTab.click();
-    const jobInfo = this.page.getByRole('img', { name: 'Job Info', exact: true })
-      .or(this.page.locator('div').filter({ hasText: /^Job Info$/ }).nth(1));
-    await jobInfo.first().click();
+    await this.page.locator('div').filter({ hasText: /^Job Info$/ }).nth(1).click();
     await this.page.waitForTimeout(1500);
+    await this.page.locator('#pn_id_3').click().catch(() => {});
+
+    for (let step = 0; step < 24; step++) {
+      await this.page.keyboard.press('ArrowRight');
+    }
 
     const updateMenu = this.page.getByText('Update', { exact: true });
     if (!(await this.page.getByRole('combobox', { name: 'Please select department' }).isVisible().catch(() => false))) {
-      const kebab = this.page.locator('table .dropdown, table i.bi, table .bi').last();
-      if (await kebab.isVisible().catch(() => false)) {
+      const kebabCandidates = [
+        this.page.locator('table i.bi').last(),
+        this.page.locator('table .dropdown > span > .bi').last(),
+        this.page.locator('i').nth(2),
+      ];
+      let opened = false;
+      for (const kebab of kebabCandidates) {
+        if (!(await kebab.isVisible().catch(() => false))) {
+          continue;
+        }
         await kebab.click();
-      } else {
-        await this.page.locator('i').nth(2).click();
+        if (await updateMenu.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+          await updateMenu.first().click();
+          opened = true;
+          break;
+        }
       }
-      if (await updateMenu.first().isVisible().catch(() => false)) {
-        await updateMenu.first().click();
+      if (!opened) {
+        console.log('Job Info kebab menu was not available; continuing');
+        await this.dismissBlockingModals();
+        return;
       }
     }
 
     const department = this.page.getByRole('combobox', { name: 'Please select department' });
     if (!(await department.isVisible({ timeout: 8000 }).catch(() => false))) {
       console.log('Job Info update form was not available; continuing');
+      await this.dismissBlockingModals();
       return;
     }
 
@@ -84,7 +106,21 @@ export class TraineeJobPrepPage {
       console.log('Job Info Update stayed disabled; continuing to onboard request');
       await this.page.keyboard.press('Escape').catch(() => {});
       await this.page.getByRole('button', { name: /Close|Cancel/i }).first().click().catch(() => {});
+      await this.dismissBlockingModals();
     }
+  }
+
+  private async dismissBlockingModals() {
+    const modal = this.page.locator('ngb-modal-window.show, .modal.show');
+    if (!(await modal.isVisible().catch(() => false))) {
+      return;
+    }
+    await this.page.keyboard.press('Escape').catch(() => {});
+    const close = this.page.getByRole('button', { name: /Close|Cancel/i }).first();
+    if (await close.isVisible().catch(() => false)) {
+      await close.click().catch(() => {});
+    }
+    await modal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }
 
   private async selectIfNeeded(combobox: Locator, option: string | RegExp) {

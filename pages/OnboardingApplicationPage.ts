@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 const FEMALE_NAMES = new Set([
@@ -402,6 +403,9 @@ export class OnboardingApplicationPage {
 
     for (const candidate of candidates) {
       try {
+        if (!fs.existsSync(candidate)) {
+          throw new Error(`ENOENT: no such file or directory, stat '${candidate}'`);
+        }
         await this.openDocumentUpload(documentName);
         const scope = await this.activeUploadScope();
         if (documentNumber) {

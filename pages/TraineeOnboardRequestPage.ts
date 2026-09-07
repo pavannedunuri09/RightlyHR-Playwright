@@ -18,6 +18,7 @@ export class TraineeOnboardRequestPage {
   }
 
   async openFromProfile() {
+    await this.dismissBlockingModals();
     await this.jobTab.waitFor({ state: 'visible', timeout: 20000 });
     await this.jobTab.click();
     await this.page.getByRole('img', { name: 'Trainee Onboard Request', exact: true }).waitFor({
@@ -60,6 +61,12 @@ export class TraineeOnboardRequestPage {
     if (!appeared) {
       await addBtn.locator('i').click({ force: true });
     }
+    const failureDialog = this.page.getByRole('dialog').getByText(/Unable to proceed|job details are not updated|not updated/i);
+    if (await failureDialog.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+      const message = (await failureDialog.first().innerText()).trim();
+      await this.page.getByRole('button', { name: /Ok|Close|Yes/i }).first().click().catch(() => {});
+      throw new Error(`Onboard request blocked: ${message}`);
+    }
     await expect(waiting.or(toast).first()).toBeVisible({ timeout: 20000 });
     const text = ((await toast.first().innerText().catch(() => '')) || 'Onboarding request submitted').trim();
     console.log(`Onboard request: ${text}`);
@@ -98,5 +105,18 @@ export class TraineeOnboardRequestPage {
     await expect(this.page.getByRole('cell').filter({ hasText: pattern }).or(this.page.getByText(pattern)).first())
       .toBeVisible({ timeout: 15000 });
     console.log(`Onboard request status: ${String(status)}`);
+  }
+
+  private async dismissBlockingModals() {
+    const modal = this.page.locator('ngb-modal-window.show, .modal.show');
+    if (!(await modal.isVisible().catch(() => false))) {
+      return;
+    }
+    await this.page.keyboard.press('Escape').catch(() => {});
+    const close = this.page.getByRole('button', { name: /Close|Cancel/i }).first();
+    if (await close.isVisible().catch(() => false)) {
+      await close.click().catch(() => {});
+    }
+    await modal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }
 }
