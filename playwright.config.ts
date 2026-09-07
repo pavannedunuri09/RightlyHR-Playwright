@@ -116,6 +116,15 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+    {
+  name: '07-employee-info',
+
+  testMatch: /Employee-info\.spec\.ts$/,
+
+  use: {
+    ...devices['Desktop Chrome'],
+  },
+},
 
     // Uncomment when needed
     // {
