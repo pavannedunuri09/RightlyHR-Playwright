@@ -4,6 +4,11 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
 
+const baseURL = process.env.BASE_URL?.trim();
+if (!baseURL) {
+  throw new Error('Set BASE_URL in .env (e.g. https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com)');
+}
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -17,6 +22,7 @@ export default defineConfig({
     '**/codegen-onbehalf-remote-login.ts',
     '**/codegen-onbehalf-wfh.ts',
     '**/codegen-onbehalf-remote.ts',
+    '**/codegen-probtion.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -25,7 +31,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
+    baseURL,
     headless: !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : 1000,
@@ -69,6 +75,11 @@ export default defineConfig({
     {
       name: '07-onbehalf-wfh',
       testMatch: /on-behalf-wfh\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '08-probation',
+      testMatch: /probation\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
