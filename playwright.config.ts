@@ -4,12 +4,26 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
 
+const baseURL = process.env.BASE_URL?.trim();
+if (!baseURL) {
+  throw new Error('Set BASE_URL in .env (e.g. https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com)');
+}
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/codegen-wfh*.ts', '**/codegen-remote-login.ts'],
+  testIgnore: [
+    '**/codegen-wfh.ts',
+    '**/codegen-wfh-settings.ts',
+    '**/codegent-wfh.ts',
+    '**/codegen-remote-login.ts',
+    '**/codegen-onbehalf-remote-login.ts',
+    '**/codegen-onbehalf-wfh.ts',
+    '**/codegen-onbehalf-remote.ts',
+    '**/codegen-probtion.ts',
+  ],
   timeout: 120000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -17,7 +31,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.BASE_URL || 'https://hrmsqasnad.onpremise.cluster.rightlyhr.com',
+    baseURL,
     headless: !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
@@ -55,12 +69,27 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '06-holidays',
+      name: '06-onbehalf-remote-login',
+      testMatch: /on-behalf-remote-login\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '07-onbehalf-wfh',
+      testMatch: /on-behalf-wfh\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '08-probation',
+      testMatch: /probation\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '09-holidays',
       testMatch: /holidays\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '07-codegen-holidays',
+      name: '10-codegen-holidays',
       testMatch: /codegen-holidays\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
