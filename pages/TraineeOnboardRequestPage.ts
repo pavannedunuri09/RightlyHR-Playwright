@@ -59,14 +59,15 @@ export class TraineeOnboardRequestPage {
     const appeared = await toast.first().isVisible({ timeout: 15000 }).catch(() => false)
       || await waiting.first().isVisible({ timeout: 5000 }).catch(() => false);
     if (!appeared) {
-      await addBtn.locator('i').click({ force: true });
+      await addBtn.locator('i').click({ force: true }).catch(() => {});
     }
-    const failureDialog = this.page.getByRole('dialog').getByText(/Unable to proceed|job details are not updated|not updated/i);
-    if (await failureDialog.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      const message = (await failureDialog.first().innerText()).trim();
-      await this.page.getByRole('button', { name: /Ok|Close|Yes/i }).first().click().catch(() => {});
-      throw new Error(`Onboard request blocked: ${message}`);
+
+    const failure = await this.readSubmitFailure();
+    if (failure) {
+      await this.dismissFailureDialog();
+      throw new Error(`Onboard request blocked: ${failure}`);
     }
+
     await expect(waiting.or(toast).first()).toBeVisible({ timeout: 20000 });
     const text = ((await toast.first().innerText().catch(() => '')) || 'Onboarding request submitted').trim();
     console.log(`Onboard request: ${text}`);
@@ -74,22 +75,49 @@ export class TraineeOnboardRequestPage {
     return text;
   }
 
+  private async readSubmitFailure() {
+    const dialog = this.page.getByRole('dialog').filter({
+      hasText: /Unable to proceed|job details|employee id|work mail|mandatory|required|not updated|please update|basic info|contact info|job info/i,
+    });
+    if (await dialog.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      return (await dialog.first().innerText()).trim();
+    }
+
+    const toast = this.page.locator('.p-toast-message-error, .p-toast .p-toast-message-error, [role="alert"]')
+      .filter({ hasText: /unable|required|mandatory|employee id|work mail|job info|not updated|please update/i });
+    if (await toast.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      return (await toast.first().innerText()).trim();
+    }
+
+    return null;
+  }
+
+  private async dismissFailureDialog() {
+    await this.page.getByRole('button', { name: /Ok|Close|Yes/i }).first().click().catch(() => {});
+    await this.page.keyboard.press('Escape').catch(() => {});
+  }
+
   async readyForOnboardFromRow() {
-    const processed = this.page.getByRole('cell').filter({ hasText: /^Processed$/i });
-    await expect(processed.first()).toBeVisible({ timeout: 15000 });
-    const row = this.page.getByRole('row').filter({ hasText: /Processed/i }).first();
+    const processedCell = this.page.getByRole('cell').filter({ hasText: /^Processed$/i }).last();
+    await expect(processedCell).toBeVisible({ timeout: 15000 });
+    const row = processedCell.locator('xpath=ancestor::tr[1]');
     await row.waitFor({ state: 'visible', timeout: 15000 });
     console.log(`Onboard row: ${(await row.innerText()).replace(/\s+/g, ' ').trim()}`);
 
-    const actionCell = row.getByRole('cell').last();
-    await actionCell.scrollIntoViewIfNeeded();
-    const kebab = actionCell.locator('i, .bi, .dropdown > span, .dropdown').first();
-    await kebab.click();
+    const dropdown = row.locator('td').last().locator('.dropdown').last();
+    await dropdown.scrollIntoViewIfNeeded();
+    const toggle = dropdown.locator(':scope > span, :scope > a').first();
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    } else {
+      await dropdown.click();
+    }
 
-    const ready = this.page.locator('.dropdown-menu.show').getByText('Ready for Onboard', { exact: true })
-      .or(this.page.getByText('Ready for Onboard').filter({ visible: true }));
-    await ready.first().waitFor({ state: 'visible', timeout: 8000 });
-    await ready.first().click();
+    const menu = dropdown.locator('.dropdown-menu');
+    const ready = menu.getByText('Ready for Onboard', { exact: true });
+    await ready.waitFor({ state: 'visible', timeout: 8000 });
+    await ready.click();
+
     const yes = this.page.getByRole('dialog').getByRole('button', { name: 'Yes' })
       .or(this.page.getByRole('button', { name: 'Yes' }));
     await yes.first().click();

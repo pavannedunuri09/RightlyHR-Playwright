@@ -13,6 +13,11 @@ export class PendingTraineeOnboardApprovalPage {
   readonly searchbox: Locator;
   readonly forYouTab: Locator;
   readonly forYourRoleTab: Locator;
+  private readonly traineesQueueUrls = [
+    '/pending-approvals/on-boarding/trainees/for-you',
+    '/pending-approvals/on-boarding/trainees/for-your-role',
+    '/pending-approvals/on-boarding/trainees',
+  ];
 
   constructor(page: Page) {
     this.page = page;
@@ -26,43 +31,33 @@ export class PendingTraineeOnboardApprovalPage {
 
   async openTraineesQueue() {
     if (await this.isOnboardTraineesQueue()) {
+      await this.waitForQueueReady().catch(() => {});
       return;
     }
 
     await this.page.bringToFront();
     await this.ensureHrShell();
 
-    const directUrls = [
-      '/pending-approvals/on-boarding/trainees/for-you',
-      '/pending-approvals/on-boarding/trainees/for-your-role',
-      '/pending-approvals/on-boarding/trainees',
-      '/pending-approvals/on-boarding/trainee-onboard-requests/for-you',
-      '/pending-approvals/on-boarding/trainee-onboard-requests',
-      '/pending-approvals/on-boarding/trainee-onboarding-requests',
-      '/pending-approvals/on-boarding',
-    ];
-    for (const path of directUrls) {
+    for (const path of this.traineesQueueUrls) {
       await this.page.goto(path, { waitUntil: 'domcontentloaded' }).catch(() => {});
-      await this.page.waitForTimeout(1500);
       if (await this.isOnboardTraineesQueue()) {
+        await this.waitForQueueReady();
         console.log(`Opened Pending Approvals > Onboarding > Trainees (${path})`);
         return;
       }
-      if (/pending-approvals/i.test(this.page.url()) && !/trainee-approvals/i.test(this.page.url())) {
-        await this.openOnboardingTraineesFromGrid();
-        if (await this.isOnboardTraineesQueue()) {
-          console.log(`Opened Pending Approvals > Onboarding > Trainees via grid (${path})`);
-          return;
-        }
-      }
     }
 
+    await this.openTraineesQueueViaMenu();
+    await this.waitForQueueReady();
+    console.log('Opened Pending Approvals > Onboarding > Trainees');
+  }
+
+  private async openTraineesQueueViaMenu() {
     if (!await this.pendingApprovalsToggle.isVisible().catch(() => false)) {
       await this.ensureHrShell();
     }
 
     await this.pendingApprovalsToggle.waitFor({ state: 'visible', timeout: 30000 });
-    await this.page.waitForTimeout(2000);
     await this.pendingApprovalsToggle.click();
 
     const onboarding = this.page.getByText(/^Onboarding\s*\(\d+\)/i).first()
@@ -88,10 +83,14 @@ export class PendingTraineeOnboardApprovalPage {
         await queueTab.first().click();
       }
     }
+  }
 
-    await this.page.getByRole('columnheader', { name: /Training Start Date/i })
-      .waitFor({ state: 'visible', timeout: 20000 });
-    console.log('Opened Pending Approvals > Onboarding > Trainees');
+  private queueHeader() {
+    return this.page.getByRole('columnheader', { name: /Training Start Date/i });
+  }
+
+  private async waitForQueueReady(timeout = 20000) {
+    await this.queueHeader().waitFor({ state: 'visible', timeout });
   }
 
   private async ensureHrShell() {
@@ -127,19 +126,29 @@ export class PendingTraineeOnboardApprovalPage {
     if (!/pending-approvals/i.test(this.page.url()) || /trainee-approvals/i.test(this.page.url())) {
       return false;
     }
-    return this.page.getByRole('columnheader', { name: /Training Start Date/i }).isVisible().catch(() => false);
+    return this.queueHeader().isVisible().catch(() => false);
   }
 
   async waitForRequestRow(trainee: OnboardTrainee, options?: { timeout?: number }) {
     const timeout = options?.timeout ?? 60000;
     const deadline = Date.now() + timeout;
+    let onQueue = false;
+
     while (Date.now() < deadline) {
-      await this.openTraineesQueue();
+      if (!onQueue || !(await this.isOnboardTraineesQueue())) {
+        await this.openTraineesQueue();
+        onQueue = true;
+      }
+
       const row = await this.locateRequestRow(trainee);
       if (row) {
         return row;
       }
-      await this.page.waitForTimeout(3000);
+
+      if (onQueue) {
+        await this.queueHeader().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      }
+      await this.page.waitForTimeout(1000);
     }
     throw new Error(`No trainee onboard request found for ${trainee.firstName} ${trainee.lastName}`);
   }
@@ -221,6 +230,14 @@ export class PendingTraineeOnboardApprovalPage {
     return text;
   }
 
+  async approveThroughAllLevels(trainee: OnboardTrainee) {
+    await this.page.bringToFront();
+    await this.waitForRequestRow(trainee, { timeout: 120000 });
+    await this.approveUntilDone(trainee);
+    await this.processAsHr(trainee);
+    console.log('Onboard request approved through all levels');
+  }
+
   async approveUntilDone(trainee: OnboardTrainee) {
     let approvedAny = false;
     for (let step = 0; step < 3; step++) {
@@ -234,7 +251,7 @@ export class PendingTraineeOnboardApprovalPage {
       }
       await this.confirmApproveDialog();
       approvedAny = true;
-      await this.page.waitForTimeout(1000);
+      await this.page.waitForTimeout(300);
     }
     if (approvedAny) {
       console.log('RM/TM approval complete (same manager is treated as one request)');
@@ -293,8 +310,7 @@ export class PendingTraineeOnboardApprovalPage {
   }
 
   async readyForOnboard(row: Locator) {
-    await this.openKebab(row);
-    await this.visibleMenuItem('Ready for Onboard').click();
+    await this.clickKebabAction(row, 'Ready for Onboard');
     const yes = this.page.getByRole('dialog').getByRole('button', { name: 'Yes' })
       .or(this.page.getByRole('button', { name: 'Yes' }));
     await yes.first().waitFor({ state: 'visible', timeout: 10000 });
@@ -321,10 +337,20 @@ export class PendingTraineeOnboardApprovalPage {
   async rejectExtend(row: Locator, extendDate: string, comments: string) {
     await this.openReject(row);
     await this.expectRejectOptions('Extend');
-    const dateInput = this.page.getByRole('textbox', { name: /Default select example|extend/i })
-      .or(this.page.getByPlaceholder(/date/i));
-    await dateInput.first().fill(extendDate);
+
+    const dialog = this.page.getByRole('dialog').or(this.page.locator('ngb-modal-window.show, .modal.show'));
+    const dateInput = dialog.getByRole('textbox', { name: /Default select example/i });
+    await this.fillExtendDate(dateInput, extendDate);
+    await this.page.waitForTimeout(500);
+
     await this.fillRejectFeedback(comments, 'Extend');
+    await expect
+      .poll(async () => {
+        const reject = this.page.getByRole('dialog').getByRole('button', { name: 'Reject', exact: true })
+          .or(this.page.locator('ngb-modal-window.show, .modal.show').getByRole('button', { name: 'Reject', exact: true }));
+        return reject.first().isEnabled().catch(() => false);
+      }, { timeout: 15000 })
+      .toBe(true);
     await this.confirmReject();
     const toast = this.page.getByText(/Trainee request extend|extended/i);
     await expect(toast.first()).toBeVisible({ timeout: 20000 });
@@ -333,8 +359,58 @@ export class PendingTraineeOnboardApprovalPage {
     return text;
   }
 
+  async advanceToHrAfterManagerApproval(trainee: OnboardTrainee) {
+    await this.page.bringToFront();
+    let row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    if (await this.kebabHas(row, 'Approve')) {
+      await this.approveUntilDone(trainee);
+      row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    }
+    await this.expectKebabActions(row, ['Process', 'Reject']);
+    console.log('Onboard request reached HR (L1+L2 treated as one approval when same approver)');
+    return row;
+  }
+
+  async rejectExtendAtManagerLevel(trainee: OnboardTrainee, extendDate: string, comments: string) {
+    await this.page.bringToFront();
+    const row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    await this.rejectExtend(row, extendDate, comments);
+    console.log('Extended at manager approval level (L1+L2 combined when same approver)');
+  }
+
+  async rejectExtendAtHrLevel(trainee: OnboardTrainee, extendDate: string, comments: string) {
+    await this.page.bringToFront();
+    const row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    console.log('Final approver (HR) kebab shows Process and Reject; selecting Reject > Extend');
+    await this.rejectExtend(row, extendDate, comments);
+    console.log('Extended at HR approval level (L3)');
+  }
+
+  async approveFirstLevelThenRejectExtend(trainee: OnboardTrainee, extendDate: string, comments: string) {
+    await this.page.bringToFront();
+
+    let row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    if (await this.clickKebabAction(row, 'Approve', { optional: true })) {
+      await this.confirmApproveDialog();
+      console.log('First approval level: request approved');
+      row = await this.waitForRequestRow(trainee, { timeout: 120000 });
+    } else {
+      console.log('First approval level already complete; continuing to second level');
+    }
+
+    await this.rejectExtend(row, extendDate, comments);
+    console.log('Second approval level: request rejected with Extend');
+  }
+
   async kebabHas(row: Locator, name: string) {
-    return this.clickKebabAction(row, name, { optional: true, inspectOnly: true });
+    const opened = await this.openKebab(row, { optional: true });
+    if (!opened) {
+      return false;
+    }
+    const actions = await this.readOpenMenu(row);
+    await this.closeMenus();
+    console.log(`Onboard kebab actions: ${actions.join(', ') || '(none)'}`);
+    return actions.map((action) => action.toLowerCase()).includes(name.toLowerCase());
   }
 
   async expectKebabActions(row: Locator, expected: string[], options?: { only?: boolean }) {
@@ -342,7 +418,7 @@ export class PendingTraineeOnboardApprovalPage {
     if (!opened) {
       throw new Error('Could not open onboard action kebab to inspect menu actions');
     }
-    const actions = await this.readOpenMenu();
+    const actions = await this.readOpenMenu(row);
     await this.closeMenus();
     console.log(`Onboard kebab actions: ${actions.join(', ') || '(none)'}`);
     for (const name of expected) {
@@ -369,19 +445,57 @@ export class PendingTraineeOnboardApprovalPage {
     if (!opened) {
       return false;
     }
-    const actions = await this.readOpenMenu();
+
+    const actions = await this.readOpenMenu(row);
     console.log(`Onboard kebab actions: ${actions.join(', ') || '(none)'}`);
-    const item = this.visibleMenuItem(name);
-    const visible = await item.isVisible().catch(() => false);
-    if (options?.inspectOnly || !visible) {
+
+    if (options?.inspectOnly) {
+      const hasAction = actions.map((action) => action.toLowerCase()).includes(name.toLowerCase());
       await this.closeMenus();
-      if (!visible && !options?.optional && !options?.inspectOnly) {
+      return hasAction;
+    }
+
+    const clicked = await this.clickMenuItem(row, name);
+    if (!clicked) {
+      await this.closeMenus();
+      if (!options?.optional) {
         throw new Error(`Kebab action "${name}" was not visible. Saw: ${actions.join(', ') || '(none)'}`);
       }
-      return visible;
+      return false;
     }
-    await item.click();
+
     return true;
+  }
+
+  private rowDropdown(row: Locator) {
+    return row.locator('td').last().locator('.dropdown').last();
+  }
+
+  private rowMenu(row: Locator) {
+    return this.rowDropdown(row).locator('.dropdown-menu');
+  }
+
+  private async clickMenuItem(row: Locator, name: string) {
+    const menu = this.rowMenu(row);
+    if (!(await menu.isVisible().catch(() => false))) {
+      return false;
+    }
+    const item = menu.locator('.dropdown-item, a, button').filter({ hasText: new RegExp(`^${name}$`, 'i') }).first();
+    if (await item.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await item.click();
+      return true;
+    }
+    const items = menu.locator('.dropdown-item, a, li, button');
+    const count = await items.count();
+    for (let index = 0; index < count; index++) {
+      const candidate = items.nth(index);
+      const label = ((await candidate.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (label.toLowerCase() === name.toLowerCase()) {
+        await candidate.click();
+        return true;
+      }
+    }
+    return false;
   }
 
   private async locateRequestRow(trainee: OnboardTrainee) {
@@ -491,9 +605,32 @@ export class PendingTraineeOnboardApprovalPage {
     console.log(`Onboard pending row: ${text}`);
   }
 
+  private async fillExtendDate(input: Locator, extendDate: string) {
+    await input.click();
+    const inputType = (await input.getAttribute('type')) ?? 'text';
+    if (inputType === 'date') {
+      const min = await input.getAttribute('min');
+      let isoDate = extendDate;
+      if (min && isoDate <= min) {
+        const adjusted = new Date(min);
+        adjusted.setMonth(adjusted.getMonth() + 2);
+        isoDate = [
+          adjusted.getFullYear(),
+          String(adjusted.getMonth() + 1).padStart(2, '0'),
+          String(adjusted.getDate()).padStart(2, '0'),
+        ].join('-');
+        console.log(`Adjusted extend date to ${isoDate} (picker min was ${min})`);
+      }
+      await input.fill(isoDate);
+    } else {
+      const [year, month, day] = extendDate.split('-');
+      await input.fill(`${month}/${day}/${year}`);
+    }
+    await input.blur();
+  }
+
   private async openReject(row: Locator) {
-    await this.openKebab(row);
-    await this.visibleMenuItem('Reject').click();
+    await this.clickKebabAction(row, 'Reject');
     await expect(this.page.getByText(/Are you sure you want to/i).first()).toBeVisible({ timeout: 10000 });
   }
 
@@ -534,13 +671,12 @@ export class PendingTraineeOnboardApprovalPage {
     await reject.first().click();
   }
 
-  private visibleMenuItem(name: string) {
-    return this.page.getByText(name, { exact: true }).filter({ visible: true }).last();
-  }
-
-  private async readOpenMenu() {
-    const items = this.page.locator('.dropdown-menu.show .dropdown-item, .dropdown-menu.show a, .dropdown-menu.show li')
-      .or(this.page.getByText(/^(Approve|Reject|Process|Ready for Onboard)$/).filter({ visible: true }));
+  private async readOpenMenu(row: Locator) {
+    const menu = this.rowMenu(row);
+    if (!(await menu.isVisible().catch(() => false))) {
+      return [];
+    }
+    const items = menu.locator('.dropdown-item, a, li, button');
     const count = await items.count();
     const actions: string[] = [];
     for (let index = 0; index < count; index++) {
@@ -553,26 +689,52 @@ export class PendingTraineeOnboardApprovalPage {
   }
 
   private async closeMenus() {
+    if (!(await this.page.locator('.dropdown-menu.show').isVisible().catch(() => false))) {
+      return;
+    }
     await this.page.keyboard.press('Escape').catch(() => {});
-    await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+    await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 1000 }).catch(() => {});
+  }
+
+  private async dismissBlockingDialogs() {
+    const dialog = this.page.getByRole('dialog').filter({ hasText: /Are you sure you want to/i });
+    if (!(await dialog.first().isVisible().catch(() => false))) {
+      return;
+    }
+    const close = dialog.getByRole('button', { name: /Close|Cancel/i });
+    if (await close.first().isVisible().catch(() => false)) {
+      await close.first().click();
+      await dialog.first().waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    } else {
+      await this.page.keyboard.press('Escape').catch(() => {});
+    }
   }
 
   private async openKebab(row: Locator, options?: { optional?: boolean }) {
-    await this.closeMenus();
-    const kebab = row.locator('td:last-child .dropdown, td .dropdown').last();
-    await kebab.scrollIntoViewIfNeeded();
-    await kebab.waitFor({ state: 'visible', timeout: 10000 });
+    await this.dismissBlockingDialogs();
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await kebab.click({ force: attempt > 0 });
-      const menu = this.page.locator('.dropdown-menu.show');
-      const visibleAction = this.page.getByText(/^(Approve|Reject|Process|Ready for Onboard)$/).filter({ visible: true });
-      if (await menu.isVisible({ timeout: 2500 }).catch(() => false)
-        || await visibleAction.first().isVisible({ timeout: 2500 }).catch(() => false)) {
+    const menu = this.rowMenu(row);
+    if (await menu.isVisible().catch(() => false)) {
+      return true;
+    }
+
+    await this.closeMenus();
+    const actionCell = row.locator('td').last();
+    await actionCell.scrollIntoViewIfNeeded();
+    const dropdown = this.rowDropdown(row);
+    await dropdown.waitFor({ state: 'visible', timeout: 10000 });
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const toggle = dropdown.locator(':scope > span, :scope > a').first();
+      if (await toggle.isVisible().catch(() => false)) {
+        await toggle.click({ force: attempt > 0 });
+      } else {
+        await dropdown.click({ force: attempt > 0 });
+      }
+      if (await menu.isVisible({ timeout: 800 }).catch(() => false)) {
         return true;
       }
       await this.closeMenus();
-      await this.page.waitForTimeout(400);
     }
 
     if (options?.optional) {

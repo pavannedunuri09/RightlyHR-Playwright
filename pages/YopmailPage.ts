@@ -178,13 +178,37 @@ export class YopmailPage {
   }
 
   async readCredentials(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
+    let lastError = 'Could not read Username/Password from Yopmail';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await this.readCredentialsOnce(options);
+      } catch (error) {
+        lastError = String(error);
+        console.log(`Yopmail credentials not ready yet (attempt ${attempt + 1}/5): ${lastError}`);
+        await sleep(attempt === 0 ? 1500 : 3000);
+        if (this.cachedMail) {
+          await this.ensureCachedMailOpen();
+        }
+      }
+    }
+    throw new Error(lastError.includes('Could not read') ? lastError : 'Could not read Username/Password from Yopmail');
+  }
+
+  async findCredentialsInInbox(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
+    return this.readCredentials(options);
+  }
+
+  private async readCredentialsOnce(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
     if (!options?.skipCached && this.cachedMail) {
       await this.ensureCachedMailOpen();
-      const liveBody = await this.readLiveMailContent();
-      const parsed = parseCredentials(liveBody) ?? parseCredentials(this.cachedMail.body);
-      if (parsed) {
-        console.log(`Yopmail username: ${parsed.username}`);
-        return parsed;
+      for (let poll = 0; poll < 10; poll++) {
+        const liveBody = await this.readLiveMailContent();
+        const parsed = parseCredentials(liveBody) ?? parseCredentials(this.cachedMail.body);
+        if (parsed) {
+          console.log(`Yopmail username: ${parsed.username}`);
+          return parsed;
+        }
+        await sleep(1000);
       }
     }
 
@@ -207,13 +231,33 @@ export class YopmailPage {
     throw new Error('Could not read Username/Password from Yopmail');
   }
 
-  async findCredentialsInInbox(options?: { skipCached?: boolean; preferPattern?: RegExp }) {
-    return this.readCredentials(options);
-  }
-
   private async collectCredentialMails() {
-    const messages = await this.listAllMailsUi();
     const results: Array<{ mail: MailMessage; credentials: { username: string; password: string }; score: number }> = [];
+
+    for (const pattern of [/Request for Documents Upload|Request for Documents/i, /Offer Letter Issued|Offer Letter Released/i]) {
+      try {
+        await this.openMatchingMailInViewer(pattern);
+        for (let poll = 0; poll < 6; poll++) {
+          const live = await this.readLiveMailContent();
+          const parsed =
+            parseCredentials(live) ??
+            (this.cachedMail ? parseCredentials(this.cachedMail.body) : null);
+          if (parsed && this.cachedMail) {
+            results.push({
+              mail: this.cachedMail,
+              credentials: parsed,
+              score: credentialMailScore(`${this.cachedMail.subject}\n${live}`, 0) + 2000 - poll,
+            });
+            break;
+          }
+          await sleep(1000);
+        }
+      } catch {
+        // Try the next credential mail pattern.
+      }
+    }
+
+    const messages = await this.listAllMailsUi();
 
     for (let index = 0; index < messages.length; index += 1) {
       const mail = messages[index];
@@ -222,6 +266,9 @@ export class YopmailPage {
         continue;
       }
       const combined = `${mail.subject}\n${mail.body}`;
+      if (results.some((entry) => `${entry.credentials.username}|${entry.credentials.password}` === `${parsed.username}|${parsed.password}`)) {
+        continue;
+      }
       results.push({
         mail,
         credentials: parsed,
@@ -242,11 +289,11 @@ export class YopmailPage {
 
   async openOnboardingPortal() {
     const cachedCombined = this.cachedMail ? `${this.cachedMail.subject}\n${this.cachedMail.body}` : '';
-    if (/Offer Letter Issued/i.test(cachedCombined)) {
+    if (/Offer Letter Issued|Offer Letter Released/i.test(cachedCombined)) {
       try {
-        return await this.openOnboardingPortalFromDocumentRequestMail();
+        return await this.openOnboardingPortalFromOfferLetterMail();
       } catch (error) {
-        console.log(`Document-request portal open failed; trying offer mail. ${error}`);
+        console.log(`Offer-letter portal open failed; trying cached mail body. ${error}`);
       }
     }
 
@@ -295,7 +342,24 @@ export class YopmailPage {
       return onboardingPage;
     }
 
-    throw new Error('Could not open onboarding portal from Yopmail');
+    const preOnboardingBase = defaultPreOnboardingBaseUrl();
+    console.log(`Opening onboarding portal from default URL: ${preOnboardingBase}`);
+    const onboardingPage = await this.page.context().newPage();
+    await onboardingPage.goto(preOnboardingBase, { waitUntil: 'domcontentloaded' });
+    return onboardingPage;
+  }
+
+  async openOnboardingPortalFromOfferLetterMail() {
+    await this.openMatchingMailInViewer(/Offer Letter Issued|Offer Letter Released/i);
+    const fromOpenMail = await this.openPortalFromOpenMail();
+    if (fromOpenMail) {
+      return fromOpenMail;
+    }
+    const fromBody = await this.openPortalFromMailBody(await this.readLiveMailContent());
+    if (fromBody) {
+      return fromBody;
+    }
+    throw new Error('Could not open portal from offer letter mail');
   }
 
   async openOnboardingPortalFromDocumentRequestMail() {
@@ -312,6 +376,24 @@ export class YopmailPage {
   }
 
   async findPortalUrlInInbox(): Promise<string | null> {
+    if (this.cachedMail && /Offer Letter Issued|Offer Letter Released/i.test(`${this.cachedMail.subject}\n${this.cachedMail.body}`)) {
+      await this.ensureCachedMailOpen();
+      const cachedUrl = extractPortalUrl(await this.readLiveMailContent());
+      if (cachedUrl) {
+        return cachedUrl;
+      }
+    }
+
+    try {
+      await this.openMatchingMailInViewer(/Offer Letter Issued|Offer Letter Released/i);
+      const offerUrl = extractPortalUrl(await this.readLiveMailContent());
+      if (offerUrl) {
+        return offerUrl;
+      }
+    } catch {
+      // Try document-request mail next.
+    }
+
     try {
       await this.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
       const url = extractPortalUrl(await this.readLiveMailContent());
@@ -463,7 +545,9 @@ export class YopmailPage {
       return null;
     }
 
-    const link = frame.getByRole('link', { name: 'Click here' });
+    const link = frame.getByRole('link', { name: 'Click here' })
+      .or(frame.getByRole('link', { name: /^Click$/i }))
+      .or(frame.locator('a').filter({ hasText: /^Click$/i }).first());
     if (!(await link.isVisible({ timeout: 5000 }).catch(() => false))) {
       return null;
     }
@@ -503,7 +587,8 @@ export class YopmailPage {
 
     const linkLocators = [
       this.mailFrame().getByRole('link', { name: 'Click here' }),
-      this.mailFrame().locator('a').filter({ hasText: /click here/i }),
+      this.mailFrame().getByRole('link', { name: /^Click$/i }),
+      this.mailFrame().locator('a').filter({ hasText: /click here|^click$/i }),
     ];
     for (const locator of linkLocators) {
       const count = await locator.count();
@@ -1153,11 +1238,12 @@ function parseCredentials(body: string) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ');
   const username =
-    normalized.match(/Username\s*:\s*([^\s]+@[^\s]+)/i)?.[1] ??
-    normalized.match(/Username\s*:\s*(\S+)/i)?.[1];
+    normalized.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i)?.[1] ??
+    normalized.match(/User\s*Name\s*[:*]\s*([^\s]+@[^\s]+)/i)?.[1] ??
+    normalized.match(/Username\s*[:*]\s*(\S+)/i)?.[1];
   const password =
-    normalized.match(/Password\s*:\s*(\S+)/i)?.[1]?.replace(/[.,;]+$/, '') ??
-    normalized.match(/Password\s*:\s*([^\s<]+)/i)?.[1]?.replace(/[.,;]+$/, '');
+    normalized.match(/Password\s*[:*]\s*(\S+)/i)?.[1]?.replace(/[.,;]+$/, '') ??
+    normalized.match(/Password\s*[:*]\s*([^\s<]+)/i)?.[1]?.replace(/[.,;]+$/, '');
   if (!username || !password) {
     return null;
   }

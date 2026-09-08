@@ -8,24 +8,15 @@ export class TraineeJobPrepPage {
   }
 
   async ensureWorkEmail(workEmail: string) {
-    const personal = this.page.getByText('Personal', { exact: true });
-    if (await personal.isVisible().catch(() => false)) {
-      await personal.click();
-    }
-
-    const contact = this.page.locator('div').filter({ hasText: /^Contact Info$/ }).nth(1)
-      .or(this.page.getByText('Contact Info', { exact: true }));
-    await contact.first().click();
+    await this.openPersonalContactInfo();
 
     const workMail = this.page.getByRole('textbox', { name: /Work Mail/i });
     if (!(await workMail.isVisible({ timeout: 8000 }).catch(() => false))) {
-      await this.page.locator('div:nth-child(2) > a').first().click();
+      await this.enableContactEdit();
     }
     await workMail.waitFor({ state: 'visible', timeout: 15000 });
     if (await workMail.isDisabled().catch(() => true)) {
-      const edit = this.page.getByText('Contact Info', { exact: true }).last().locator('xpath=following-sibling::*').first()
-        .or(this.page.locator('div:nth-child(2) > a').first());
-      await edit.click();
+      await this.enableContactEdit();
       await expect(workMail).toBeEnabled({ timeout: 10000 });
     }
     const current = (await workMail.inputValue()).trim();
@@ -48,11 +39,64 @@ export class TraineeJobPrepPage {
     return workEmail;
   }
 
+  private async openPersonalContactInfo() {
+    await this.dismissBlockingModals();
+
+    const personal = this.page.getByText('Personal', { exact: true });
+    if (await personal.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await personal.click({ timeout: 10000 });
+    }
+
+    const contactImg = this.page.getByRole('img', { name: 'Contact Info', exact: true });
+    if (await contactImg.isVisible({ timeout: 8000 }).catch(() => false)) {
+      await contactImg.click({ timeout: 10000 });
+      return;
+    }
+
+    const contactNav = this.page.locator('div').filter({ hasText: /^Contact Info$/ }).nth(1)
+      .or(this.page.getByText('Contact Info', { exact: true }).last());
+    await contactNav.first().click({ timeout: 10000 });
+  }
+
+  private async enableContactEdit() {
+    const workMail = this.page.getByRole('textbox', { name: /Work Mail/i });
+    if (await workMail.isEnabled().catch(() => false)) {
+      return;
+    }
+
+    const editCandidates = [
+      this.page.getByText('Contact Info', { exact: true }).last().locator('xpath=following-sibling::*').first(),
+      this.page.locator('div:nth-child(2) > a').first(),
+      this.page.locator('img[alt="edit-icon"], img[title="edit-icon"]').first(),
+    ];
+    for (const edit of editCandidates) {
+      if (!(await edit.isVisible().catch(() => false))) {
+        continue;
+      }
+      await edit.click({ timeout: 5000 });
+      if (await workMail.isEnabled({ timeout: 3000 }).catch(() => false)) {
+        return;
+      }
+    }
+  }
+
   async ensureJobInfo() {
     const jobTab = this.page.getByText('Job', { exact: true });
     await jobTab.click();
+
+    const reportingManager = await this.readProfileFieldValue('Reporting Manager');
+    const teamManager = await this.readProfileFieldValue('Team Manager')
+      ?? await this.readProfileFieldValue('Team');
+    if (this.isAssignedValue(reportingManager) && this.isAssignedValue(teamManager)) {
+      console.log(`Job Info skipped; RM (${reportingManager}) and TM (${teamManager}) already set`);
+      return;
+    }
+
     await this.page.locator('div').filter({ hasText: /^Job Info$/ }).nth(1).click();
-    await this.page.waitForTimeout(1500);
+    await this.page.getByRole('columnheader', { name: /Job Role|Department|Effective Date/i })
+      .first()
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .catch(() => {});
     await this.page.locator('#pn_id_3').click().catch(() => {});
 
     for (let step = 0; step < 24; step++) {
@@ -121,6 +165,22 @@ export class TraineeJobPrepPage {
       await close.click().catch(() => {});
     }
     await modal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
+
+  private isAssignedValue(value: string) {
+    const trimmed = value.trim();
+    return trimmed.length > 0
+      && !/^NA$/i.test(trimmed)
+      && !/please select/i.test(trimmed)
+      && !/^[-–—]+$/i.test(trimmed);
+  }
+
+  private async readProfileFieldValue(label: string) {
+    const value = (await this.page.getByText(label, { exact: true })
+      .locator('xpath=following-sibling::*[1]')
+      .innerText()
+      .catch(() => '')).trim();
+    return value || null;
   }
 
   private async selectIfNeeded(combobox: Locator, option: string | RegExp) {

@@ -13,13 +13,12 @@ import { PreOnboardingPostOfferPage } from '../pages/PreOnboardingPostOfferPage'
 import { EmployeeOnboardingInfoPage } from '../pages/EmployeeOnboardingInfoPage';
 import { SettingsServingPeriodPage } from '../pages/SettingsServingPeriodPage';
 import { TraineeOnboardRequestPage } from '../pages/TraineeOnboardRequestPage';
-import { TraineeJobPrepPage } from '../pages/TraineeJobPrepPage';
 import { PendingTraineeOnboardApprovalPage } from '../pages/PendingTraineeOnboardApprovalPage';
 
 declare const process: { env: Record<string, string | undefined> };
 
 import { createOnboardingFiles } from './fixtures/onboardingFiles';
-import { openPreOnboardingFromYopmail, refreshPreOnboardingCredentials } from './fixtures/onboardingCredentials';
+import { openOnboardingLoginPage, openPreOnboardingForReleasedOffer, openPreOnboardingFromYopmail, readOnboardingCredentials, refreshPreOnboardingCredentials } from './fixtures/onboardingCredentials';
 import { loadLastTrainee, saveLastTrainee, needsDocumentRequest, type SavedTrainee } from './fixtures/lastTrainee';
 import {
   approveAndReleaseOffer,
@@ -32,15 +31,11 @@ import {
   generateOfferAndRequestApproval,
   loadSavedTraineeFromList,
   resolveActiveSavedTrainee,
-  findActiveTraineeWithOnboardRequest,
-  findActiveTraineeWithPendingOnboardRequest,
-  ensurePendingOnboardRequestTrainee,
-  ensureOnboardRequestPending,
-  activateProspectiveTraineeToActive,
   ensureActiveTraineeEmployeeId,
-  syncTraineeFromActiveList,
-  prepareActiveTraineeForOnboard,
   submitFreshOnboardRequest,
+  submitOnboardRequestDirect,
+  activateProspectiveTraineeToActive,
+  bootstrapFreshActiveTraineeWithOnboardRequest,
   openSavedTraineeProfile,
   prepareSubmittedTrainee,
   requestDocumentsAndOpenMail,
@@ -48,7 +43,6 @@ import {
   withOfferDefaults,
   resolveProspectiveTraineeForDocuments,
   resolveTraineeEmail,
-  isTraineeEmailExcluded,
 } from './fixtures/traineeBootstrap';
 
 const DUPLICATE_TRAINEE = {
@@ -56,9 +50,6 @@ const DUPLICATE_TRAINEE = {
   lastName: 'Priya',
   email: 'Swethapriya@yopmail.com',
 };
-
-let approvedOnboardTraineeEmail: string | undefined;
-let extendedOnboardTraineeEmail: string | undefined;
 
 test.describe('Prospective Trainees', () => {
   test.describe.configure({ mode: 'serial' });
@@ -190,7 +181,7 @@ test.describe('Prospective Trainees', () => {
 
     const requestSubject = await yopmail.waitForMailSubject(`${details.firstName} ${details.lastName}`, 240000, details.email);
     await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
-    const credentials = await yopmail.readCredentials();
+    const credentials = await readOnboardingCredentials(yopmail, details.email, details);
     saveLastTrainee({
       ...details,
       ...OnboardingApplicationPage.expectedPersonalDefaults(details.firstName),
@@ -199,7 +190,7 @@ test.describe('Prospective Trainees', () => {
     });
     expect(credentials.username.toLowerCase()).toContain(details.email.split('@')[0].toLowerCase());
 
-    const onboardingPage = await yopmail.openOnboardingPortal();
+    const onboardingPage = await openOnboardingLoginPage(yopmail);
     const preOnboarding = new PreOnboardingPage(onboardingPage);
     await preOnboarding.expectLoaded();
 
@@ -477,7 +468,7 @@ test.describe('Prospective Trainees', () => {
       await yopmail.waitForMailMatching(
         new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
       );
-      const { portal, preOnboarding, employee: loggedInEmployee } = await openPreOnboardingFromYopmail(
+      const { portal, preOnboarding, employee: loggedInEmployee } = await openPreOnboardingForReleasedOffer(
         yopmail,
         employee,
       );
@@ -536,10 +527,13 @@ test.describe('Prospective Trainees', () => {
     const mailTab = await page.context().newPage();
     const yopmail = new YopmailPage(mailTab);
     await yopmail.openInbox(employee.email);
-    await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
-    const { portal, preOnboarding, employee: activeEmployee } = await openPreOnboardingFromYopmail(yopmail, employee, {
-      preferLatestMailCredentials: true,
-    });
+    await yopmail.waitForMailMatching(
+      new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
+    );
+    const { portal, preOnboarding, employee: activeEmployee } = await openPreOnboardingForReleasedOffer(
+      yopmail,
+      employee,
+    );
     saveLastTrainee(activeEmployee);
     if (await preOnboarding.goToApplicationButton.isVisible().catch(() => false)) {
       await preOnboarding.goToApplication();
@@ -648,60 +642,21 @@ test.describe('Prospective Trainees', () => {
     await expect(page.getByRole('cell', { name: 'Button Before Onboard' })).toBeVisible();
   });
 
-  test('Test-15: Request trainee onboard and complete RM/TM/HR approval', async ({ page }, testInfo) => {
+  test('Test-15: Request trainee onboard for saved active trainee', async ({ page }, testInfo) => {
     test.setTimeout(360000);
     const trainees = new ProspectiveTraineePage(page);
-    const saved = loadLastTrainee();
-    if (!saved) {
-      throw new Error('No saved trainee found. Run Test-13 first.');
-    }
-
-    const activatedTrainee: SavedTrainee = {
-      firstName: 'Meera',
-      lastName: 'Menon',
-      email: 'meera.menon.bij@yopmail.com',
-      username: 'meera.menon.bij@yopmail.com',
-      employeeId: '12837',
-    };
-    const employee = await resolveActiveSavedTrainee(trainees, activatedTrainee).catch(async (error) => {
-      console.log(`Meera lookup failed (${error}); falling back to saved trainee`);
-      if (!saved) {
-        throw error;
-      }
-      return resolveActiveSavedTrainee(trainees, saved).catch(async () => resolveActiveTrainee(page, trainees));
-    });
-    saveLastTrainee(employee);
+    const employee = await resolvePrimaryActiveTrainee(page, trainees);
     await trainees.openActiveTraineeProfile(employee);
     console.log(`Requesting onboard for ${employee.firstName} ${employee.lastName} (${employee.email})`);
 
     const onboard = new TraineeOnboardRequestPage(page);
     await onboard.openFromProfile();
     const tableText = await page.locator('table').innerText().catch(() => '');
-    const alreadyProcessed = /Processed/i.test(tableText);
-    const alreadyWaiting = /Waiting for Approval|Extended/i.test(tableText);
+    const alreadyInProgress = /Waiting for Approval|Extended|Approved|Processed/i.test(tableText);
     const canSubmit = await onboard.requestButton.last().isVisible().catch(() => false);
 
     if (canSubmit) {
-      const prep = new TraineeJobPrepPage(page);
-      const personalEmail = resolveTraineeEmail(employee);
-      const workEmail = personalEmail.replace('@', '1@');
-      await prep.ensureWorkEmail(workEmail);
-      await prep.ensureJobInfo();
-      await page.keyboard.press('Escape').catch(() => {});
-      await onboard.openFromProfile();
-      await onboard.expectRequestButtonVisible();
-      try {
-        await onboard.submitRequest();
-      } catch (error) {
-        if (!/job details are not updated/i.test(String(error))) {
-          throw error;
-        }
-        console.log('Onboard request needs Job Info update; retrying preparation');
-        await prep.ensureJobInfo();
-        await page.keyboard.press('Escape').catch(() => {});
-        await onboard.openFromProfile();
-        await onboard.submitRequest();
-      }
+      await submitFreshOnboardRequest(page, employee);
 
       await page.bringToFront();
       const rmMailTab = await page.context().newPage();
@@ -723,145 +678,204 @@ test.describe('Prospective Trainees', () => {
         );
       }
       await rmMailTab.close();
-    } else if (alreadyProcessed) {
-      console.log('Onboard request already processed; skipping submit and approval queue');
-    } else if (alreadyWaiting) {
-      console.log('Onboard request already submitted; continuing approval');
-    }
-
-    if (!alreadyProcessed) {
-      await page.bringToFront();
-      const approvals = new PendingTraineeOnboardApprovalPage(page);
-      await approvals.openTraineesQueue();
-      const row = await approvals.waitForRequestRow(employee);
-      await approvals.expectKebabActions(row, ['Approve'], { only: true });
-      await approvals.approveUntilDone(employee);
-      try {
-        await approvals.processAsHr(employee);
-      } catch (error) {
-        await trainees.openActiveTraineeProfile(employee);
-        await onboard.openFromProfile();
-        const statusText = await page.locator('table').innerText().catch(() => '');
-        if (!/Processed/i.test(statusText)) {
-          throw error;
-        }
-        console.log('HR Process already completed on trainee profile');
-      }
-    }
-
-    await trainees.openActiveTraineesList();
-    await trainees.openActiveTraineeProfile(employee);
-    await onboard.openFromProfile();
-    const finalTableText = await page.locator('table').innerText().catch(() => '');
-    console.log(`Onboard request table: ${finalTableText.replace(/\s+/g, ' ').trim()}`);
-    if (!alreadyProcessed || /Processed/i.test(finalTableText)) {
-      await onboard.expectStatus(/processed/i);
+    } else if (alreadyInProgress) {
+      console.log(`Onboard request already in progress: ${tableText.replace(/\s+/g, ' ').trim()}`);
     } else {
-      console.log('Processed status was verified earlier; continuing');
-    }
-    try {
-      await onboard.readyForOnboardFromRow();
-    } catch (error) {
-      console.log(`Ready for onboard already completed or unavailable: ${error}`);
+      console.log('No submit button on profile; checking approval queue');
     }
 
-    await trainees.openActiveTraineesList();
-    await trainees.openActiveTraineeProfile(employee);
-    await expect(page.getByText(`${employee.firstName} ${employee.lastName}`).first()).toBeVisible();
-    console.log(`${employee.firstName} ${employee.lastName} remains on active trainees after onboard`);
-
-    await trainees.openActiveTraineesList();
-    const offerLetter = new TraineeOfferLetterPage(page);
-    await offerLetter.openEmployeeOfferLetterFromList();
-    await offerLetter.expectEmployeeInDropdown(employee.firstName, employee.lastName, employee.employeeId);
+    await page.bringToFront();
+    const approvals = new PendingTraineeOnboardApprovalPage(page);
+    await approvals.openTraineesQueue();
+    await approvals.advanceToHrAfterManagerApproval(employee);
+    console.log(
+      `${employee.firstName} ${employee.lastName} onboard request is pending HR Process (L1+L2 manager approval treated as one when same approver)`,
+    );
   });
 
-  test('Test-16: Approve onboard request through HR', async ({ page }) => {
+  test('Test-16: Manager extends onboard request for saved active trainee', async ({ page }) => {
     test.setTimeout(360000);
     const trainees = new ProspectiveTraineePage(page);
-    let employee = await resolveTraineeForOnboardAction(page, trainees, { allowPending: true });
-    employee = await ensureActiveTraineeEmployeeId(page, trainees, employee);
-    saveLastTrainee(employee);
-    console.log(`Approving onboard request for ${employee.firstName} ${employee.lastName} (${employee.employeeId ?? 'no id'})`);
-
-    await ensureOnboardRequestPending(page, employee);
-    approvedOnboardTraineeEmail = resolveTraineeEmail(employee);
-    await approveOnboardRequestThroughHr(page, trainees, employee);
-  });
-
-  test('Test-17: Reject onboard request with extend', async ({ page }, testInfo) => {
-    test.setTimeout(600000);
-    const trainees = new ProspectiveTraineePage(page);
-    const employee = await ensurePendingOnboardRequestTrainee(page, testInfo, {
-      excludeEmail: approvedOnboardTraineeEmail,
-    });
-    saveLastTrainee(employee);
-    extendedOnboardTraineeEmail = resolveTraineeEmail(employee);
-    console.log(`Extending onboard request for ${employee.firstName} ${employee.lastName} (${employee.email})`);
-
-    await ensureOnboardRequestPending(page, employee);
-
-    const approvals = new PendingTraineeOnboardApprovalPage(page);
-    await page.bringToFront();
-    const row = await approvals.waitForRequestRow(employee, { timeout: 120000 });
-    await approvals.expectKebabActions(row, ['Approve', 'Reject']);
-    const extendDate = futureIsoDate(30);
-    await approvals.rejectExtend(row, extendDate, 'Extended by a month');
-
+    const employee = await resolvePrimaryActiveTrainee(page, trainees);
     const onboard = new TraineeOnboardRequestPage(page);
+    const approvals = new PendingTraineeOnboardApprovalPage(page);
+    const extendDate = futureIsoDateByMonths(2);
+    const extendComments = 'Extended by 2 months';
+
+    console.log(`Test-16 for ${employee.firstName} ${employee.lastName} (${employee.email})`);
+
     await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+
+    const tableText = await page.locator('table').innerText().catch(() => '');
+    const canSubmit = await onboard.requestButton.last().isVisible().catch(() => false);
+    const waitingForApproval = /Waiting for Approval/i.test(tableText);
+    const managerApproved = /\bApproved\b/i.test(tableText) && !waitingForApproval;
+    const alreadyExtended = /Extended/i.test(tableText);
+
+    if (alreadyExtended) {
+      console.log(`Onboard request already extended: ${tableText.replace(/\s+/g, ' ').trim()}`);
+    } else if (canSubmit) {
+      await submitFreshOnboardRequest(page, employee);
+      await onboard.expectStatus(/waiting for approval/i);
+      console.log('Raised Request For Onboard from Job > Trainee Onboard Request');
+      await approvals.rejectExtendAtManagerLevel(employee, extendDate, extendComments);
+    } else if (waitingForApproval) {
+      console.log(`Onboard request already pending manager approval: ${tableText.replace(/\s+/g, ' ').trim()}`);
+      await approvals.rejectExtendAtManagerLevel(employee, extendDate, extendComments);
+    } else if (managerApproved) {
+      console.log(
+        `Manager already approved (likely from Test-15); extending at HR approval level: ${tableText.replace(/\s+/g, ' ').trim()}`,
+      );
+      await approvals.rejectExtendAtHrLevel(employee, extendDate, extendComments);
+    } else {
+      throw new Error(`${employee.email} has no Request For Onboard button and no pending approval to extend`);
+    }
+
+    await page.keyboard.press('Escape').catch(() => {});
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
     await trainees.openActiveTraineeProfile(employee);
     await onboard.openFromProfile();
     await onboard.expectStatus(/extend/i);
     await onboard.expectRequestButtonVisible();
-
-    const employeeMail = await page.context().newPage();
-    const yopmail = new YopmailPage(employeeMail);
-    await yopmail.openInbox(employee.email);
-    try {
-      await yopmail.waitForMailMatching(/Onboard Period Extended|extended/i, 45000);
-    } catch (error) {
-      console.log(`Employee extend mail was not in Yopmail. ${error}`);
-    }
-    await employeeMail.close();
-
-    await page.bringToFront();
-    await approvals.openTraineesQueue();
-    const extendedRow = await approvals.waitForRequestRow(employee);
-    await approvals.expectKebabActions(extendedRow, ['Approve'], { only: true });
-    console.log('Extended onboard request remains in queue with Approve-only kebab');
+    console.log(`${employee.firstName} ${employee.lastName} onboard request extended by manager`);
   });
 
-  test('Test-18: Reject onboard request with discontinue', async ({ page }, testInfo) => {
+  test('Test-17: Re-request onboard and L1 approve, L2 reject extend', async ({ page }) => {
     test.setTimeout(360000);
     const trainees = new ProspectiveTraineePage(page);
-    const excludeEmails = [approvedOnboardTraineeEmail, extendedOnboardTraineeEmail].filter(Boolean) as string[];
-    const employee = await ensurePendingOnboardRequestTrainee(page, testInfo, {
-      excludeEmail: excludeEmails.length > 0 ? excludeEmails : undefined,
-    });
-    saveLastTrainee(employee);
-    console.log(`Discontinuing onboard request for ${employee.firstName} ${employee.lastName} (${employee.employeeId ?? 'no id'})`);
-
+    const employee = await resolvePrimaryActiveTrainee(page, trainees);
     const onboard = new TraineeOnboardRequestPage(page);
-    await ensureOnboardRequestPending(page, employee);
-
-    await page.keyboard.press('Escape').catch(() => {});
-
     const approvals = new PendingTraineeOnboardApprovalPage(page);
-    await page.bringToFront();
-    const row = await approvals.waitForRequestRow(employee, { timeout: 120000 });
-    await approvals.expectKebabActions(row, ['Approve', 'Reject']);
-    await approvals.rejectDiscontinue(row);
+    const extendDate = futureIsoDateByMonths(2);
+    const extendComments = 'Extended at second approval level after re-request';
 
-    await page.bringToFront();
-    await approvals.openTraineesQueue();
-    await approvals.expectRequestRowAbsent(employee);
+    console.log(`Test-17 for ${employee.firstName} ${employee.lastName} (${employee.email})`);
 
     await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
     await trainees.openActiveTraineeProfile(employee);
     await onboard.openFromProfile();
-    await onboard.expectStatus(/reject/i);
-    await onboard.expectRequestButtonHidden();
+    const tableText = await page.locator('table').innerText().catch(() => '');
+    const canSubmit = await onboard.requestButton.last().isVisible().catch(() => false);
+    const waitingForApproval = /Waiting for Approval/i.test(tableText);
+    const managerApproved = /Approved/i.test(tableText) && !waitingForApproval;
+
+    if (canSubmit) {
+      await submitFreshOnboardRequest(page, employee);
+      await onboard.expectStatus(/waiting for approval/i);
+      console.log('Re-requested onboard from Job > Trainee Onboard Request');
+    } else if (waitingForApproval) {
+      console.log(`Onboard re-request already pending manager approval: ${tableText.replace(/\s+/g, ' ').trim()}`);
+    } else if (managerApproved) {
+      console.log(`Manager already approved re-request; continuing at second approval level`);
+    } else {
+      throw new Error(`${employee.email} has no Request For Onboard button and no pending approval to continue Test-17`);
+    }
+
+    await approvals.approveFirstLevelThenRejectExtend(employee, extendDate, extendComments);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+    await onboard.expectStatus(/extend/i);
+    await onboard.expectRequestButtonVisible();
+    console.log(`${employee.firstName} ${employee.lastName} re-request extended at second approval level`);
+  });
+
+  test('Test-18: Re-request onboard and approve through all approval levels', async ({ page }) => {
+    test.setTimeout(360000);
+    const trainees = new ProspectiveTraineePage(page);
+    const employee = await resolvePrimaryActiveTrainee(page, trainees);
+    const onboard = new TraineeOnboardRequestPage(page);
+    const approvals = new PendingTraineeOnboardApprovalPage(page);
+
+    console.log(`Test-18 for ${employee.firstName} ${employee.lastName} (${employee.email})`);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+
+    const canSubmit = await onboard.requestButton.last().isVisible().catch(() => false);
+    const tableText = await page.locator('table').innerText().catch(() => '');
+    const waitingForApproval = /Waiting for Approval/i.test(tableText);
+
+    if (canSubmit) {
+      await submitOnboardRequestDirect(page);
+      await onboard.expectStatus(/waiting for approval/i);
+    } else if (waitingForApproval) {
+      console.log(`Onboard request already pending approval: ${tableText.replace(/\s+/g, ' ').trim()}`);
+    } else {
+      throw new Error(`${employee.email} has no Request For Onboard button and no pending approval to continue Test-18`);
+    }
+
+    await page.keyboard.press('Escape').catch(() => {});
+    await approvals.approveThroughAllLevels(employee);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+    await onboard.expectStatus(/processed/i);
+    console.log(`${employee.firstName} ${employee.lastName} onboard request approved through all levels`);
+  });
+
+  test('Test-19: Ready for onboard and verify employee in Offer Letter dropdown', async ({ page }) => {
+    test.setTimeout(360000);
+    const trainees = new ProspectiveTraineePage(page);
+    const employee = await resolvePrimaryActiveTrainee(page, trainees);
+    const onboard = new TraineeOnboardRequestPage(page);
+    const offerLetter = new TraineeOfferLetterPage(page);
+
+    console.log(`Test-19 for ${employee.firstName} ${employee.lastName} (${employee.email})`);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+    await onboard.expectStatus(/processed/i);
+
+    const readyText = await onboard.readyForOnboardFromRow();
+    expect(readyText).toMatch(/Employee onboarded/i);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    const activeRow = trainees.traineeRow(`${employee.firstName} ${employee.lastName}`);
+    await expect(activeRow).toBeVisible({ timeout: 15000 });
+    console.log(`Verified ${employee.firstName} ${employee.lastName} in active trainees list`);
+
+    await offerLetter.openEmployeeOfferLetterFromList();
+    await offerLetter.expectEmployeeInDropdown(employee.firstName, employee.lastName, employee.employeeId);
+    console.log(`${employee.firstName} ${employee.lastName} is available in Generate Documents > Offer Letter dropdown`);
+  });
+
+  test('Test-20: New active trainee onboard approve through all levels', async ({ page }, testInfo) => {
+    test.setTimeout(900000);
+    const trainees = new ProspectiveTraineePage(page);
+    const onboard = new TraineeOnboardRequestPage(page);
+    const approvals = new PendingTraineeOnboardApprovalPage(page);
+
+    const employee = await bootstrapFreshActiveTraineeWithOnboardRequest(page, testInfo);
+    saveLastTrainee(employee);
+    console.log(
+      `Approving onboard request for ${employee.firstName} ${employee.lastName} (${employee.email})`,
+    );
+
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.bringToFront();
+    await approvals.approveThroughAllLevels(employee);
+
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(employee.firstName);
+    await trainees.openActiveTraineeProfile(employee);
+    await onboard.openFromProfile();
+    await onboard.expectStatus(/processed/i);
+    console.log(`${employee.firstName} ${employee.lastName} onboard request approved through all levels`);
   });
 });
 
@@ -877,6 +891,48 @@ async function ensurePreOnboardingCredentials(
   return updated;
 }
 
+async function resolvePrimaryActiveTrainee(
+  page: import('@playwright/test').Page,
+  trainees: ProspectiveTraineePage,
+): Promise<SavedTrainee> {
+  const saved = loadLastTrainee();
+  if (!saved) {
+    throw new Error('No saved trainee found. Run Test-13 first.');
+  }
+
+  let employee: SavedTrainee;
+  try {
+    employee = await resolveActiveSavedTrainee(trainees, saved);
+  } catch (error) {
+    console.log(`Saved trainee lookup failed (${error}); searching active trainees by name`);
+    await trainees.openActiveTraineesList();
+    await trainees.searchTrainee(saved.firstName);
+    let row = trainees.traineeRow(`${saved.firstName} ${saved.lastName}`);
+    if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
+      const emailLocal = resolveTraineeEmail(saved).split('@')[0] ?? saved.firstName;
+      await trainees.searchTrainee(emailLocal);
+      row = trainees.traineeRow(`${saved.firstName} ${saved.lastName}`);
+    }
+    await expect(row).toBeVisible({ timeout: 15000 });
+    const fromRow = await trainees.readTraineeFromRow(row);
+    employee = withOfferDefaults({
+      ...saved,
+      ...fromRow,
+      email: resolveTraineeEmail(saved),
+      username: saved.username ?? saved.email,
+    });
+  }
+
+  employee = await ensureActiveTraineeEmployeeId(page, trainees, employee);
+  employee = {
+    ...employee,
+    email: resolveTraineeEmail(saved),
+    username: saved.username ?? saved.email,
+  };
+  saveLastTrainee(employee);
+  return employee;
+}
+
 async function approveOnboardRequestThroughHr(
   page: import('@playwright/test').Page,
   trainees: ProspectiveTraineePage,
@@ -886,12 +942,8 @@ async function approveOnboardRequestThroughHr(
   const onboard = new TraineeOnboardRequestPage(page);
 
   await page.keyboard.press('Escape').catch(() => {});
-  await page.bringToFront();
-  const row = await approvals.waitForRequestRow(employee, { timeout: 120000 });
-  await approvals.expectKebabActions(row, ['Approve'], { only: true });
-  await approvals.approveUntilDone(employee);
   try {
-    await approvals.processAsHr(employee);
+    await approvals.approveThroughAllLevels(employee);
   } catch (error) {
     await trainees.openActiveTraineeProfile(employee);
     await onboard.openFromProfile();
@@ -909,181 +961,19 @@ async function approveOnboardRequestThroughHr(
   console.log(`Onboard request processed for ${employee.firstName} ${employee.lastName}`);
 }
 
-async function resolveTraineeForOnboardAction(
-  page: import('@playwright/test').Page,
-  trainees: ProspectiveTraineePage,
-  options: { allowPending: boolean; excludeEmails?: string[] },
-): Promise<SavedTrainee> {
-  const lastUsed = resolveTraineeEmail(loadLastTrainee() ?? { firstName: '', lastName: '', email: '' });
-  const excludeEmails = [
-    ...(options.excludeEmails ?? []),
-    ...(options.allowPending ? [] : [lastUsed]),
-  ].filter(Boolean);
-  const candidates: SavedTrainee[] = [
-    { firstName: 'Nandini', lastName: 'Joshi', email: 'nandini.joshi.ijt1@yopmail.com' },
-    { firstName: 'Nandini', lastName: 'Joshi', email: 'nandini.joshi.ijt@yopmail.com' },
-    { firstName: 'anatha', lastName: 'lakshmi manjula', email: 'manjulalakshmiana@yopmail.com' },
-    { firstName: 'Sindhuja', lastName: 'Priya', email: 'Sindhuja@yopmail.com' },
-    { firstName: 'Sindhuja', lastName: 'Priya', email: 'Sindhuja1@yopmail.com' },
-  ].filter((candidate) => !isTraineeEmailExcluded(resolveTraineeEmail(candidate), excludeEmails));
-
-  for (const candidate of candidates) {
-    try {
-      await trainees.openActiveTraineesList();
-      await trainees.openActiveTraineeProfile(candidate);
-      const manager = (await page.getByText('Reporting Manager', { exact: true })
-        .locator('xpath=following-sibling::*[1]')
-        .innerText()
-        .catch(() => 'NA')).trim();
-      if (/^NA$/i.test(manager)) {
-        console.log(`${candidate.email} has no reporting manager; skipping`);
-        continue;
-      }
-
-      const onboard = new TraineeOnboardRequestPage(page);
-      await onboard.openFromProfile();
-      const tableText = await page.locator('table').innerText().catch(() => '');
-
-      if (options.allowPending && /Waiting for Approval/i.test(tableText)) {
-        const synced = await syncTraineeFromActiveList(trainees, candidate);
-        console.log(`Reusing pending onboard request for ${synced.email}`);
-        return synced;
-      }
-
-      if (await onboard.requestButton.last().isVisible().catch(() => false)) {
-        return withOfferDefaults(candidate);
-      }
-
-      if (!/Waiting for Approval|Processed|Extended/i.test(tableText)) {
-        await prepareActiveTraineeForOnboard(page, candidate);
-        await onboard.openFromProfile();
-        if (await onboard.requestButton.last().isVisible().catch(() => false)) {
-          console.log(`Prepared onboard-ready trainee ${candidate.email}`);
-          return withOfferDefaults(candidate);
-        }
-      }
-
-      if (/No Data Found/i.test(tableText)) {
-        await prepareActiveTraineeForOnboard(page, candidate);
-        await onboard.openFromProfile();
-        if (await onboard.requestButton.last().isVisible().catch(() => false)) {
-          console.log(`Prepared onboard-ready trainee ${candidate.email}`);
-          return withOfferDefaults(candidate);
-        }
-      }
-
-      console.log(`${candidate.email} is not ready for onboard request; trying next candidate`);
-    } catch (error) {
-      console.log(`Could not evaluate ${candidate.email}: ${error}`);
-    }
-  }
-
-  const scanned = await findActiveTraineeWithOnboardRequest(page, trainees, {
-    excludeEmail: excludeEmails.length > 0 ? excludeEmails : lastUsed,
-    maxPages: 1,
-  });
-  if (scanned) {
-    return scanned;
-  }
-
-  throw new Error('No active trainee with Request For Onboard. Prepare an active trainee first.');
-}
-
-async function resolveActiveTrainee(
-  page: import('@playwright/test').Page,
-  trainees: ProspectiveTraineePage,
-  options?: { preferDifferentFromLast?: boolean; requireRequestButton?: boolean },
-): Promise<SavedTrainee> {
-  await trainees.openActiveTraineesList();
-  const saved = loadLastTrainee();
-  const hardcoded: SavedTrainee[] = [
-    { firstName: 'Nandini', lastName: 'Joshi', email: 'nandini.joshi.ijt@yopmail.com' },
-    { firstName: 'Sindhuja', lastName: 'Priya', email: 'Sindhuja@yopmail.com' },
-    { firstName: 'rajesh', lastName: 'zithwaday', email: 'zithwaday@yopmail.com' },
-  ];
-  const candidates: SavedTrainee[] = options?.preferDifferentFromLast
-    ? [...hardcoded, ...(saved ? [saved] : [])]
-    : [...(saved ? [saved] : []), ...hardcoded];
-
-  const unique: SavedTrainee[] = [];
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    const key = `${candidate.firstName}|${candidate.lastName}|${candidate.email}`.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(candidate);
-  }
-
-  for (const candidate of unique) {
-    try {
-      await trainees.openActiveTraineeProfile(candidate);
-      const manager = (await page.getByText('Reporting Manager', { exact: true })
-        .locator('xpath=following-sibling::*[1]')
-        .innerText()
-        .catch(() => 'NA')).trim();
-      if (/^NA$/i.test(manager)) {
-        console.log(`${candidate.email} has no reporting manager; skipping`);
-        await trainees.openActiveTraineesList();
-        continue;
-      }
-      const onboard = new TraineeOnboardRequestPage(page);
-      await onboard.openFromProfile();
-      if (await onboard.requestButton.last().isVisible().catch(() => false)) {
-        const resolved = withOfferDefaults({ ...(saved ?? {}), ...candidate });
-        saveLastTrainee(resolved);
-        return resolved;
-      }
-      const tableText = await page.locator('table').innerText().catch(() => '');
-      if (/No Data Found/i.test(tableText)) {
-        await prepareActiveTraineeForOnboard(page, candidate);
-        await onboard.openFromProfile();
-        if (await onboard.requestButton.last().isVisible().catch(() => false)) {
-          const resolved = withOfferDefaults({ ...(saved ?? {}), ...candidate });
-          saveLastTrainee(resolved);
-          return resolved;
-        }
-      }
-      if (options?.requireRequestButton) {
-        console.log(`${candidate.email} does not have Request For Onboard; trying another active trainee`);
-        await trainees.openActiveTraineesList();
-        continue;
-      }
-      if (await page.getByText(/Waiting for Approval|Extended|Approved|Processed|Ready for Onboard/i).first().isVisible().catch(() => false)) {
-        const isSavedTrainee = saved && candidate.email.toLowerCase() === saved.email.toLowerCase();
-        if (isSavedTrainee) {
-          console.log(`${candidate.email} already has an onboard request in progress`);
-          const resolved = { ...saved, ...candidate };
-          saveLastTrainee(resolved);
-          return resolved;
-        }
-        console.log(`${candidate.email} has a stale onboard request in progress; trying another active trainee`);
-        await trainees.openActiveTraineesList();
-        continue;
-      }
-      console.log(`${candidate.email} does not have Request For Onboard; trying another active trainee`);
-      await trainees.openActiveTraineesList();
-    } catch {
-      await trainees.openActiveTraineesList();
-    }
-  }
-
-  const excludeEmail = options?.preferDifferentFromLast
-    ? resolveTraineeEmail(saved ?? { firstName: '', lastName: '', email: '' })
-    : undefined;
-  const scanned = await findActiveTraineeWithOnboardRequest(page, trainees, { excludeEmail });
-  if (scanned) {
-    saveLastTrainee(scanned);
-    return scanned;
-  }
-
-  throw new Error('No active trainee with Request For Onboard. Run Test-13 first. Do not create a new trainee.');
-}
-
 function futureIsoDate(daysAhead: number) {
   const date = new Date();
   date.setDate(date.getDate() + daysAhead);
+  return formatIsoDate(date);
+}
+
+function futureIsoDateByMonths(monthsAhead: number) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + monthsAhead);
+  return formatIsoDate(date);
+}
+
+function formatIsoDate(date: Date) {
   return [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, '0'),

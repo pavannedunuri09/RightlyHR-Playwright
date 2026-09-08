@@ -27,4 +27,16 @@ export class EmployeeMyInfoPage {
     await this.page.keyboard.press('Escape').catch(() => {});
     return text;
   }
+
+  async regenerateOnboardingCredentials() {
+    const button = this.page.getByRole('button', { name: 'Generate Credentials' });
+    await expect(button).toBeVisible({ timeout: 15000 });
+    await button.click();
+    const toast = this.page.getByText(/credential|password|sent|generated|email has been sent/i);
+    await expect(toast.first()).toBeVisible({ timeout: 20000 });
+    const text = (await toast.first().innerText()).trim();
+    console.log(`Generate credentials: ${text}`);
+    await this.page.keyboard.press('Escape').catch(() => {});
+    return text;
+  }
 }

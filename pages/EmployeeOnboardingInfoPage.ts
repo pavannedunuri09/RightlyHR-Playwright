@@ -116,6 +116,7 @@ export class EmployeeOnboardingInfoPage {
       if (await input.first().isEnabled().catch(() => false)) {
         const id = employeeId ?? generateEmployeeId();
         await input.first().fill(id);
+        await this.fillMandatoryBasicInfoFields();
         const saveEnabled = await this.saveButton.first().isEnabled().catch(() => false);
         if (saveEnabled) {
           await this.saveButton.first().click();
@@ -168,6 +169,44 @@ export class EmployeeOnboardingInfoPage {
       await basicInfo.first().click();
     }
     console.log('Opened Basic Info tab');
+  }
+
+  async readEmployeeIdFromBasicInfo() {
+    await this.openBasicInfoSection();
+    return this.readExistingEmployeeId();
+  }
+
+  private async fillMandatoryBasicInfoFields() {
+    const marital = this.page.getByRole('combobox', { name: /Please select marital status|Marital Status/i })
+      .or(this.page.locator('p-select[formcontrolname="maritalStatus"]'));
+    if (await marital.first().isVisible().catch(() => false)) {
+      const text = ((await marital.first().innerText().catch(() => '')) || '').trim();
+      if (!text || /please select/i.test(text)) {
+        await marital.first().click();
+        await this.page.getByRole('option', { name: 'Single', exact: true }).click();
+        console.log('Marital status set to Single');
+      }
+    }
+
+    const salutation = this.page.locator('p-select[formcontrolname="salutation"]');
+    if (await salutation.isVisible().catch(() => false)) {
+      const text = ((await salutation.innerText().catch(() => '')) || '').trim();
+      if (!text || /please select/i.test(text)) {
+        await salutation.click();
+        await this.page.getByRole('option', { name: 'Miss.', exact: true }).click();
+        console.log('Salutation set to Miss.');
+      }
+    }
+
+    const gender = this.page.locator('p-select[formcontrolname="gender"]');
+    if (await gender.isVisible().catch(() => false)) {
+      const text = ((await gender.innerText().catch(() => '')) || '').trim();
+      if (!text || /please select/i.test(text)) {
+        await gender.click();
+        await this.page.getByRole('option', { name: 'Female', exact: true }).click();
+        console.log('Gender set to Female');
+      }
+    }
   }
 
   private async readExistingEmployeeId() {

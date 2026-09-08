@@ -1,4 +1,5 @@
 import { expect, type Page, type TestInfo } from '@playwright/test';
+import fs from 'fs';
 import { ProspectiveTraineePage } from '../../pages/ProspectiveTraineePage';
 import { EmployeeMyInfoPage } from '../../pages/EmployeeMyInfoPage';
 import { YopmailPage } from '../../pages/YopmailPage';
@@ -468,15 +469,25 @@ export async function syncTraineeFromActiveList(
 }
 
 export async function prepareActiveTraineeForOnboard(page: Page, employee: SavedTrainee) {
-  if (!employee.employeeId) {
-    const onboardingInfo = new EmployeeOnboardingInfoPage(page);
-    const basicTab = page.getByText('Personal', { exact: true }).or(page.getByText('Basic Info', { exact: true }));
-    if (await basicTab.first().isVisible().catch(() => false)) {
-      try {
+  await page.keyboard.press('Escape').catch(() => {});
+  const personal = page.getByText('Personal', { exact: true });
+  if (await personal.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await personal.click({ timeout: 10000 });
+  }
+
+  const onboardingInfo = new EmployeeOnboardingInfoPage(page);
+  const basicTab = page.getByText('Personal', { exact: true }).or(page.getByText('Basic Info', { exact: true }));
+  if (await basicTab.first().isVisible().catch(() => false)) {
+    try {
+      const profileEmployeeId = await onboardingInfo.readEmployeeIdFromBasicInfo();
+      if (!hasValidEmployeeId(profileEmployeeId)) {
         employee.employeeId = await onboardingInfo.setEmployeeIdOnBasicInfo(employee.employeeId);
-      } catch (error) {
-        console.log(`Could not update employee ID on Basic Info; continuing onboard prep. ${error}`);
+      } else {
+        employee.employeeId = profileEmployeeId ?? employee.employeeId;
+        console.log(`Employee ID already on Basic Info: ${employee.employeeId}`);
       }
+    } catch (error) {
+      console.log(`Could not update employee ID on Basic Info; continuing onboard prep. ${error}`);
     }
   }
   saveLastTrainee({ ...loadLastTrainee(), ...employee, employeeId: employee.employeeId });
@@ -490,21 +501,40 @@ export async function prepareActiveTraineeForOnboard(page: Page, employee: Saved
 }
 
 export async function submitFreshOnboardRequest(page: Page, employee: SavedTrainee) {
-  await prepareActiveTraineeForOnboard(page, employee);
   const onboard = new TraineeOnboardRequestPage(page);
   await onboard.openFromProfile();
   await onboard.expectRequestButtonVisible();
   try {
     await onboard.submitRequest();
+    return;
   } catch (error) {
-    if (!/job details are not updated/i.test(String(error))) {
+    const tableText = await page.locator('table').innerText().catch(() => '');
+    if (/Waiting for Approval/i.test(tableText)) {
+      console.log('Onboard request is already waiting for approval');
+      return;
+    }
+    if (!isOnboardPrepRequired(error)) {
       throw error;
     }
-    console.log('Onboard request needs Job Info update; retrying preparation');
+    console.log(`Onboard request failed; updating Basic Info / Contact Info / Job Info before retry. ${error}`);
     await prepareActiveTraineeForOnboard(page, employee);
     await onboard.openFromProfile();
+    await onboard.expectRequestButtonVisible();
     await onboard.submitRequest();
   }
+}
+
+function isOnboardPrepRequired(error: unknown) {
+  const message = String(error).toLowerCase();
+  return /unable to proceed|job details|not updated|employee id|work mail|basic info|contact info|job info|mandatory|required|please update|validation/i.test(message);
+}
+
+export async function submitOnboardRequestDirect(page: Page) {
+  const onboard = new TraineeOnboardRequestPage(page);
+  await onboard.openFromProfile();
+  await onboard.expectRequestButtonVisible();
+  await onboard.submitRequest();
+  console.log('Raised Request For Onboard without Basic Info / Contact Info / Job Info prep');
 }
 
 export async function ensureOnboardRequestPending(page: Page, employee: SavedTrainee) {
@@ -547,12 +577,31 @@ export async function ensurePendingOnboardRequestTrainee(
   return bootstrapActiveTraineeWithPendingOnboardRequest(page, testInfo);
 }
 
-async function bootstrapActiveTraineeWithPendingOnboardRequest(
+export async function bootstrapActiveTraineeWithPendingOnboardRequest(
   page: Page,
   testInfo: TestInfo,
 ): Promise<SavedTrainee> {
-  const trainees = new ProspectiveTraineePage(page);
   const employee = await ensureReleasedOfferTrainee(page, testInfo);
+  return finishActiveTraineeOnboardBootstrap(page, testInfo, employee);
+}
+
+export async function bootstrapFreshActiveTraineeWithOnboardRequest(
+  page: Page,
+  testInfo: TestInfo,
+): Promise<SavedTrainee> {
+  console.log('Creating a fresh active trainee with pending onboard request');
+  const employee = await createNewVerifiedTrainee(page, testInfo);
+  await generateOfferAndRequestApproval(page, testInfo, employee);
+  await approveAndReleaseOffer(page, testInfo, employee);
+  return finishActiveTraineeOnboardBootstrap(page, testInfo, employee);
+}
+
+async function finishActiveTraineeOnboardBootstrap(
+  page: Page,
+  testInfo: TestInfo,
+  employee: SavedTrainee,
+): Promise<SavedTrainee> {
+  const trainees = new ProspectiveTraineePage(page);
 
   const mailTab = await page.context().newPage();
   const yopmail = new YopmailPage(mailTab);
@@ -561,9 +610,7 @@ async function bootstrapActiveTraineeWithPendingOnboardRequest(
     new RegExp(`${employee.firstName}[\\s\\S]*Offer Letter Issued|Offer Letter Issued`, 'i'),
     45000,
   );
-  const { portal, preOnboarding, employee: activeEmployee } = await openPreOnboardingFromYopmail(yopmail, employee, {
-    preferLatestMailCredentials: true,
-  });
+  const { portal, preOnboarding, employee: activeEmployee } = await openPreOnboardingFromYopmail(yopmail, employee);
   saveLastTrainee(activeEmployee);
   if (await preOnboarding.goToApplicationButton.isVisible().catch(() => false)) {
     await preOnboarding.goToApplication();
@@ -587,7 +634,8 @@ async function bootstrapActiveTraineeWithPendingOnboardRequest(
   await trainees.goToTraineesList();
   const listed = await loadSavedTraineeFromList(trainees, activeEmployee);
   const resolved = await activateProspectiveTraineeToActive(page, trainees, listed);
-  await submitFreshOnboardRequest(page, resolved);
+  await prepareActiveTraineeForOnboard(page, resolved);
+  await submitOnboardRequestDirect(page);
   saveLastTrainee(resolved);
   console.log(`Bootstrapped active trainee with pending onboard request: ${resolved.email}`);
   return resolved;
@@ -868,7 +916,9 @@ export async function generateOfferAndRequestApproval(
   const downloadPath = testInfo.outputPath('trainee-offer-letter.pdf');
   const generateText = await offerLetter.generateOfferLetter(downloadPath);
   expect(generateText).toContain('Trainee Offer letter generated successfully');
-  await testInfo.attach('trainee-offer-letter', { path: downloadPath, contentType: 'application/pdf' });
+  if (fs.existsSync(downloadPath)) {
+    await testInfo.attach('trainee-offer-letter', { path: downloadPath, contentType: 'application/pdf' });
+  }
 
   const approvalText = await offerLetter.requestApproval();
   expect(approvalText).toContain('Approval request sent');
@@ -944,7 +994,20 @@ export async function prepareSubmittedTrainee(
   const { details, yopmail } = await requestDocumentsAndOpenMail(page);
   const requestSubject = await yopmail.waitForMailSubject(`${details.firstName} ${details.lastName}`, 240000, details.email);
   await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
-  const credentials = await yopmail.readCredentials();
+  let credentials: { username: string; password: string } | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      credentials = await yopmail.readCredentials();
+      break;
+    } catch (error) {
+      console.log(`Yopmail credentials not ready yet (attempt ${attempt + 1}/4): ${error}`);
+      await yopmail.page.waitForTimeout(3000);
+      await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
+    }
+  }
+  if (!credentials) {
+    throw new Error(`Could not read Username/Password from Yopmail for ${details.email}`);
+  }
   saveLastTrainee({
     ...details,
     ...OnboardingApplicationPage.expectedPersonalDefaults(details.firstName),

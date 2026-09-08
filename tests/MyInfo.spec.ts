@@ -1,6 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { MyInfoPage } from '../pages/MyInfoPage';
+import {
+  alternateNameSet,
+  alternateValidDob,
+  alternateBloodGroup,
+  alternateMarriageAnniversary,
+  MARRIAGE_ANNIVERSARY_A,
+  INVALID_DOB_UNDERAGE,
+} from './fixtures/myInfoFields';
+import { alternateContactSet } from './fixtures/myInfoContactFields';
 
 test('Test 01: Employee should navigate to My Info Basic Info tab', async ({ page }) => {
     const loginPage = new LoginPage(page);
@@ -16,11 +25,7 @@ test('Test 01: Employee should navigate to My Info Basic Info tab', async ({ pag
 
     // Navigate to My Info
     await myInfoPage.openMyInfo();
-
-    // Open Basic Info tab
-    // await myInfoPage.openBasicInfo();
-    });
-
+});
 
 test('Test-02: Verify Basic Info details', async ({ page }) => {
 
@@ -113,8 +118,193 @@ test('Test-03: Verify Employee can update Salutation', async ({ page }) => {
 
 });
 
+test('Test-04: Verify Employee can update name fields', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
 
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
 
-    
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
 
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
 
+    await myInfoPage.openMyInfo();
+    await myInfoPage.clickEdit();
+
+    const editable = {
+        first: await myInfoPage.isNameFieldEditable('first'),
+        middle: await myInfoPage.isNameFieldEditable('middle'),
+        last: await myInfoPage.isNameFieldEditable('last'),
+    };
+    console.log(`Name field editability — First: ${editable.first}, Middle: ${editable.middle}, Last: ${editable.last}`);
+
+    test.skip(
+        !editable.first && !editable.middle && !editable.last,
+        'No name fields are editable in My Info Basic Info edit mode'
+    );
+
+    const currentNames = await myInfoPage.readCurrentNames();
+    const updatedNames = alternateNameSet(currentNames);
+    console.log(`Updating names from ${JSON.stringify(currentNames)} to ${JSON.stringify(updatedNames)}`);
+
+    await myInfoPage.fillNames(updatedNames);
+    await myInfoPage.saveChanges();
+    await myInfoPage.verifySavedNames(updatedNames, editable);
+});
+
+test('Test-05: Verify Employee can update Date of Birth with age validation', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
+
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
+
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
+
+    await myInfoPage.openMyInfo();
+    await myInfoPage.clickEdit();
+
+    const dobEditable = await myInfoPage.isDateOfBirthEditable();
+    console.log(`Date Of Birth editable: ${dobEditable}`);
+    test.skip(!dobEditable, 'Date Of Birth is not editable in My Info Basic Info edit mode');
+
+    await myInfoPage.fillDateOfBirth(INVALID_DOB_UNDERAGE);
+    await myInfoPage.blurBasicInfoForm();
+    await expect(myInfoPage.ageValidationMessage).toBeVisible({ timeout: 10000 });
+    console.log('Age validation shown for underage DOB');
+
+    const currentDob = await myInfoPage.readCurrentDateOfBirth();
+    const validDob = alternateValidDob(currentDob);
+    console.log(`Updating DOB from ${currentDob || 'unknown'} to ${validDob}`);
+
+    await myInfoPage.fillDateOfBirth(validDob);
+    await myInfoPage.blurBasicInfoForm();
+    await expect(myInfoPage.ageValidationMessage).toBeHidden({ timeout: 10000 });
+
+    await myInfoPage.saveChanges();
+    await myInfoPage.verifySavedDateOfBirth(validDob);
+});
+
+test('Test-06: Verify Employee can update Blood Group', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
+
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
+
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
+
+    await myInfoPage.openMyInfo();
+    await myInfoPage.clickEdit();
+
+    const bloodGroupEditable = await myInfoPage.isBloodGroupEditable();
+    console.log(`Blood Group editable: ${bloodGroupEditable}`);
+    test.skip(!bloodGroupEditable, 'Blood Group is not editable in My Info Basic Info edit mode');
+
+    const currentBloodGroup = await myInfoPage.readCurrentBloodGroup();
+    const selectedBloodGroup = alternateBloodGroup(currentBloodGroup);
+    console.log(`Updating blood group from ${currentBloodGroup || 'unknown'} to ${selectedBloodGroup}`);
+
+    await myInfoPage.selectBloodGroup(selectedBloodGroup);
+    await myInfoPage.saveChanges();
+    await myInfoPage.verifySavedBloodGroup(selectedBloodGroup);
+});
+
+test('Test-07: Verify Employee can update Marital Status with Marriage Anniversary', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
+
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
+
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
+
+    await myInfoPage.openMyInfo();
+    await myInfoPage.clickEdit();
+
+    const maritalStatusEditable = await myInfoPage.isMaritalStatusEditable();
+    console.log(`Marital Status editable: ${maritalStatusEditable}`);
+    test.skip(!maritalStatusEditable, 'Marital Status is not editable in My Info Basic Info edit mode');
+
+    console.log('Updating marital status to Single');
+    await myInfoPage.updateToSingleAndSave();
+
+    await myInfoPage.clickEdit();
+    const anniversary = alternateMarriageAnniversary(
+        (await myInfoPage.readMarriageAnniversary()) || MARRIAGE_ANNIVERSARY_A,
+    );
+    console.log(`Updating marital status to Married with anniversary ${anniversary}`);
+    await myInfoPage.updateToMarriedAndSave(anniversary);
+});
+
+test('Test-08: Verify Contact Info breadcrumb and fields', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
+
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
+
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
+
+    await myInfoPage.openContactInfo();
+    await myInfoPage.verifyContactInfoBreadcrumb();
+    await myInfoPage.verifyContactInfoFieldsVisible();
+});
+
+test('Test-09: Verify Employee can update Contact Info fields except Work Mail', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const myInfoPage = new MyInfoPage(page);
+
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+
+    test.skip(
+        !email || !password,
+        'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env'
+    );
+
+    await loginPage.goto();
+    await loginPage.login(email!, password!);
+
+    await myInfoPage.openContactInfo();
+    await myInfoPage.clickContactEdit();
+
+    await myInfoPage.expectWorkMailNotEditable();
+
+    const currentContact = await myInfoPage.readCurrentContactFields();
+    const updatedContact = alternateContactSet(currentContact);
+    console.log(`Updating contact info from ${JSON.stringify(currentContact)} to ${JSON.stringify(updatedContact)}`);
+
+    await myInfoPage.fillContactFields(updatedContact);
+    await myInfoPage.saveContactChanges();
+    await myInfoPage.verifySavedContactFields(updatedContact);
+});

@@ -13,9 +13,16 @@ export async function readOnboardingCredentials(
   options?: { refresh?: boolean; preferLatestMail?: boolean },
 ) {
   if (options?.preferLatestMail) {
-    return yopmail.findCredentialsInInbox({
-      preferPattern: OFFER_LETTER_MAIL_PATTERN,
-    });
+    for (const pattern of [OFFER_LETTER_MAIL_PATTERN, CREDENTIAL_MAIL_PATTERN]) {
+      try {
+        return await yopmail.findCredentialsInInbox({
+          skipCached: true,
+          preferPattern: pattern,
+        });
+      } catch {
+        // Try the next mail pattern.
+      }
+    }
   }
 
   if (!options?.refresh) {
@@ -28,7 +35,7 @@ export async function readOnboardingCredentials(
 
   return yopmail.findCredentialsInInbox({
     skipCached: true,
-    preferPattern: CREDENTIAL_MAIL_PATTERN,
+    preferPattern: options?.preferLatestMail ? OFFER_LETTER_MAIL_PATTERN : CREDENTIAL_MAIL_PATTERN,
   });
 }
 
@@ -83,24 +90,37 @@ export async function loginPreOnboardingPortal(
   preOnboarding: PreOnboardingPage,
   yopmail: YopmailPage,
   credentials: { username: string; password: string },
-  options?: { preferLatestMail?: boolean },
+  options?: { preferLatestMail?: boolean; employeeEmail?: string },
 ) {
-  const candidates = options?.preferLatestMail
-    ? [...(await yopmail.findAllCredentialsInInbox()), credentials]
-    : [credentials, ...(await yopmail.findAllCredentialsInInbox())];
-  const tried = new Set<string>();
+  const all = await yopmail.findAllCredentialsInInbox();
+  const usernames = new Set<string>([credentials.username]);
+  if (options?.employeeEmail) {
+    usernames.add(options.employeeEmail);
+  }
+  const passwords = new Set<string>([credentials.password, ...all.map((entry) => entry.password)]);
+
+  const candidates: Array<{ username: string; password: string }> = [];
+  const seen = new Set<string>();
+  for (const username of usernames) {
+    for (const password of passwords) {
+      const key = `${username}|${password}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      candidates.push({ username, password });
+    }
+  }
+  if (options?.preferLatestMail) {
+    candidates.push(...all.filter((entry) => !seen.has(`${entry.username}|${entry.password}`)));
+  }
+
   let lastMessage = 'Invalid Credentials';
 
   for (const candidate of candidates) {
-    const key = `${candidate.username}|${candidate.password}`;
-    if (tried.has(key)) {
-      continue;
-    }
-    tried.add(key);
-
     const attempt = await tryPreOnboardingLogin(preOnboarding, candidate);
     if (attempt.ok) {
-      if (key !== `${credentials.username}|${credentials.password}`) {
+      if (`${candidate.username}|${candidate.password}` !== `${credentials.username}|${credentials.password}`) {
         console.log(`Pre-onboarding login succeeded with alternate Yopmail credentials for ${candidate.username}`);
       }
       return candidate;
@@ -114,17 +134,22 @@ export async function loginPreOnboardingPortal(
 }
 
 async function resolvePreOnboardingLoginPage(context: import('@playwright/test').BrowserContext): Promise<Page> {
-  const base = (
-    process.env.RHR_BASE_URL?.trim() ||
+  const hrmsBase = (process.env.RHR_BASE_URL?.trim() || 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com').replace(
+    /\/$/,
+    '',
+  );
+  const preOnboardingBase = (
     process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
-    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
+    'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com'
   ).replace(/\/$/, '');
   const candidates = [
     process.env.PRE_ONBOARDING_URL?.trim(),
-    `${base}/pre-onboarding/login`,
-    `${base}/onboarding/login`,
-    `${base}/onboarding-portal/login`,
-    `${base}/employee-onboarding/login`,
+    preOnboardingBase,
+    `${preOnboardingBase}/login`,
+    `${hrmsBase}/pre-onboarding/login`,
+    `${hrmsBase}/onboarding/login`,
+    `${hrmsBase}/onboarding-portal/login`,
+    `${hrmsBase}/employee-onboarding/login`,
   ].filter((url): url is string => !!url);
 
   for (const url of candidates) {
@@ -149,6 +174,12 @@ async function resolvePreOnboardingLoginPage(context: import('@playwright/test')
 }
 
 async function openPreOnboardingPortalDirect(yopmail: YopmailPage): Promise<Page> {
+  try {
+    return await yopmail.openOnboardingPortalFromOfferLetterMail();
+  } catch (error) {
+    console.log(`Offer-letter portal direct open failed: ${error}`);
+  }
+
   const portalUrl = await yopmail.findPortalUrlInInbox();
   if (portalUrl) {
     console.log(`Opening pre-onboarding portal from mail URL: ${portalUrl}`);
@@ -158,6 +189,34 @@ async function openPreOnboardingPortalDirect(yopmail: YopmailPage): Promise<Page
   }
 
   return resolvePreOnboardingLoginPage(yopmail.page.context());
+}
+
+export async function openOnboardingLoginPage(yopmail: YopmailPage): Promise<Page> {
+  const portalOpeners = [
+    () => yopmail.openOnboardingPortalFromOfferLetterMail(),
+    () => openPreOnboardingPortalDirect(yopmail),
+    () => yopmail.openOnboardingPortalFromDocumentRequestMail(),
+    () => yopmail.openOnboardingPortal(),
+    () => yopmail.openOnboardingPortalFromCredentialMails(),
+  ];
+
+  let portal: Page | null = null;
+  let lastError: unknown = new Error('Could not open onboarding portal from Yopmail');
+  for (const openPortal of portalOpeners) {
+    try {
+      portal = await openPortal();
+      break;
+    } catch (error) {
+      lastError = error;
+      console.log(`Portal open attempt failed: ${error}`);
+    }
+  }
+
+  if (!portal) {
+    throw lastError;
+  }
+
+  return portal;
 }
 
 export async function openPreOnboardingFromYopmail(
@@ -171,6 +230,7 @@ export async function openPreOnboardingFromYopmail(
 }> {
   const { PreOnboardingPage } = await import('../../pages/PreOnboardingPage');
   const portalOpeners = [
+    () => yopmail.openOnboardingPortalFromOfferLetterMail(),
     () => openPreOnboardingPortalDirect(yopmail),
     () => yopmail.openOnboardingPortalFromDocumentRequestMail(),
     () => yopmail.openOnboardingPortal(),
@@ -207,8 +267,25 @@ export async function openPreOnboardingFromYopmail(
   });
   const credentials = await loginPreOnboardingPortal(preOnboarding, yopmail, initialCredentials, {
     preferLatestMail: options?.preferLatestMailCredentials,
+    employeeEmail: employee.email,
   });
   const updated = { ...employee, ...credentials };
   saveLastTrainee(updated);
   return { portal, preOnboarding, employee: updated };
+}
+
+export async function openPreOnboardingForReleasedOffer(
+  yopmail: YopmailPage,
+  employee: SavedTrainee,
+): Promise<{
+  portal: Page;
+  preOnboarding: PreOnboardingPage;
+  employee: SavedTrainee;
+}> {
+  await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
+  const refreshed = await readOnboardingCredentials(yopmail, employee.email, employee, { refresh: true });
+  const updated = { ...employee, ...refreshed };
+  saveLastTrainee(updated);
+  await yopmail.openMatchingMailInViewer(/Offer Letter Issued|Offer Letter Released/i);
+  return openPreOnboardingFromYopmail(yopmail, updated);
 }
