@@ -11,6 +11,8 @@
     "test:remote-login": "playwright test --project=03-remote-login --headed --workers=1 --no-deps",
     "test:wfh": "playwright test --project=04-wfh --headed --workers=1 --no-deps",
     "test:wfh-settings": "playwright test --project=05-wfh-settings --headed --workers=1 --no-deps",
+    "test:holidays": "playwright test --project=06-holidays --headed --workers=1 --no-deps",
+    "test:codegen-holidays": "playwright test --project=07-codegen-holidays --headed --workers=1 --no-deps",
     "test:headed": "playwright test --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },

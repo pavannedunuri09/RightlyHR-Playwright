@@ -18,7 +18,7 @@ export class LoginPage {
     this.passwordInput = page.getByRole('textbox', { name: 'Please enter password' });
     this.passwordVisibilityToggle = page.locator('.input-group-text');
     this.forgotPassword = page.getByText('Forgot Password?');
-    this.loginButton = page.getByRole('button', { name: 'Login' });
+    this.loginButton = page.locator('button[type="submit"].custom-btn, button.custom-btn.btn-primary, button[type="submit"]').filter({ hasText: /^Login$/i }).first();
     this.logo = page.getByAltText('RightlyHr Logo');
     this.googleButton = page.getByRole('button', { name: 'Google Icon' });
     this.microsoftButton = page.locator('button.microsoft-login-btn');

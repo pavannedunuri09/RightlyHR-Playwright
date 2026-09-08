@@ -8,6 +8,7 @@ const projects = [
   '03-remote-login',
   '04-wfh',
   '05-wfh-settings',
+  '06-holidays',
 ];
 
 let failed = false;
