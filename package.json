@@ -17,6 +17,8 @@
     "test:probation-from-07": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"HR Reject and Extend from Rejected\"",
     "test:probation-from-11": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"11. HR Process Extend|12. Verify Extended|13. Raise probation|14. RM Confirm|15. Verify Approved status and confirm|16. HR Process probation\"",
     "test:probation-from-12": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"12. Verify Extended|13. Raise probation|14. RM Confirm|15. Verify Approved status and confirm|16. HR Process probation\"",
+    "test:probation-from-14": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"14. RM Confirm|15. Verify Approved status and confirm|16. HR Process probation\"",
+    "test:probation-from-17": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"Generate Document and Move to Active\"",
     "test:probation-extend": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"HR Reject and Extend from Rejected\"",
     "test:headed": "playwright test --headed --workers=1 --no-deps",
     "report": "playwright show-report"

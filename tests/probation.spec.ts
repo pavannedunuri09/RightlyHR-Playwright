@@ -5,6 +5,8 @@ import { ProbationPage } from '../pages/ProbationPage';
 const PROBATION_EMPLOYEE_NAME = 'Bhavitha Reddy';
 const PROBATION_EMPLOYEE_SEARCH = 'bhav';
 const PROBATION_EMPLOYEE_ID = 'SD3021300';
+const PROBATION_EMPLOYEE_OPTION = `${PROBATION_EMPLOYEE_ID}-${PROBATION_EMPLOYEE_NAME}`;
+const SIGNATURE_AUTHORITY = 'saii Pavan Dinesh Tejaa';
 
 test.describe.serial('Probation Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -236,6 +238,78 @@ test.describe.serial('Probation Flow — Confirm from Extended', () => {
 
       await processRow.getByRole('button', { name: 'Process' }).click();
       await probationPage.hrProcessProbationDecision('Reporting Manager', 'HR Process confirm probation', PROBATION_EMPLOYEE_NAME);
+    });
+  });
+});
+
+test.describe.serial('Probation Flow — Generate Document and Move to Active', () => {
+  test.beforeEach(async ({ page }) => {
+    const email = process.env.LOGIN_EMAIL?.trim();
+    const password = process.env.LOGIN_PASSWORD?.trim();
+    test.skip(!email || !password, 'Set LOGIN_EMAIL and LOGIN_PASSWORD in .env');
+
+    const loginPage = new LoginPage(page);
+    await loginPage.loginFromEnv();
+  });
+
+  test.describe('17. Fill Probation Confirmation Letter form', () => {
+    test('opens Generate Documents and fills Probation Confirmation letter form for Bhavitha Reddy', async ({ page }) => {
+      test.setTimeout(180000);
+      const probationPage = new ProbationPage(page);
+      const today = probationPage.todayDateString();
+
+      await probationPage.openGenerateDocuments();
+      await probationPage.selectProbationConfirmationLetter();
+      await probationPage.fillProbationConfirmationLetterForm({
+        employeeOption: PROBATION_EMPLOYEE_OPTION,
+        issuedDate: today,
+        effectiveDate: today,
+        documentType: 'Soft Copy',
+        signatureAuthority: SIGNATURE_AUTHORITY,
+      });
+
+      await expect(page.getByRole('combobox', { name: PROBATION_EMPLOYEE_OPTION })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: 'Soft Copy' })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: SIGNATURE_AUTHORITY })).toBeVisible();
+      await expect(probationPage.issuedDateInput).toHaveValue(today);
+      await expect(probationPage.effectiveDateInput).toHaveValue(today);
+      await expect(probationPage.generateDocumentButton).toBeVisible();
+      await expect(probationPage.releaseLetterButton).toBeDisabled();
+    });
+  });
+
+  test.describe('18. Generate and release Probation Confirmation Letter', () => {
+    test('generates Probation Confirmation letter, waits for download, and releases letter via email', async ({ page }) => {
+      test.setTimeout(240000);
+      const probationPage = new ProbationPage(page);
+      const today = probationPage.todayDateString();
+
+      await probationPage.openGenerateDocuments();
+      await probationPage.selectProbationConfirmationLetter();
+      await probationPage.fillProbationConfirmationLetterForm({
+        employeeOption: PROBATION_EMPLOYEE_OPTION,
+        issuedDate: today,
+        effectiveDate: today,
+        documentType: 'Soft Copy',
+        signatureAuthority: SIGNATURE_AUTHORITY,
+      });
+
+      const download = await probationPage.generateProbationConfirmationLetter();
+      expect(download.suggestedFilename()).toBeTruthy();
+      await probationPage.releaseProbationConfirmationLetter();
+    });
+  });
+
+  test.describe('19. Verify employee in Active employees list', () => {
+    test('shows Bhavitha Reddy in Employees Active tab after letter release', async ({ page }) => {
+      test.setTimeout(180000);
+      const probationPage = new ProbationPage(page);
+
+      await probationPage.assertEmployeeInActiveList(
+        PROBATION_EMPLOYEE_NAME,
+        PROBATION_EMPLOYEE_SEARCH,
+        PROBATION_EMPLOYEE_ID,
+      );
     });
   });
 });

@@ -41,6 +41,18 @@ export class ProbationPage {
   readonly hrExtendFeedbackInput: Locator;
   readonly hrRejectDescription: Locator;
   readonly hrProcessSubmitButton: Locator;
+  readonly generateDocumentsButton: Locator;
+  readonly probationConfirmationLetterCard: Locator;
+  readonly employeeCombobox: Locator;
+  readonly documentTypeCombobox: Locator;
+  readonly signatureCombobox: Locator;
+  readonly issuedDateInput: Locator;
+  readonly effectiveDateInput: Locator;
+  readonly generateDocumentButton: Locator;
+  readonly letterGeneratedMessage: Locator;
+  readonly releaseLetterButton: Locator;
+  readonly emailSentMessage: Locator;
+  readonly activeEmployeesTab: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -82,6 +94,18 @@ export class ProbationPage {
     this.hrExtendFeedbackInput = this.hrProcessDialog.getByRole('textbox', { name: /Feedback for Extend/i });
     this.hrRejectDescription = this.hrProcessDialog.getByRole('textbox', { name: 'Description' });
     this.hrProcessSubmitButton = this.hrProcessDialog.getByRole('button', { name: 'Submit' });
+    this.generateDocumentsButton = page.getByRole('button', { name: 'Generate Documents' });
+    this.probationConfirmationLetterCard = page.locator('div').filter({ hasText: /^Probation Confirmation Letter$/ }).first();
+    this.employeeCombobox = page.getByRole('combobox', { name: 'Please select employee' });
+    this.documentTypeCombobox = page.getByRole('combobox', { name: 'Please select document type' });
+    this.signatureCombobox = page.getByRole('combobox', { name: 'Please select signature' });
+    this.issuedDateInput = page.getByPlaceholder('Please enter Date').first();
+    this.effectiveDateInput = page.getByPlaceholder('Please enter Date').nth(1);
+    this.generateDocumentButton = page.getByRole('button', { name: 'Generate Document' });
+    this.letterGeneratedMessage = page.getByText('Probation confirmation letter generated successfully');
+    this.releaseLetterButton = page.getByRole('button', { name: 'Release Letter' });
+    this.emailSentMessage = page.getByText('Email has been sent');
+    this.activeEmployeesTab = page.getByText(/^Active\(\d+\)$/);
   }
 
   async validateUserOnDashboard() {
@@ -90,7 +114,11 @@ export class ProbationPage {
     await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
   }
 
-  async openEmployeesProbation() {
+  todayDateString() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  async openEmployeesManagement() {
     await this.jobInfo.employeesIcon.waitFor({ state: 'visible', timeout: 15000 });
     await this.page.waitForTimeout(2000);
     await this.jobInfo.employeesIcon.click();
@@ -105,6 +133,10 @@ export class ProbationPage {
         await this.page.waitForURL(/\/employee-management/, { timeout: 15000 });
       }
     }
+  }
+
+  async openEmployeesProbation() {
+    await this.openEmployeesManagement();
 
     await this.probationEmployeesTab.first().waitFor({ state: 'visible', timeout: 15000 });
     await this.probationEmployeesTab.first().click();
@@ -636,13 +668,20 @@ export class ProbationPage {
     await this.probationExtendedMessage.first().waitFor({ state: 'visible', timeout: 15000 });
   }
 
-  async confirmProbationDecision() {
+  async confirmProbationDecision(comments = 'Confirm probation decision') {
     await this.confirmProbationStatusText.waitFor({ state: 'visible', timeout: 15000 });
     await this.confirmedRadio.check();
     if (!(await this.confirmedRadio.isChecked().catch(() => false))) {
       await this.decisionDialog.getByText('Confirmed', { exact: true }).click();
     }
     await expect(this.confirmedRadio).toBeChecked({ timeout: 5000 });
+
+    const commentsInput = this.decisionDialog.getByRole('textbox', { name: /Description|Comments/i }).first();
+    await commentsInput.waitFor({ state: 'visible', timeout: 10000 });
+    await commentsInput.click();
+    await commentsInput.fill('');
+    await commentsInput.pressSequentially(comments.trim(), { delay: 30 });
+    await commentsInput.blur();
     await this.confirmProbationStatusText.click();
     await expect(this.decisionSubmitButton).toBeEnabled({ timeout: 15000 });
     await this.decisionSubmitButton.click();
@@ -718,5 +757,76 @@ export class ProbationPage {
     await this.openProbationEmployee(employeeName, searchText);
     await this.openProbationInfoTab();
     await expect(this.page.getByRole('cell', { name: 'Rejected' }).first()).toBeVisible({ timeout: 15000 });
+  }
+
+  async selectComboboxOption(combobox: Locator, optionName: string) {
+    await combobox.click();
+    const option = this.page.getByRole('option', { name: optionName });
+    await option.waitFor({ state: 'visible', timeout: 10000 });
+    await option.click();
+  }
+
+  async openGenerateDocuments() {
+    await this.openEmployeesManagement();
+    await this.generateDocumentsButton.waitFor({ state: 'visible', timeout: 15000 });
+    await this.generateDocumentsButton.click();
+    await this.probationConfirmationLetterCard.waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  async selectProbationConfirmationLetter() {
+    await this.probationConfirmationLetterCard.click();
+    await this.employeeCombobox.waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  async fillProbationConfirmationLetterForm(options: {
+    employeeOption: string;
+    issuedDate?: string;
+    effectiveDate?: string;
+    documentType?: string;
+    signatureAuthority?: string;
+  }) {
+    const issuedDate = options.issuedDate ?? this.todayDateString();
+    const effectiveDate = options.effectiveDate ?? this.todayDateString();
+    const documentType = options.documentType ?? 'Soft Copy';
+    const signatureAuthority = options.signatureAuthority ?? 'saii Pavan Dinesh Tejaa';
+
+    await this.selectComboboxOption(this.employeeCombobox, options.employeeOption);
+    await this.issuedDateInput.fill(issuedDate);
+    await this.effectiveDateInput.fill(effectiveDate);
+    await this.selectComboboxOption(this.documentTypeCombobox, documentType);
+    await this.selectComboboxOption(this.signatureCombobox, signatureAuthority);
+  }
+
+  async generateProbationConfirmationLetter() {
+    const downloadPromise = this.page.waitForEvent('download');
+    await this.generateDocumentButton.click();
+    const download = await downloadPromise;
+    await expect(this.letterGeneratedMessage).toBeVisible({ timeout: 30000 });
+    return download;
+  }
+
+  async releaseProbationConfirmationLetter() {
+    await this.releaseLetterButton.waitFor({ state: 'visible', timeout: 15000 });
+    await this.releaseLetterButton.click();
+    await expect(this.emailSentMessage).toBeVisible({ timeout: 30000 });
+  }
+
+  async openActiveEmployees() {
+    await this.openEmployeesManagement();
+    await this.activeEmployeesTab.first().waitFor({ state: 'visible', timeout: 15000 });
+    await this.activeEmployeesTab.first().click();
+    await this.page.waitForURL(/\/employee-management\/.*active/i, { timeout: 15000 }).catch(() => {});
+    await this.employeeSearch.waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  async assertEmployeeInActiveList(employeeName: string, searchText: string, employeeId: string) {
+    await this.openActiveEmployees();
+    await this.employeeSearch.click();
+    await this.employeeSearch.fill(searchText);
+    await this.employeeSearch.press('Enter');
+
+    const employeeRow = this.page.getByRole('row').filter({ hasText: employeeName });
+    await expect(employeeRow.first()).toBeVisible({ timeout: 15000 });
+    await expect(employeeRow.first().getByRole('cell', { name: employeeId })).toBeVisible();
   }
 }

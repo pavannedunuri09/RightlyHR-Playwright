@@ -182,6 +182,7 @@ test('test', async ({ page }) => {
   await page.getByRole('button', { name: 'Yes' }).click();
   await page.getByRole('button', { name: 'OK' }).click();
   await page.getByRole('radio', { name: 'Confirmed' }).check();
+  await page.getByRole('textbox', { name: /Description|Comments/i }).fill('Confirm probation decision');
   await page.getByRole('button', { name: 'Submit' }).click();
   await page.getByText('Probation request approved').click();
   await page.getByRole('cell', { name: 'Approved' }).click();
@@ -195,4 +196,27 @@ test('test', async ({ page }) => {
   await page.getByRole('radio', { name: 'Process' }).check();
   await page.getByRole('textbox', { name: 'Comments*' }).fill('HR Process confirm probation');
   await page.getByRole('button', { name: 'Submit' }).click();
+  // Phase 9 — Generate Documents: Probation Confirmation Letter → Release → Active tab
+  await page.getByText('Employees').click();
+  await page.getByRole('button', { name: 'Generate Documents' }).click();
+  await page.locator('div').filter({ hasText: /^Probation Confirmation Letter$/ }).first().click();
+  await page.getByRole('combobox', { name: 'Please select employee' }).click();
+  await page.getByRole('option', { name: 'SD3021300-Bhavitha Reddy' }).click();
+  await page.getByPlaceholder('Please enter Date').first().fill('2026-09-08');
+  await page.getByPlaceholder('Please enter Date').nth(1).fill('2026-09-08');
+  await page.getByRole('combobox', { name: 'Please select document type' }).click();
+  await page.getByRole('option', { name: 'Soft Copy' }).click();
+  await page.getByRole('combobox', { name: 'Please select signature' }).click();
+  await page.getByRole('option', { name: 'saii Pavan Dinesh Tejaa' }).click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Generate Document' }).click();
+  await downloadPromise;
+  await page.getByText('Probation confirmation letter generated successfully').click();
+  await page.getByRole('button', { name: 'Release Letter' }).click();
+  await page.getByText('Email has been sent').click();
+  await page.getByText('Employees').click();
+  await page.getByText(/^Active\(\d+\)$/).click();
+  await page.getByRole('searchbox', { name: 'Username' }).fill('bhav');
+  await page.getByRole('searchbox', { name: 'Username' }).press('Enter');
+  await page.getByRole('cell', { name: 'Bhavitha Reddy' }).click();
 });
