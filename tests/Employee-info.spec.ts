@@ -4178,71 +4178,77 @@ test('TC73 - Add Past Experience', async ({ page }) => {
   // Login
   await loginPage.loginFromEnv();
 
-  // Active Employees
+  // ========================================
+  // Open Active Employees
+  // ========================================
+
   await page.goto('/employee-management/active/employees', {
     waitUntil: 'domcontentloaded',
   });
 
-  // Select employee
+  // Select Employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
     .first()
     .click();
 
-  // Past Experiences
+  // ========================================
+  // Employment History
+  // ========================================
+
   await page.goto('/personalinfo/job/past-experiences', {
     waitUntil: 'domcontentloaded',
   });
 
   await page.waitForLoadState('networkidle');
 
-  // Open Add Employment
-  await page
-    .getByText('Add New', { exact: true })
-    .click();
+  // Click Add New
+  await page.getByText('Add New', {
+    exact: true,
+  }).click();
 
-  await page
-    .getByText('Add Employment', { exact: true })
-    .waitFor({
-      state: 'visible',
-      timeout: 15000,
-    });
+  // Wait for Add Employment
+  await page.getByText('Add Employment', {
+    exact: true,
+  }).waitFor({
+    state: 'visible',
+    timeout: 15000,
+  });
 
   // ========================================
   // Company Name
   // ========================================
 
-  const companySelect = page
-    .locator('p-select')
-    .filter({
-      hasText: 'Please enter company name',
-    })
-    .first();
-
-  await companySelect.click();
-
   await page
-    .getByText('ABC', { exact: true })
-    .last()
+    .locator('p-autocomplete')
+    .getByRole('button')
     .click();
 
-  // ========================================
-  // Employment Type
-  // ========================================
-
-  const employmentTypeSelect = page
-    .locator('p-select')
-    .filter({
-      hasText: 'Please select employment type',
-    })
-    .first();
-
-  await employmentTypeSelect.click();
-
   await page
-    .getByText('Full-Time', { exact: true })
-    .last()
+    .getByText('eyewyewy', {
+      exact: true,
+    })
     .click();
+
+  /// ========================================
+// Employment Type
+// ========================================
+
+await page
+  .getByRole('combobox', {
+    name: 'Please select employment type',
+  })
+  .click();
+
+const fullTimeOptions = page.getByRole('option', {
+  name: 'Full-Time',
+});
+
+await expect(fullTimeOptions).toHaveCount(2);
+
+await fullTimeOptions.last().click();
 
   // ========================================
   // From Date
@@ -4252,7 +4258,7 @@ test('TC73 - Add Past Experience', async ({ page }) => {
     .getByRole('textbox', {
       name: 'From Date *',
     })
-    .fill('2023-05-17');
+    .fill('2023-07-04');
 
   // ========================================
   // To Date
@@ -4262,7 +4268,7 @@ test('TC73 - Add Past Experience', async ({ page }) => {
     .getByRole('textbox', {
       name: 'To Date *',
     })
-    .fill('2023-05-31');
+    .fill('2023-07-14');
 
   // ========================================
   // Job Role
@@ -4303,23 +4309,23 @@ test('TC73 - Add Past Experience', async ({ page }) => {
       name: 'Please enter contact email',
     })
     .fill('testcontact@gmail.com');
+// ========================================
+// Upload Experience / Relieving Letter
+// ========================================
 
-  // ========================================
-  // Upload Experience / Relieving Letter
-  // ========================================
+const uploadButton = page.getByRole('button', {
+  name: 'Experience/Relieving Letter *',
+});
 
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: 'experience-letter.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from(
-        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'
-      ),
-    });
-
+await uploadButton.setInputFiles({
+  name: 'experience-letter.pdf',
+  mimeType: 'application/pdf',
+  buffer: Buffer.from(
+    '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n2 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n3 0 obj\n<< /Type /Pages /Count 0 >>\nendobj\ntrailer\n<< /Root 2 0 R >>\n%%EOF'
+  ),
+});
   // ========================================
-  // Add
+  // Verify Add Button
   // ========================================
 
   const addButton = page.getByRole('button', {
@@ -4329,5 +4335,2200 @@ test('TC73 - Add Past Experience', async ({ page }) => {
 
   await expect(addButton).toBeEnabled();
 
+  // ========================================
+  // Submit
+  // ========================================
+
   await addButton.click();
+});
+
+// ========================================
+// TC74 - Update Past Experience
+// ========================================
+
+test('TC74 - Update Past Experience', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // ========================================
+  // Open Active Employees
+  // ========================================
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // ========================================
+  // Open Employment History
+  // ========================================
+
+  await page.goto('/personalinfo/job/past-experiences', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.waitForLoadState('networkidle');
+
+  // ========================================
+  // Open Update menu
+  // ========================================
+
+  await page.locator('i').nth(3).click();
+
+  await page
+    .getByText('Update', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // ========================================
+  // Update Employment Type
+  // ========================================
+
+  await page
+    .getByRole('combobox', {
+      name: 'Full-Time',
+    })
+    .click();
+
+  await page
+    .getByText('Contract', {
+      exact: true,
+    })
+    .click();
+
+  // ========================================
+  // Update Contact Name
+  // ========================================
+
+  await page
+    .getByRole('textbox', {
+      name: 'Please enter contact name',
+    })
+    .fill('ravi teja');
+
+  // ========================================
+  // Update
+  // ========================================
+
+  const updateButton = page.getByRole('button', {
+    name: 'Update',
+    exact: true,
+  });
+
+  await expect(updateButton).toBeEnabled();
+
+  await updateButton.click();
+});
+// ========================================
+// TC75 - Delete Past Experience
+// ========================================
+
+test('TC75 - Delete Past Experience', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Past Experiences directly
+  await page.goto('/personalinfo/job/past-experiences', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.waitForLoadState('networkidle');
+
+  // Open first action menu
+  await page
+    .locator('.text-center > .dropdown')
+    .first()
+    .click();
+
+  // Click Delete
+  await page
+    .getByText('Delete', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Confirm Delete
+  await page
+    .getByRole('button', {
+      name: 'Yes',
+      exact: true,
+    })
+    .click();
+});
+// ========================================
+// TC76 - Verify Desk Info
+// ========================================
+
+test('TC76 - Verify Desk Info', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Active Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Verify Desk Info
+  await expect(
+    page.getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+  ).toBeVisible();
+});
+// ========================================
+// TC77 - Separation Request / Recall
+// ========================================
+
+test('TC77 - Separation Request Recall or Exit Feedback', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Open Separation Request
+  await page
+    .getByRole('img', {
+      name: 'Separation Request',
+      exact: true,
+    })
+    .click();
+
+  // ========================================
+  // Check Recall action
+  // ========================================
+
+  const recallAction = page.getByText('Recall', {
+    exact: true,
+  }).first();
+
+  if (await recallAction.isVisible().catch(() => false)) {
+    // Recall is available
+
+    await recallAction.click();
+
+    await page
+      .getByRole('textbox', {
+        name: 'Please enter recall reason',
+      })
+      .fill('Test recall reason');
+
+    await page
+      .getByRole('button', {
+        name: 'Submit',
+        exact: true,
+      })
+      .click();
+  } else {
+    // Recall is not available
+    // Go to Exit Feedback Details
+
+    await page
+      .getByRole('link', {
+        name: 'Exit-Feedback-Details',
+        exact: true,
+      })
+      .click();
+
+    await expect(
+      page.getByRole('link', {
+        name: 'Exit-Feedback-Details',
+        exact: true,
+      })
+    ).toBeVisible();
+  }
+});
+// ========================================
+// TC79 - Verify No Due Clearance Info
+// ========================================
+
+test('TC79 - Verify No Due Clearance Info', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Open No Due Clearance Info
+  await page
+    .getByRole('img', {
+      name: 'No Due Clearance Info',
+      exact: true,
+    })
+    .click();
+
+  // Verify section
+  await expect(
+    page.getByRole('img', {
+      name: 'No Due Clearance Info',
+      exact: true,
+    })
+  ).toBeVisible();
+});
+// ========================================
+// TC80 - Verify Onboarding Documents
+// ========================================
+
+test('TC80 - Verify Onboarding Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Open Onboarding Documents
+  await page
+    .getByText('Onboarding Documents', {
+      exact: true,
+    })
+    .click();
+
+  // Verify
+  await expect(
+    page.getByText('Onboarding Documents', {
+      exact: true,
+    }).last()
+  ).toBeVisible();
+});
+// ========================================
+// TC81 - Verify Trainee Onboard Request
+// ========================================
+
+test('TC81 - Verify Trainee Onboard Request', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Open Trainee Onboard Request
+  await page
+    .getByText('Trainee Onboard Request', {
+      exact: true,
+    })
+    .click();
+
+  // Verify
+  await expect(
+    page.getByText('Trainee Onboard Request', {
+      exact: true,
+    }).last()
+  ).toBeVisible();
+});
+// ========================================
+// TC82 - Verify Offboarding Info
+// ========================================
+
+test('TC82 - Verify Offboarding Info', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Desk Info
+  await page
+    .getByRole('img', {
+      name: 'Desk Info',
+      exact: true,
+    })
+    .click();
+
+  // Open Offboarding Info
+  await page
+    .getByRole('img', {
+      name: 'Offboarding Info',
+      exact: true,
+    })
+    .click();
+
+  // Verify Offboarding Info
+  await expect(
+    page.getByRole('img', {
+      name: 'Offboarding Info',
+      exact: true,
+    })
+  ).toBeVisible();
+});
+// ========================================
+// TC83 - Verify Cards
+// ========================================
+
+test('TC83 - Verify Cards', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Cards
+  await page
+    .getByText('Cards', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Verify Cards
+  await expect(
+    page.getByText('Cards', {
+      exact: true,
+    }).last()
+  ).toBeVisible();
+});
+// ========================================
+// TC84 - Assigned Projects
+// ========================================
+
+test('TC84 - Verify Assigned Projects', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Assigned Projects
+  await page
+    .getByText('Assigned Projects', {
+      exact: true,
+    })
+    .click();
+
+  // Open Year dropdown
+  await page
+    .getByRole('button', {
+      name: 'dropdown trigger',
+    })
+    .click();
+
+  // Select 2026
+  await page
+    .getByRole('option', {
+      name: '2026',
+      exact: true,
+    })
+    .click();
+
+  // Verify Assigned Projects
+  await expect(
+    page.getByText('Assigned Projects', {
+      exact: true,
+    })
+  ).toBeVisible();
+});
+// ========================================
+// TC85 - Upload Client Call Document
+// ========================================
+
+test('TC85 - Upload Client Call Document', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open Client Documents
+  await page.getByText('ClientDocuments', {
+    exact: true,
+  }).click();
+
+  // Open Client Calls
+  await page.getByText('Client Calls', {
+    exact: true,
+  }).click();
+
+  // Upload File
+  await page
+    .getByRole('button', {
+      name: 'Upload File',
+    })
+    .click();
+
+  // Upload test file
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'client-call-test.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  // Add
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+});
+// ========================================
+// TC86 - Upload Client Requirement Document
+// ========================================
+
+test('TC86 - Upload Client Requirement Document', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open Client Documents
+  await page.getByText('ClientDocuments', {
+    exact: true,
+  }).click();
+
+  // Open Client Requirement
+  await page.getByText('Client Requirement', {
+    exact: true,
+  }).click();
+
+  // Upload File
+  await page
+    .getByRole('button', {
+      name: 'Upload File',
+    })
+    .click();
+
+  // Choose File
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'client-requirement-test.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  // Add
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+});
+// ========================================
+// TC87 - Upload Client Documents
+// ========================================
+
+test('TC87 - Upload Client Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open ClientDocuments
+  await page.getByText('ClientDocuments', {
+    exact: true,
+  }).click();
+
+  // Open Client documents
+  await page.getByText('Client documents', {
+    exact: true,
+  }).click();
+
+  // Upload File
+  await page.getByRole('button', {
+    name: 'Upload File',
+  }).click();
+
+  // Choose File
+  await page.getByRole('button', {
+    name: 'Choose File',
+  }).setInputFiles({
+    name: 'client-documents-test.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(
+      '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+    ),
+  });
+
+  // Add
+  await page.getByRole('button', {
+    name: 'Add',
+    exact: true,
+  }).click();
+});
+// ========================================
+// TC88 - Upload Requirement Discussion
+// ========================================
+
+test('TC88 - Upload Requirement Discussion', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open ClientDocuments
+  await page.getByText('ClientDocuments', {
+    exact: true,
+  }).click();
+
+  // Open Requirement discussion
+  await page.getByText('Requirement discussion', {
+    exact: true,
+  }).click();
+
+  // Upload File
+  await page.getByRole('button', {
+    name: 'Upload File',
+  }).click();
+
+  // Choose File
+  await page.getByRole('button', {
+    name: 'Choose File',
+  }).setInputFiles({
+    name: 'requirement-discussion-test.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(
+      '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+    ),
+  });
+
+  // Add
+  await page.getByRole('button', {
+    name: 'Add',
+    exact: true,
+  }).click();
+});
+// ========================================
+// TC89 - Upload Academic Documents
+// ========================================
+
+test('TC89 - Upload Academic Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  // Login
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open Employee Documents
+  await page.getByText('Employee Documents', {
+    exact: true,
+  }).click();
+
+  // Open Academic Documents
+  await page.getByText('Academic Documents', {
+    exact: true,
+  }).click();
+
+  // Upload File
+  await page.getByRole('button', {
+    name: 'Upload File',
+  }).click();
+
+  // Choose File
+  await page.getByRole('button', {
+    name: 'Choose File',
+  }).setInputFiles({
+    name: 'academic-document-test.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(
+      '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+    ),
+  });
+
+  // Add
+  await page.getByRole('button', {
+    name: 'Add',
+    exact: true,
+  }).click();
+});
+// ========================================
+// Document Upload Helper
+// ========================================
+
+async function openEmployeeDocuments(page: any) {
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  await page.getByText('Job').click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+}
+
+async function uploadDocument(page: any) {
+  await page
+    .getByRole('button', {
+      name: /Upload File/,
+    })
+    .click();
+
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'test-document.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+}
+
+
+// ========================================
+// TC90 - Address Proof Letters
+// ========================================
+
+test('TC90 - Upload Address Proof Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Address Proof Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC91 - Appointment Letter
+// ========================================
+
+test('TC91 - Upload Appointment Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Appointment Letter', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC92 - AppointmentLetter
+// ========================================
+
+test('TC92 - Upload AppointmentLetter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('AppointmentLetter', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC93 - Appraisal Letters
+// ========================================
+
+test('TC93 - Upload Appraisal Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Appraisal Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC94 - Assets Details
+// ========================================
+
+test('TC94 - Upload Assets Details', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Assets Details', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC95 - Bank Details
+// ========================================
+
+test('TC95 - Upload Bank Details', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Bank Details', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC96 - Bank Documents
+// ========================================
+
+test('TC96 - Upload Bank Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Bank Documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC97 - Bank letter
+// ========================================
+
+test('TC97 - Upload Bank letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Bank letter', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC98 - BankLoan Letters
+// ========================================
+
+test('TC98 - Upload BankLoan Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('BankLoan Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC99 - Certifications
+// ========================================
+
+test('TC99 - Upload Certifications Document', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Certifications', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC100 - Contractor Extension Letters
+// ========================================
+
+test('TC100 - Upload Contractor Extension Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Contractor Extension Letters', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC101 - Education Documents
+// ========================================
+
+test('TC101 - Upload Education Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Education Documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC102 - Exit Feedback Form
+// ========================================
+
+test('TC102 - Upload Exit Feedback Form', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Exit Feedback Form', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC103 - Expenses
+// ========================================
+
+test('TC103 - Upload Expenses', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+
+  await page
+    .locator('app-documents')
+    .getByText('Expenses', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC104 - Identity Documents
+// ========================================
+
+test('TC104 - Upload Identity Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Identity Documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC105 - KRA Documents
+// ========================================
+
+test('TC105 - Upload KRA Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('KRA Documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC106 - KT documents
+// ========================================
+
+test('TC106 - Upload KT documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('KT documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC107 - MSA Letters
+// ========================================
+
+test('TC107 - Upload MSA Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('MSA Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC108 - No Due Form
+// ========================================
+
+test('TC108 - Upload No Due Form', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('No Due Form', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC109 - Upload Non-Disclosure Agreement
+// ========================================
+
+test('TC109 - Upload Non-Disclosure Agreement', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  await page.getByText('Job').click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByText('Employee Documents', {
+    exact: true,
+  }).click();
+
+  const documents = page.locator('app-documents');
+
+  await documents
+    .getByText('Non-Disclosure Agreement', {
+      exact: true,
+    })
+    .click();
+
+  await page.getByRole('button', {
+    name: /Upload File/,
+  }).click();
+
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'non-disclosure-agreement.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+});
+
+// ========================================
+// TC110 - Offer Letter
+// ========================================
+
+test('TC110 - Upload Offer Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Offer Letter', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC111 - Pre Onboarding Documents - 1
+// ========================================
+
+test('TC111 - Upload Pre Onboarding Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Pre Onboarding Documents', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC112 - Pre Onboarding Documents - 2
+// ========================================
+
+test('TC112 - Upload Second Pre Onboarding Document', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Pre Onboarding Documents', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC113 - Previous Experience Documents
+// ========================================
+
+test('TC113 - Upload Previous Experience Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Previous Experience Documents', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC114 - Probation Assessment Form
+// ========================================
+
+test('TC114 - Upload Probation Assessment Form', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Probation Assessment Form', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC115 - Probation Confirmation Letter
+// ========================================
+
+test('TC115 - Upload Probation Confirmation Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Probation Confirmation Letter', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC116 - Probation Documents
+// ========================================
+
+test('TC116 - Upload Probation Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Probation Documents', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC117 - Probation Extension Letter
+// ========================================
+
+test('TC117 - Upload Probation Extension Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Probation Extension Letter', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC118 - Promotion Letters
+// ========================================
+
+test('TC118 - Upload Promotion Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Promotion Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC119 - Relieving Letters
+// ========================================
+
+test('TC119 - Upload Relieving Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Relieving Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC120 - Reports
+// ========================================
+
+test('TC120 - Upload Reports', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+
+  await page
+    .locator('app-documents')
+    .getByText('Reports', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC121 - Salary Revision Letters
+// ========================================
+
+test('TC121 - Upload Salary Revision Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Salary Revision Letters', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC122 - Trainee Appointment Letter
+// ========================================
+
+test('TC122 - Upload Trainee Appointment Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Trainee Appointment Letter', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC123 - Trainee Offer Letter
+// ========================================
+
+test('TC123 - Upload Trainee Offer Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Trainee Offer Letter', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC124 - Welcome Letters
+// ========================================
+
+test('TC124 - Upload Welcome Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page.getByText('Welcome Letters', { exact: true }).click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC125 - Work Order Letters
+// ========================================
+
+test('TC125 - Upload Work Order Letters', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page.getByText('Employee Documents', { exact: true }).click();
+  await page
+    .getByText('Work Order Letters', { exact: true })
+    .click();
+
+  await uploadDocument(page);
+});
+
+
+// ========================================
+// TC126 - Employee%20Documents
+// ========================================
+
+test('TC126 - Verify Employee Documents Folder', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page
+    .getByText('Employee%20Documents', {
+      exact: true,
+    })
+    .click();
+await expect(
+  page
+    .locator('app-documents')
+    .getByText('Policies', {
+      exact: true,
+    })
+).toBeVisible();
+});
+
+
+// ========================================
+// TC127 - Policies
+// ========================================
+
+test('TC127 - Verify Policies', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+
+  await openEmployeeDocuments(page);
+
+  await page
+    .getByText('Employee%20Documents', {
+      exact: true,
+    })
+    .click();
+
+  await page
+    .locator('app-documents')
+    .getByText('Policies', {
+      exact: true,
+    })
+    .click();
+
+  await expect(
+    page.getByText('No Subfolders Found', {
+      exact: true,
+    })
+  ).toBeVisible();
+});
+// ========================================
+// TC128 - Download Timesheet Report 12460
+// ========================================
+
+test('TC128 - Download Timesheet Report 12460', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open Timesheet Reports
+  await page.getByText('TimesheetReports', {
+    exact: true,
+  }).click();
+
+  // Open 12460
+  await page.getByText('12460', {
+    exact: true,
+  }).click();
+
+  // Download 12460
+  const downloadPromise = page.waitForEvent('download');
+
+  await page
+    .locator('app-download-icon > .cursor > svg > path')
+    .click();
+
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBeTruthy();
+});
+// ========================================
+// TC129 - Download Consolidated Timesheet
+// ========================================
+
+test('TC129 - Download Consolidated Timesheet', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  // Open Employees
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Select Employee
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  // Open Job
+  await page.getByText('Job').click();
+
+  // Open Documents
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  // Open Timesheet Reports
+  await page.getByText('TimesheetReports', {
+    exact: true,
+  }).click();
+
+  // Open 12460
+  await page.getByText('12460', {
+    exact: true,
+  }).click();
+
+  // Open Consolidated
+  await page.getByText('Consolidated', {
+    exact: true,
+  }).click();
+
+  // Download Consolidated
+  const downloadPromise = page.waitForEvent('download');
+
+  await page
+    .locator('app-download-icon > .cursor > svg')
+    .click();
+
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBeTruthy();
+});
+// ========================================
+// TC130 - Upload organizationPolicy
+// ========================================
+
+test('TC130 - Upload organizationPolicy', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  await page.getByText('Job').click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByText('organizationPolicy', {
+    exact: true,
+  }).click();
+
+  await page.getByText('12460', {
+    exact: true,
+  }).click();
+
+  await page
+    .getByRole('button', {
+      name: /Upload File/,
+    })
+    .click();
+
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'organization-policy-test.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+});
+// ========================================
+// TC131 - Upload Trainee Documents
+// ========================================
+
+test('TC131 - Upload Trainee Documents', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page
+    .getByText('Arpita Bhanja', {
+      exact: true,
+    })
+    .first()
+    .click();
+
+  await page.getByText('Job').click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByText('organizationPolicy', {
+    exact: true,
+  }).click();
+
+  await page.getByText('Trainee Documents', {
+    exact: true,
+  }).click();
+
+  await page
+    .getByRole('button', {
+      name: /Upload File/,
+    })
+    .click();
+
+  await page
+    .getByRole('button', {
+      name: 'Choose File',
+    })
+    .setInputFiles({
+      name: 'trainee-document-test.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'
+      ),
+    });
+
+  await page
+    .getByRole('button', {
+      name: 'Add',
+      exact: true,
+    })
+    .click();
+});
+
+// ========================================
+// TC132 - Letters - Appointment Letter
+// ========================================
+
+test('TC132 - Verify Appointment Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Appointment Letter',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Rejected',
+  }).click();
+});
+// ========================================
+// TC133 - Letters - Appraisal Letter
+// ========================================
+
+test('TC133 - Verify Appraisal Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Appraisal Letter',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Rejected',
+  }).click();
+});
+// ========================================
+// TC134 - Letters - Contractor Extension
+// ========================================
+
+test('TC134 - Verify Contractor Extension', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Contractor Extension',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Rejected',
+  }).click();
+});
+// ========================================
+// TC135 - Letters - Probation Confirmation
+// ========================================
+
+test('TC135 - Verify Probation Confirmation', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Probation Confirmation',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+});
+// ========================================
+// TC136 - Letters - Probation Extension
+// ========================================
+
+test('TC136 - Verify Probation Extension', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Probation Extension',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+});
+// ========================================
+// TC137 - Letters - Salary Revision Letter
+// ========================================
+
+test('TC137 - Verify Salary Revision Letter', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Salary Revision Letter',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Rejected',
+  }).click();
+});
+// ========================================
+// TC138 - Letters - Trainee Appointment
+// ========================================
+
+test('TC138 - Verify Trainee Appointment', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+
+  await loginPage.loginFromEnv();
+
+  await page.goto('/employee-management/active/employees', {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await page.getByText('Arpita Bhanja', {
+    exact: true,
+  }).first().click();
+
+  await page.getByText('Documents', {
+    exact: true,
+  }).click();
+
+  await page.getByRole('img', {
+    name: 'Letters',
+    exact: true,
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Icon Trainee Appointment',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Generated',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Accepted',
+  }).click();
+
+  await page.getByRole('tab', {
+    name: 'Rejected',
+  }).click();
 });
