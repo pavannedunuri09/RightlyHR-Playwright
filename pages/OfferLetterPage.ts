@@ -1,10 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { OnboardingApplicationPage } from './OnboardingApplicationPage';
 
-export class TraineeOfferLetterPage {
+export class OfferLetterPage {
   readonly page: Page;
   readonly generateDocumentsButton: Locator;
-  readonly traineeOfferLetterCard: Locator;
   readonly employeeOfferLetterCard: Locator;
   readonly employeeCombobox: Locator;
   readonly employeeSearch: Locator;
@@ -24,7 +23,6 @@ export class TraineeOfferLetterPage {
   readonly offerIssuedDate: Locator;
   readonly expectedStartDate: Locator;
   readonly offerExpiryDate: Locator;
-  readonly trainingPeriodCombobox: Locator;
   readonly reportingManagerCombobox: Locator;
   readonly documentTypeCombobox: Locator;
   readonly signatureAuthorityCombobox: Locator;
@@ -38,7 +36,6 @@ export class TraineeOfferLetterPage {
   constructor(page: Page) {
     this.page = page;
     this.generateDocumentsButton = page.getByRole('button', { name: 'Generate Documents' });
-    this.traineeOfferLetterCard = page.locator('div').filter({ hasText: /^Trainee Offer Letter$/ }).first();
     this.employeeOfferLetterCard = page.locator('div').filter({ hasText: /^Offer Letter$/ }).first();
     this.employeeCombobox = page.getByRole('combobox', { name: 'Please select employee' });
     this.employeeSearch = page.getByRole('searchbox', { name: 'Search employee' });
@@ -58,27 +55,18 @@ export class TraineeOfferLetterPage {
     this.offerIssuedDate = page.getByPlaceholder('Please enter offer issued date');
     this.expectedStartDate = page.getByPlaceholder(/Please enter expected start date/i);
     this.offerExpiryDate = page.getByPlaceholder('Please enter offer expiry date');
-    this.trainingPeriodCombobox = page.getByRole('combobox', { name: 'Please select training period' });
     this.reportingManagerCombobox = page.getByRole('combobox', { name: 'Please select reporting manager' });
     this.documentTypeCombobox = page.getByRole('combobox', { name: 'Please select document type' });
     this.signatureAuthorityCombobox = page.getByRole('combobox', { name: 'Please select signature authority' });
     this.noteInput = page.getByRole('textbox', { name: 'Please enter note' });
     this.generateButton = page.getByRole('button', { name: /Regenerate Offer Letter|Generate Offer Letter/ });
     this.requestApprovalButton = page.getByRole('button', { name: 'Request For Approval' });
-    this.generatedToast = page.getByText('Trainee Offer letter generated successfully');
+    this.generatedToast = page.getByText(/Offer letter generated successfully/i);
     this.approvalToast = page.getByText('Approval request sent');
     this.expiryError = page.getByText('Offer Expiry Date should be');
   }
 
-  async openFromTraineesList() {
-    await this.generateDocumentsButton.waitFor({ state: 'visible', timeout: 20000 });
-    await this.generateDocumentsButton.click();
-    await this.traineeOfferLetterCard.waitFor({ state: 'visible', timeout: 15000 });
-    await this.traineeOfferLetterCard.click();
-    await this.employeeCombobox.waitFor({ state: 'visible', timeout: 20000 });
-  }
-
-  async openEmployeeOfferLetterFromList() {
+  async openFromList() {
     await this.generateDocumentsButton.waitFor({ state: 'visible', timeout: 20000 });
     await this.generateDocumentsButton.click();
     await this.employeeOfferLetterCard.waitFor({ state: 'visible', timeout: 15000 });
@@ -119,35 +107,40 @@ export class TraineeOfferLetterPage {
         continue;
       }
 
-      const options = this.page.getByRole('option');
-      const count = await options.count();
-      for (let index = 0; index < count; index++) {
-        const option = options.nth(index);
-        if (!(await option.isVisible().catch(() => false))) {
-          continue;
-        }
-        const label = ((await option.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-        const matchesId = Boolean(employeeId && label.includes(employeeId));
-        const matchesName = nameRe.test(label);
-        const matchesEmail = Boolean(email && label.toLowerCase().includes(email.toLowerCase()));
-        if (!matchesId && !matchesName && !matchesEmail) {
-          continue;
-        }
-
-        await option.click();
-        await this.firstNameInput.waitFor({ state: 'visible', timeout: 15000 });
-        const loaded = await this.waitForSelectedEmployee(firstName, email);
-        if (loaded) {
-          console.log(`Selected employee: ${label}`);
-          await this.page.waitForTimeout(1500);
+      const matchByEmail = email ? this.page.getByRole('option').filter({ hasText: email }).first() : null;
+      if (matchByEmail && (await matchByEmail.isVisible().catch(() => false))) {
+        const label = ((await matchByEmail.innerText().catch(() => '')) || '').trim();
+        console.log(`Selected employee by email: ${label}`);
+        await matchByEmail.click();
+        if (await this.waitForSelectedEmployee(firstName, email)) {
           return;
         }
+        await this.openEmployeePicker();
+      }
 
+      const matchByName = this.page.getByRole('option').filter({ hasText: nameRe }).first();
+      if (await matchByName.isVisible().catch(() => false)) {
+        const label = ((await matchByName.innerText().catch(() => '')) || '').trim();
+        console.log(`Selected employee: ${label}`);
+        await matchByName.click();
+        if (await this.waitForSelectedEmployee(firstName, email)) {
+          return;
+        }
         await this.openEmployeePicker();
       }
     }
 
-    throw new Error(`Employee ${firstName} ${lastName} was not found in Trainee Offer Letter search`);
+    const firstOption = this.page.getByRole('option').first();
+    if (await firstOption.isVisible().catch(() => false)) {
+      const text = ((await firstOption.innerText().catch(() => '')) || '').trim();
+      console.log(`Fallback selecting first employee option: ${text}`);
+      await firstOption.click();
+      if (await this.waitForSelectedEmployee(firstName, email)) {
+        return;
+      }
+    }
+
+    throw new Error(`Employee ${firstName} ${lastName} was not found in Offer Letter search`);
   }
 
   private async openEmployeePicker() {
@@ -371,7 +364,7 @@ export class TraineeOfferLetterPage {
     }
 
     if (await this.page.getByText('Reporting Manager *', { exact: true }).isVisible().catch(() => false)) {
-      await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
+      await this.chooseComboByRoleOrLabel(this.reportingManagerCombobox, 'Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
     }
     await this.chooseComboByRoleOrLabel(this.documentTypeCombobox, 'Document Type *', 'Soft Copy');
     await this.noteInput.fill('Employee Offer letter');
@@ -439,7 +432,6 @@ export class TraineeOfferLetterPage {
     const text = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
     const needsSelection =
       /please select/i.test(text) ||
-      (label.includes('Training Period') && !/^\d+$/.test(text)) ||
       (label.includes('Reporting Manager') && /please select/i.test(text)) ||
       (label.includes('Document Type') && /please select/i.test(text)) ||
       (label.includes('Signature Authority') && /please select/i.test(text));

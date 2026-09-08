@@ -1008,7 +1008,7 @@ export class YopmailPage {
       console.log('If CAPTCHA remains, click "I\'m not a robot" in the Yopmail tab.');
     }
 
-    const waitMs = timeoutMs ?? (headed ? 90000 : 30000);
+    const waitMs = timeoutMs ?? (headed ? 180000 : 30000);
     const cleared = await this.waitForCaptchaCleared(waitMs);
     if (!cleared) {
       console.log('Yopmail CAPTCHA still visible; will retry inbox access.');
@@ -1227,7 +1227,7 @@ function defaultPreOnboardingBaseUrl() {
   return (
     process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
     process.env.RHR_BASE_URL?.trim() ||
-    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
+    'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com'
   ).replace(/\/$/, '');
 }
 
