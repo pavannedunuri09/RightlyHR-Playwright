@@ -2,7 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
+dotenv.config({
+    path: path.resolve(process.cwd(), '.env'),
+    override: true
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -53,6 +56,44 @@ export default defineConfig({
       testMatch: /wfh-entitlement-criteria\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+    name: '06-separation',
+   testMatch: '**/Separation.spec.ts',
+    use: { ...devices['Desktop Chrome'] },
+},
+   {
+    name: '07-helpdesk',
+    testMatch: /(?:^|[\/\\])HelpDesk\.spec\.ts$/,
+    use: { ...devices['Desktop Chrome'] },
+},
+{
+            name: '08-separation-rejected',
+            testMatch: /SeparationRejected\.spec\.ts$/,
+            use: {
+                ...devices['Desktop Chrome']
+            }
+        },
+       {
+    name: '09-recall',
+    testMatch: /recall\.spec\.ts$/,
+    use: {
+        ...devices['Desktop Chrome']
+    }
+},
+{
+    name: '10-extra-log-hours',
+    testMatch: '**/ExtraLogHours.spec.ts',
+    use: {
+        ...devices['Desktop Chrome'],
+    },
+},{
+    name: '11-contract',
+    testMatch: /Contract\.spec\.ts$/,
+    use: {
+        ...devices['Desktop Chrome'],
+    },
+},
+
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
