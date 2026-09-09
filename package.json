@@ -24,6 +24,7 @@
     "test:holidays": "playwright test --project=06-holidays --headed --workers=1 --no-deps",
     "test:codegen-holidays": "playwright test --project=07-codegen-holidays --headed --workers=1 --no-deps",
     "test:leave-category": "playwright test --project=11-leave-category --headed --workers=1 --no-deps",
+    "test:leave-allocation": "playwright test --project=12-leave-allocation --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },
   "keywords": [],

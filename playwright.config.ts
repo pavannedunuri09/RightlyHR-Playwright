@@ -99,6 +99,11 @@ export default defineConfig({
       testMatch: /leave-category\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: '12-leave-allocation',
+      testMatch: /leave-allocation\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
