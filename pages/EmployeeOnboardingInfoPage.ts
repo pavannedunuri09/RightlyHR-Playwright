@@ -60,6 +60,25 @@ export class EmployeeOnboardingInfoPage {
     await this.saveButton.first().waitFor({ state: 'visible', timeout: 15000 });
   }
 
+  async setStatusActiveAndSave() {
+    await this.selectStatus('Active');
+    await this.saveButton.first().click();
+
+    const yes = this.page.getByRole('dialog').getByRole('button', { name: 'Yes' })
+      .or(this.page.getByRole('button', { name: 'Yes' }));
+    if (await yes.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+      await yes.first().click();
+    }
+
+    const toastVisible = await this.savedMessage.first().isVisible({ timeout: 15000 }).catch(() => false);
+    if (toastVisible) {
+      console.log(`Save: ${(await this.savedMessage.first().innerText()).trim()}`);
+    } else {
+      await expect(this.page.getByText('Active', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+      console.log('Onboarding status saved as Active');
+    }
+  }
+
   async setStatusTraineeActiveAndSave() {
     await this.selectStatus('Trainee Active');
     await this.saveButton.first().click();

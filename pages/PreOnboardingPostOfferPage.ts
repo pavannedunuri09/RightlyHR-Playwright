@@ -95,6 +95,34 @@ export class PreOnboardingPostOfferPage {
     await this.addEmploymentHistory(attachmentPath);
   }
 
+  async completePostOfferApplication(attachmentPath: string, options?: { skipEmployment?: boolean }) {
+    await this.addAcademicRecordIfNeeded(attachmentPath);
+    await this.fillEmergencyContactsIfNeeded();
+    if (options?.skipEmployment) {
+      await this.skipEmploymentIfNeeded();
+    } else {
+      await this.addEmploymentHistoryIfNeeded(attachmentPath);
+    }
+  }
+
+  async skipEmploymentIfNeeded() {
+    if (await this.isReviewPage()) {
+      return;
+    }
+
+    const skip = this.page.getByRole('button', { name: /Skip & continue|Skip and continue/i });
+    if (await skip.first().isVisible({ timeout: 8000 }).catch(() => false)) {
+      await skip.first().click();
+      console.log('Skipped employment history');
+      return;
+    }
+
+    if (await this.isEmploymentPage() && await this.nextButton.isEnabled().catch(() => false)) {
+      await this.nextButton.click();
+      console.log('Continued past employment history without adding a record');
+    }
+  }
+
   private async isEmergencyPage() {
     return this.page.getByRole('textbox', { name: 'Please enter name' }).first().isVisible().catch(() => false);
   }
@@ -180,7 +208,7 @@ export class PreOnboardingPostOfferPage {
     await this.nextButton.click();
   }
 
-  async expectReviewPage() {
+  async expectReviewPage(options?: { requireEmployment?: boolean }) {
     await expect(this.reviewHeading.first()).toBeVisible({ timeout: 15000 });
     await expect(this.page.getByText('Offer Letter Accepted')).toBeVisible();
 
@@ -191,6 +219,11 @@ export class PreOnboardingPostOfferPage {
     await expect(this.page.getByText(/California University/i).first()).toBeVisible({ timeout: 10000 });
     await expect(this.page.getByText(/B\.TECH/i).first()).toBeVisible();
     await expect(this.page.getByText(/CSE/i).first()).toBeVisible();
+
+    if (options?.requireEmployment === false) {
+      console.log('Review page verified: offer accepted, academic (employment skipped)');
+      return;
+    }
 
     const employmentToggle = this.page.getByRole('heading', { name: 'Employment History' }).getByRole('button')
       .or(this.page.getByRole('button', { name: 'Employment History' }));
