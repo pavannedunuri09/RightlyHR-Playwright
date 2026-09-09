@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
+import { LoginPage } from './LoginPage';
 
 // Ignored locator recording: Settings → Time Off → Attendance Eligibility Criteria → WFH Entitlement Criteria.
 // Login uses LOGIN_EMAIL / LOGIN_PASSWORD from .env.

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
-import { HolidaysPage } from '../pages/HolidaysPage';
+import { LoginPage } from './LoginPage';
+import { HolidaysPage } from './HolidaysPage';
 
 /**
  * End-to-End Holidays Automation Flow (Current Year & Record-Specific Row Actions):

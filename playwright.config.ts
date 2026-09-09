@@ -15,14 +15,14 @@ if (!baseURL) {
 export default defineConfig({
   testDir: './tests',
   testIgnore: [
-    '**/codegen-wfh.ts',
-    '**/codegen-wfh-settings.ts',
-    '**/codegent-wfh.ts',
-    '**/codegen-remote-login.ts',
-    '**/codegen-onbehalf-remote-login.ts',
-    '**/codegen-onbehalf-wfh.ts',
-    '**/codegen-onbehalf-remote.ts',
-    '**/codegen-probtion.ts',
+    '**/pages/codegen-wfh.ts',
+    '**/pages/codegen-wfh-settings.ts',
+    '**/pages/codegent-wfh.ts',
+    '**/pages/codegen-remote-login.ts',
+    '**/pages/codegen-onbehalf-remote-login.ts',
+    '**/pages/codegen-onbehalf-wfh.ts',
+    '**/pages/codegen-onbehalf-remote.ts',
+    '**/pages/codegen-probtion.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -90,7 +90,13 @@ export default defineConfig({
     },
     {
       name: '10-codegen-holidays',
+      testDir: './pages',
       testMatch: /codegen-holidays\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '11-leave-category',
+      testMatch: /leave-category\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {

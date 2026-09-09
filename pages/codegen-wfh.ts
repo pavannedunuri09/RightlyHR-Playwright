@@ -1,4 +1,4 @@
-npimport { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 test('test', async ({ page }) => {
   await page.goto('https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com/login');

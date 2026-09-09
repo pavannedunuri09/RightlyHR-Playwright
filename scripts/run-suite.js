@@ -12,6 +12,7 @@ const projects = [
   '07-onbehalf-wfh',
   '08-probation',
   '09-holidays',
+  '11-leave-category',
 ];
 
 let failed = false;
