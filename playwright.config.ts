@@ -88,7 +88,7 @@ export default defineConfig({
     },
 },{
     name: '11-contract',
-    testMatch: /Contract\.spec\.ts$/,
+    testMatch: /.*[\\/]Contract\.spec\.ts$/,
     use: {
         ...devices['Desktop Chrome'],
     },

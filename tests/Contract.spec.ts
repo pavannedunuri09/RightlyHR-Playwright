@@ -58,7 +58,7 @@ test.describe.serial(
                 console.log(
                     'TC01 PASSED - HR clicked Employee'
                 );
-                await employeePage.waitForTimeout(5000);
+                
             }
         );
 
