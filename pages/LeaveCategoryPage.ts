@@ -93,6 +93,41 @@ export const UPDATED_GENERAL_LEAVE_CATEGORY: LeaveCategoryFormData = {
   validDays: '366',
 };
 
+export const SICK_LEAVE_CATEGORY: LeaveCategoryFormData = {
+  year: '2026',
+  location: 'Kerala',
+  subLocation: 'Kannur',
+  shift: 'Morning Test',
+  categoryType: 'General',
+  leaveType: 'Sick Leave',
+  categoryName: 'Sick Leave',
+  categoryCode: 'SICK-LEAVE',
+  validDays: '365',
+  color: '#dc2626',
+  allowedGender: 'All',
+  allowedMaritalStatus: 'All',
+  excludeWeekends: 'Yes',
+  excludeHolidays: 'Yes',
+  isOptionalHoliday: 'No',
+  halfDayLeaveAllowed: 'Yes',
+  proRataLeaveAllocation: 'Yes',
+  enableSandwichPolicy: 'No',
+  futureDatesAllowed: 'Yes',
+  futureDatesDays: '100',
+  pastDatesAllowed: 'Yes',
+  pastDatesDays: '100',
+  carryForwardAllowed: 'No',
+  encashAllowed: 'No',
+  probationRulesApplicable: 'No',
+  noticePeriodRulesApplicable: 'No',
+  frequencyType: 'Yearly',
+};
+
+export type LeaveCategoryLocationHierarchy = Pick<
+  LeaveCategoryFormData,
+  'location' | 'subLocation' | 'shift'
+>;
+
 export class LeaveCategoryPage {
   readonly page: Page;
 
@@ -151,6 +186,7 @@ export class LeaveCategoryPage {
   readonly successToast: Locator;
   readonly dataUpdatedToast: Locator;
   readonly dataPublishedToast: Locator;
+  readonly dataClonedToast: Locator;
   readonly frequencyTypeDropdown: Locator;
 
   constructor(page: Page) {
@@ -223,6 +259,7 @@ export class LeaveCategoryPage {
     this.successToast = page.getByText(/(Data|Leave Category) (Added|Saved|Created) Successfully/i);
     this.dataUpdatedToast = page.getByText(/(Data|Leave Category) Updated Successfully/i);
     this.dataPublishedToast = page.getByText(/Leave [Cc]ategory published successfully/i);
+    this.dataClonedToast = page.getByText(/Leave [Cc]ategory cloned successfully/i);
     this.frequencyTypeDropdown = page.getByRole('combobox', { name: 'Select frequency type' });
   }
 
@@ -232,6 +269,15 @@ export class LeaveCategoryPage {
       .filter({ hasText: label })
       .first()
       .locator('xpath=ancestor::*[contains(@class,"col-")][1]');
+  }
+
+  locationHierarchyCombobox(field: 'location' | 'subLocation' | 'shift'): Locator {
+    const labels = {
+      location: /^Location\s*\*?$/i,
+      subLocation: /^Sub Location\s*\*?$/i,
+      shift: /^Shift\s*\*?$/i,
+    };
+    return this.fieldGroupByLabel(labels[field]).getByRole('combobox').first();
   }
 
   allowedDaysGroup(index: number): Locator {
@@ -368,10 +414,8 @@ export class LeaveCategoryPage {
   }
 
   async expectPublishedRow(data: LeaveCategoryFormData) {
-    await this.ensureOnLeaveCategoryList();
-    await this.switchToPublished();
-
-    const row = this.getCategoryRow(data.categoryName);
+    await this.ensureOnPublishedList();
+    const row = this.getPublishedCategoryRow(data.categoryName);
     await row.scrollIntoViewIfNeeded();
     await expect(row).toBeVisible({ timeout: 30000 });
     await expect(row.getByRole('cell', { name: /^Published$/i })).toBeVisible();
@@ -383,6 +427,254 @@ export class LeaveCategoryPage {
     await expect(row).toContainText(data.categoryName);
     await expect(row).toContainText(data.categoryCode);
     await expect(this.statusHeader).toBeVisible();
+  }
+
+  async ensureOnPublishedList() {
+    if (!(await this.pendingTab.isVisible({ timeout: 3000 }).catch(() => false))) {
+      await this.openFromDashboard();
+    }
+
+    await this.switchToPublished();
+  }
+
+  getPublishedCategoryRow(categoryName: string): Locator {
+    return this.table
+      .locator('tbody tr, [role="row"]')
+      .filter({ hasText: categoryName })
+      .filter({ hasText: /Published/i })
+      .first();
+  }
+
+  getCategoryRowByHierarchy(data: LeaveCategoryFormData): Locator {
+    return this.table
+      .locator('tbody tr, [role="row"]')
+      .filter({ hasText: data.categoryName })
+      .filter({ hasText: data.location })
+      .filter({ hasText: data.subLocation })
+      .filter({ hasText: data.shift })
+      .first();
+  }
+
+  async expectPublishedKebabOptions(categoryName: string) {
+    await this.ensureOnPublishedList();
+    const row = this.getPublishedCategoryRow(categoryName);
+    await row.scrollIntoViewIfNeeded();
+    await expect(row).toBeVisible({ timeout: 30000 });
+    await this.openRowKebab(row);
+
+    await expect(this.kebabMenuItem('Clone')).toBeVisible();
+    await expect(this.kebabMenuItem('View')).toBeVisible();
+    await expect(this.kebabMenuItem('Update')).toHaveCount(0);
+    await this.page.keyboard.press('Escape');
+  }
+
+  async openViewForCategory(categoryName: string) {
+    await this.ensureOnPublishedList();
+    const row = this.getPublishedCategoryRow(categoryName);
+    await row.scrollIntoViewIfNeeded();
+    await expect(row).toBeVisible({ timeout: 30000 });
+    await this.clickRowAction(row, 'View');
+    await this.page.getByText('View Leave Category', { exact: false }).first().waitFor({ state: 'visible', timeout: 15000 });
+    await expect(this.categoryNameInput).toHaveValue(categoryName, { timeout: 15000 });
+  }
+
+  async expectViewLeaveCategoryDetails(data: LeaveCategoryFormData) {
+    await expect(this.categoryNameInput).toHaveValue(data.categoryName);
+    await expect(this.categoryCodeInput).toHaveValue(data.categoryCode);
+    await expect(this.validDaysInput).toHaveValue(data.validDays);
+    await expect(this.colorInput).toHaveValue(data.color);
+    await expect(this.page.getByRole('combobox', { name: data.year })).toBeVisible();
+    await expect(this.page.getByRole('textbox', { name: 'Select location' })).toHaveValue(data.location);
+    await expect(this.page.getByRole('textbox', { name: 'Select sub-location' })).toHaveValue(data.subLocation);
+    await expect(this.page.getByRole('textbox', { name: 'Select shift' })).toHaveValue(data.shift);
+    await expect(this.fieldGroupByLabel(/Leave Category Type/i).getByRole('combobox').first()).toHaveAttribute('aria-label', data.categoryType);
+    await expect(this.fieldGroupByLabel(/^Leave Type/i).getByRole('combobox').first()).toHaveAttribute('aria-label', data.leaveType);
+  }
+
+  async expectViewActionButtons() {
+    await expect(this.cancelButton).toBeEnabled();
+    await expect(this.cloneButton).toBeEnabled();
+  }
+
+  async openCloneFromViewPage() {
+    await expect(this.cloneButton).toBeEnabled();
+    await this.cloneButton.click();
+    await this.page.getByText('Clone Leave Category', { exact: false }).first().waitFor({ state: 'visible', timeout: 15000 });
+    await expect(this.locationHierarchyCombobox('location')).toBeVisible({ timeout: 15000 });
+    await expect(this.saveButton).toBeVisible({ timeout: 15000 });
+  }
+
+  async openCloneForCategory(categoryName: string) {
+    await this.ensureOnPublishedList();
+    const row = this.getPublishedCategoryRow(categoryName);
+    await row.scrollIntoViewIfNeeded();
+    await expect(row).toBeVisible({ timeout: 30000 });
+    await this.clickRowAction(row, 'Clone');
+    await this.page.getByText('Clone Leave Category', { exact: false }).first().waitFor({ state: 'visible', timeout: 15000 });
+    await expect(this.locationHierarchyCombobox('location')).toBeVisible({ timeout: 15000 });
+    await expect(this.saveButton).toBeVisible({ timeout: 15000 });
+  }
+
+  formComboboxByLabel(label: string | RegExp): Locator {
+    return this.fieldGroupByLabel(label).getByRole('combobox').first();
+  }
+
+  async fillCloneLeaveCategoryForm(data: LeaveCategoryFormData) {
+    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/^Year/i), data.year);
+    await this.selectDropdownOptionIfNeeded(this.locationHierarchyCombobox('location'), data.location);
+    await this.selectDropdownOptionIfNeeded(this.locationHierarchyCombobox('subLocation'), data.subLocation);
+    await this.selectDropdownOptionIfNeeded(this.locationHierarchyCombobox('shift'), data.shift);
+
+    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/Leave Category Type/i), data.categoryType);
+    await this.selectDropdownOption(this.formComboboxByLabel(/^Leave Type/i), data.leaveType);
+
+    await this.categoryNameInput.fill(data.categoryName);
+    await this.categoryCodeInput.fill(data.categoryCode);
+    await this.validDaysInput.fill(data.validDays);
+    await this.colorInput.fill(data.color);
+
+    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/Allowed Gender/i), data.allowedGender);
+    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/Allowed Marital Status/i), data.allowedMaritalStatus);
+
+    await this.selectByFieldLabel(/Exclude Weekends/i, data.excludeWeekends);
+    await this.selectByFieldLabel(/Exclude Holidays/i, data.excludeHolidays);
+    await this.selectByFieldLabel(/Is Optional Holiday/i, data.isOptionalHoliday);
+    await this.selectByFieldLabel(/Half Day Leave Allowed/i, data.halfDayLeaveAllowed);
+    await this.selectByFieldLabel(/Pro Rata Leave Allocation/i, data.proRataLeaveAllocation);
+
+    await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await this.page.waitForTimeout(500);
+
+    await this.selectByFieldLabel(/Enable Sandwich Policy/i, data.enableSandwichPolicy);
+    await this.fillAllowedDaysPair(0, data.futureDatesAllowed, data.futureDatesDays);
+    await this.fillAllowedDaysPair(1, data.pastDatesAllowed, data.pastDatesDays);
+    await this.fillAllowedDaysPair(2, data.carryForwardAllowed, data.carryForwardDays);
+    await this.fillAllowedDaysPair(3, data.encashAllowed, data.encashDays);
+
+    await this.selectByFieldLabel(/Probation Period Rules Applicable/i, data.probationRulesApplicable);
+    await this.selectByFieldLabel(/Notice Period Rules Applicable/i, data.noticePeriodRulesApplicable);
+    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/Frequency Type/i), data.frequencyType);
+  }
+
+  async readComboboxValue(dropdown: Locator): Promise<string> {
+    const ariaLabel = (await dropdown.getAttribute('aria-label'))?.trim() ?? '';
+    if (ariaLabel && !/select (year|location|sub-location|shift|option)/i.test(ariaLabel)) {
+      return ariaLabel;
+    }
+
+    const text = (await dropdown.innerText()).trim();
+    return text.replace(/\s+/g, ' ');
+  }
+
+  async selectDropdownOptionByIndex(dropdown: Locator, index: number) {
+    await dropdown.scrollIntoViewIfNeeded().catch(() => {});
+    await dropdown.click({ force: true }).catch(() => {});
+
+    const optionLocator = this.page
+      .locator('.p-select-overlay [role="option"], .p-dropdown-items [role="option"], .p-select-option, [role="listbox"] [role="option"]')
+      .filter({
+        hasNotText: /^(Please select|Select year|Select location|Select sub location|Select shift|No result found|No data found|No records found)/i,
+      });
+
+    await optionLocator.first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    const count = await optionLocator.count();
+    if (count === 0) {
+      await this.page.keyboard.press('Escape');
+      return;
+    }
+
+    const safeIndex = index < count ? index : index % count;
+    await optionLocator.nth(safeIndex).click({ force: true });
+  }
+
+  async expectCloneLocationFieldsEmpty(original: LeaveCategoryFormData) {
+    const locationCombo = this.locationHierarchyCombobox('location');
+    const subLocationCombo = this.locationHierarchyCombobox('subLocation');
+    const shiftCombo = this.locationHierarchyCombobox('shift');
+
+    await expect(locationCombo).toBeVisible();
+    await expect(subLocationCombo).toBeVisible();
+    await expect(shiftCombo).toBeVisible();
+
+    const locationValue = await this.readComboboxValue(locationCombo);
+    const subLocationValue = await this.readComboboxValue(subLocationCombo);
+    const shiftValue = await this.readComboboxValue(shiftCombo);
+
+    expect(locationValue.toLowerCase()).not.toBe(original.location.toLowerCase());
+    expect(subLocationValue.toLowerCase()).not.toBe(original.subLocation.toLowerCase());
+    expect(shiftValue.toLowerCase()).not.toBe(original.shift.toLowerCase());
+  }
+
+  async fillCloneLocationHierarchyExcludingOriginal(
+    original: LeaveCategoryFormData,
+    maxAttempts = 5,
+  ): Promise<LeaveCategoryLocationHierarchy> {
+    const locationCombo = this.locationHierarchyCombobox('location');
+    const subLocationCombo = this.locationHierarchyCombobox('subLocation');
+    const shiftCombo = this.locationHierarchyCombobox('shift');
+
+    for (let offset = 0; offset < maxAttempts; offset += 1) {
+      await this.selectDropdownOptionByIndex(locationCombo, offset);
+      await this.selectDropdownOptionByIndex(subLocationCombo, offset);
+      await this.selectDropdownOptionByIndex(shiftCombo, offset);
+
+      const location = await this.readComboboxValue(locationCombo);
+      const subLocation = await this.readComboboxValue(subLocationCombo);
+      const shift = await this.readComboboxValue(shiftCombo);
+
+      const differsFromOriginal =
+        location.toLowerCase() !== original.location.toLowerCase()
+        || subLocation.toLowerCase() !== original.subLocation.toLowerCase()
+        || shift.toLowerCase() !== original.shift.toLowerCase();
+
+      if (differsFromOriginal && location && subLocation && shift) {
+        if (await this.saveButton.isEnabled().catch(() => false)) {
+          return { location, subLocation, shift };
+        }
+      }
+    }
+
+    throw new Error('Unable to select a different location hierarchy for clone.');
+  }
+
+  async submitCloneLeaveCategory() {
+    await expect(this.saveButton).toBeEnabled({ timeout: 15000 });
+    await this.saveButton.click();
+
+    if (await this.confirmYesButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await this.confirmYesButton.click();
+    }
+
+    await Promise.race([
+      this.dataClonedToast.waitFor({ state: 'visible', timeout: 30000 }),
+      this.successToast.waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+    await this.dataClonedToast.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+    await this.successToast.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+  }
+
+  async expectPendingClonedRow(
+    sourceData: LeaveCategoryFormData,
+    cloneLocation: LeaveCategoryLocationHierarchy,
+  ) {
+    await this.ensureOnLeaveCategoryList();
+    const clonedRowData: LeaveCategoryFormData = {
+      ...sourceData,
+      location: cloneLocation.location,
+      subLocation: cloneLocation.subLocation,
+      shift: cloneLocation.shift,
+    };
+    const row = this.getCategoryRowByHierarchy(clonedRowData);
+    await row.scrollIntoViewIfNeeded();
+    await expect(row).toBeVisible({ timeout: 30000 });
+    await expect(row.getByRole('cell', { name: /Pending\s*for\s*submission/i })).toBeVisible();
+    await expect(row).toContainText(sourceData.year);
+    await expect(row).toContainText(cloneLocation.location);
+    await expect(row).toContainText(cloneLocation.subLocation);
+    await expect(row).toContainText(cloneLocation.shift);
+    await expect(row).toContainText(sourceData.categoryType);
+    await expect(row).toContainText(sourceData.categoryName);
+    await expect(row).toContainText(sourceData.categoryCode);
   }
 
   async openDashboard() {
@@ -461,10 +753,19 @@ export class LeaveCategoryPage {
     await option.click();
   }
 
+  async selectDropdownOptionIfNeeded(dropdown: Locator, optionName: string) {
+    const currentValue = await this.readComboboxValue(dropdown);
+    if (currentValue.toLowerCase() === optionName.toLowerCase()) {
+      return;
+    }
+
+    await this.selectDropdownOption(dropdown, optionName);
+  }
+
   async selectByFieldLabel(label: string | RegExp, optionName: string) {
     const group = this.fieldGroupByLabel(label);
     await group.scrollIntoViewIfNeeded();
-    await this.selectDropdownOption(group.getByRole('combobox').first(), optionName);
+    await this.selectDropdownOptionIfNeeded(group.getByRole('combobox').first(), optionName);
   }
 
   async fillAllowedDaysPair(
@@ -474,12 +775,15 @@ export class LeaveCategoryPage {
   ) {
     const allowedGroup = this.allowedDaysGroup(index);
     await allowedGroup.scrollIntoViewIfNeeded();
-    await this.selectDropdownOption(allowedGroup.getByRole('combobox').first(), allowed);
+    await this.selectDropdownOptionIfNeeded(allowedGroup.getByRole('combobox').first(), allowed);
 
     if (days !== undefined) {
       const daysField = this.daysGroup(index).getByRole('spinbutton').first();
       if (await daysField.isEnabled().catch(() => false)) {
-        await daysField.fill(days);
+        const currentDays = await daysField.inputValue().catch(() => '');
+        if (currentDays !== days) {
+          await daysField.fill(days);
+        }
       }
     }
   }

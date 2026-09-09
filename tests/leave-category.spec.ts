@@ -3,13 +3,16 @@ import {
   GENERAL_LEAVE_CATEGORY,
   LEAVE_CATEGORY_REQUIRED_VALIDATIONS,
   LeaveCategoryPage,
+  SICK_LEAVE_CATEGORY,
   UPDATED_GENERAL_LEAVE_CATEGORY,
+  type LeaveCategoryLocationHierarchy,
 } from '../pages/LeaveCategoryPage';
 import { LoginPage } from '../pages/LoginPage';
 
 test.describe.serial('Leave Category Foundation', () => {
   let page: Page;
   let leaveCategoryPage: LeaveCategoryPage;
+  let clonedLocation: LeaveCategoryLocationHierarchy;
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
@@ -155,6 +158,54 @@ test.describe.serial('Leave Category Foundation', () => {
       await leaveCategoryPage.cancelAddForm();
       await expect(leaveCategoryPage.pendingTab).toBeVisible();
       await expect(leaveCategoryPage.addNewButton).toBeVisible();
+    });
+
+    test('13. Published kebab shows Clone and View options only', async () => {
+      await leaveCategoryPage.ensureOnPublishedList();
+      await leaveCategoryPage.expectPublishedKebabOptions(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+    });
+
+    test('14. View Leave Category displays all details and opens Clone form', async () => {
+      await leaveCategoryPage.ensureOnPublishedList();
+      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.expectViewLeaveCategoryDetails(UPDATED_GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectViewActionButtons();
+      await leaveCategoryPage.openCloneFromViewPage();
+    });
+
+    test('15. clones Leave Category with different location and verifies Pending row', async () => {
+      test.setTimeout(120000);
+
+      await leaveCategoryPage.ensureOnPublishedList();
+      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openCloneFromViewPage();
+      await leaveCategoryPage.expectCloneLocationFieldsEmpty(UPDATED_GENERAL_LEAVE_CATEGORY);
+      clonedLocation = await leaveCategoryPage.fillCloneLocationHierarchyExcludingOriginal(
+        UPDATED_GENERAL_LEAVE_CATEGORY,
+      );
+      await leaveCategoryPage.submitCloneLeaveCategory();
+      await leaveCategoryPage.expectPendingClonedRow(UPDATED_GENERAL_LEAVE_CATEGORY, clonedLocation);
+    });
+
+    test('16. clones published General Leave and creates Sick Leave with required details', async () => {
+      test.setTimeout(180000);
+
+      await leaveCategoryPage.ensureOnPublishedList();
+      await leaveCategoryPage.openCloneForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.fillCloneLeaveCategoryForm(SICK_LEAVE_CATEGORY);
+      await expect(leaveCategoryPage.saveButton).toBeEnabled();
+      await leaveCategoryPage.submitCloneLeaveCategory();
+      await leaveCategoryPage.expectPendingSubmissionRow(SICK_LEAVE_CATEGORY);
+    });
+
+    test('17. publishes cloned Sick Leave and displays it in Published tab', async () => {
+      test.setTimeout(120000);
+
+      await leaveCategoryPage.ensureOnLeaveCategoryList();
+      await leaveCategoryPage.openUpdateForCategory(SICK_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.expectInitialUpdateActionButtons();
+      await leaveCategoryPage.publishLeaveCategoryFromUpdatePage();
+      await leaveCategoryPage.expectPublishedRow(SICK_LEAVE_CATEGORY);
     });
   });
 });
