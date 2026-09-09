@@ -23,6 +23,8 @@ export default defineConfig({
     '**/codegen-onbehalf-wfh.ts',
     '**/codegen-onbehalf-remote.ts',
     '**/codegen-probtion.ts',
+    '**/codegen.permissions.ts',
+    '**/codegen,regularization.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -93,13 +95,15 @@ export default defineConfig({
       testMatch: /codegen-holidays\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
+    {
+      name: '11-permissions',
+      testMatch: /permissions\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '12-regularization',
+      testMatch: /regularization\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 });
