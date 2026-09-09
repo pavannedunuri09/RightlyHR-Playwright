@@ -6,6 +6,8 @@ type MailMessage = {
   body: string;
 };
 
+const CAPTCHA_WAIT_MS = 120_000;
+
 export class YopmailPage {
   readonly page: Page;
   private mailbox = '';
@@ -26,8 +28,11 @@ export class YopmailPage {
     if (onMailbox) {
       await this.bringPageToFront().catch(() => {});
       if (await this.hasCaptcha()) {
-        console.log('Yopmail already open with CAPTCHA; waiting for manual solve.');
-        return;
+        console.log('Yopmail already open with CAPTCHA; waiting up to 2 minutes for it to be solved.');
+        await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
+        if (await this.inboxReady()) {
+          return;
+        }
       }
       if (await this.inboxReady()) {
         return;
@@ -56,7 +61,10 @@ export class YopmailPage {
       await this.bringPageToFront();
 
       if (await this.hasCaptcha()) {
-        await this.handleCaptchaIfVisible(isHeadedRun() ? 180000 : 30000);
+        const cleared = await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
+        if (cleared) {
+          continue;
+        }
       } else if (!(await this.inboxReady())) {
         const onYopmail = /yopmail\.com/i.test(this.page.url());
         if (!onYopmail) {
@@ -101,6 +109,13 @@ export class YopmailPage {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
+      if (await this.hasCaptcha()) {
+        const cleared = await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
+        if (!cleared) {
+          await sleep(5000);
+          continue;
+        }
+      }
       const mail = await this.findMailUi(pattern);
       if (
         mail &&
@@ -120,6 +135,13 @@ export class YopmailPage {
   async waitForMailMatching(pattern: RegExp, timeoutMs = 120000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
+      if (await this.hasCaptcha()) {
+        const cleared = await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
+        if (!cleared) {
+          await sleep(5000);
+          continue;
+        }
+      }
       const matches: MailMessage[] = [];
       for (const mail of await this.listAllMailsUi()) {
         const combined = `${mail.subject}\n${mail.body}`;
@@ -147,6 +169,13 @@ export class YopmailPage {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
+      if (await this.hasCaptcha()) {
+        const cleared = await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
+        if (!cleared) {
+          await sleep(5000);
+          continue;
+        }
+      }
       for (const mail of await this.listAllMailsUi()) {
         const combined = `${mail.subject}\n${mail.body}`;
         if (!namePat.test(combined)) {
@@ -840,7 +869,7 @@ export class YopmailPage {
 
   private async gotoInbox(options?: { soft?: boolean; captchaTimeoutMs?: number }) {
     const headed = isHeadedRun();
-    const captchaTimeoutMs = options?.captchaTimeoutMs ?? (headed ? 45000 : 30000);
+    const captchaTimeoutMs = options?.captchaTimeoutMs ?? CAPTCHA_WAIT_MS;
 
     if (await this.hasCaptcha()) {
       await this.handleCaptchaIfVisible(captchaTimeoutMs);
@@ -921,7 +950,7 @@ export class YopmailPage {
 
   private async reloadInboxIfAllowed(options?: { soft?: boolean }) {
     if (await this.hasCaptcha()) {
-      await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+      await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
       if (await this.hasCaptcha()) {
         console.log('Yopmail CAPTCHA visible; skipping inbox refresh.');
         return;
@@ -945,7 +974,7 @@ export class YopmailPage {
           console.log('Yopmail refresh button blocked; skipping page reload.');
           return;
         }
-        await this.handleCaptchaIfVisible(isHeadedRun() ? 30000 : 15000);
+        await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
         await sleep(2500);
         return;
       }
@@ -963,7 +992,7 @@ export class YopmailPage {
       return;
     }
     if (await this.hasCaptcha()) {
-      await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+      await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
       return;
     }
     await this.gotoInbox({ soft: true }).catch((error) => {
@@ -999,7 +1028,7 @@ export class YopmailPage {
       return true;
     }
 
-    console.log('Yopmail CAPTCHA detected — trying automated checkbox click...');
+    console.log('Yopmail CAPTCHA detected — waiting up to 2 minutes. Continuing as soon as it is solved.');
     await this.tryClickRecaptcha();
 
     const headed = isHeadedRun();
@@ -1008,13 +1037,18 @@ export class YopmailPage {
       console.log('If CAPTCHA remains, click "I\'m not a robot" in the Yopmail tab.');
     }
 
-    const waitMs = timeoutMs ?? (headed ? 90000 : 30000);
+    const waitMs = timeoutMs ?? CAPTCHA_WAIT_MS;
     const cleared = await this.waitForCaptchaCleared(waitMs);
     if (!cleared) {
-      console.log('Yopmail CAPTCHA still visible; will retry inbox access.');
+      console.log('Yopmail CAPTCHA still visible after 2 minutes; will retry inbox access.');
       return false;
     }
-    console.log('Yopmail CAPTCHA cleared; continuing.');
+
+    console.log('Yopmail CAPTCHA resolved; pausing debugger then reading mail credentials.');
+    debugger;
+    if (headed) {
+      await this.page.pause();
+    }
     return true;
   }
 
@@ -1077,10 +1111,13 @@ export class YopmailPage {
       if (await this.inboxReady() && !(await this.hasCaptcha())) {
         return true;
       }
+      if (!(await this.hasCaptcha()) && (await this.inboxReady().catch(() => false) || /yopmail\.com/i.test(this.page.url()))) {
+        return true;
+      }
       await this.tryClickRecaptcha();
-      await sleep(2000);
+      await sleep(1000);
     }
-    return false;
+    return !(await this.hasCaptcha());
   }
 
   private async waitForInboxReady(options?: { soft?: boolean }) {
@@ -1090,7 +1127,7 @@ export class YopmailPage {
         return;
       }
       if (await this.hasCaptcha()) {
-        await this.handleCaptchaIfVisible(isHeadedRun() ? 120000 : 30000);
+        await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
         if (options?.soft && (await this.hasCaptcha())) {
           console.log('Yopmail inbox waiting on CAPTCHA resolution.');
           return;
