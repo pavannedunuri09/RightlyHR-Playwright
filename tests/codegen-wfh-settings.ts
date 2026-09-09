@@ -1,0 +1,60 @@
+import { test } from '@playwright/test';
+import { LoginPage } from '../pages/LoginPage';
+
+// Ignored locator recording: Settings → Time Off → Attendance Eligibility Criteria → WFH Entitlement Criteria.
+// Login uses LOGIN_EMAIL / LOGIN_PASSWORD from .env.
+
+test('codegen WFH entitlement criteria', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.loginFromEnv();
+  await page.goto('/dashboard/emp');
+  await page.locator('rect').first().click();
+  await page.locator('#settings-panel-2').click();
+  await page.getByText('Attendance Eligibility CriteriaConfigure company-wide criteria for Comp Off,').click();
+  await page.getByRole('link', { name: 'WFH Entitlement Criteria' }).click();
+  await page.getByRole('cell', { name: 'allowedPerMonth' }).click();
+  await page.getByRole('cell', { name: '10', exact: true }).click();
+  await page.locator('.dropdown > a').first().click();
+  await page.getByText('Update').first().click();
+  await page.getByRole('button', { name: 'Update' }).click();
+  await page.locator('div').filter({ hasText: 'Data Updated Successfully' }).nth(2).click();
+  await page.locator('.dropdown > a').first().click();
+  await page.getByText('Update').first().click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('cell', { name: 'pastDatesAllowed' }).click();
+  await page.getByRole('cell', { name: '100' }).first().click();
+  await page.locator('tr:nth-child(2) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(1).click();
+  await page.getByRole('button', { name: 'Update' }).click();
+  await page.getByText('Data Updated Successfully').click();
+  await page.locator('tr:nth-child(2) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(1).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('cell', { name: 'futureDatesAllowed' }).click();
+  await page.getByRole('cell', { name: '100' }).nth(1).click();
+  await page.locator('tr:nth-child(3) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByRole('cell', { name: '  Update' }).getByRole('list').click();
+  await page.getByRole('button', { name: 'Update' }).click();
+  await page.getByText('Data Updated Successfully').click();
+  await page.locator('tr:nth-child(3) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(2).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('cell', { name: 'minHalfDayHours' }).click();
+  await page.getByRole('cell', { name: '4' }).first().click();
+  await page.locator('tr:nth-child(4) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(3).click();
+  await page.getByRole('button', { name: 'Update' }).click();
+  await page.locator('tr:nth-child(4) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(3).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('cell', { name: 'minFullDayHours' }).click();
+  await page.getByRole('cell', { name: '4' }).nth(1).click();
+  await page.locator('tr:nth-child(5) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(4).click();
+  await page.getByRole('textbox').click();
+  await page.getByRole('textbox').fill('3');
+  await page.getByRole('button', { name: 'Update' }).click();
+  await page.locator('tr:nth-child(5) > td:nth-child(3) > .dropdown > a').click();
+  await page.getByText('Update').nth(4).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+});

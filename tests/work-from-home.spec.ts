@@ -25,7 +25,27 @@ test.describe('Work from Home', () => {
     await loginPage.loginFromEnv();
   });
 
-  test.describe('01. Open module and Job Info allocation', () => {
+  test.describe.serial('01. Open module and Job Info allocation', () => {
+    test('activates WFH on Job Info and shows the WFH tab after user validation', async ({ page }) => {
+      test.setTimeout(180000);
+      const jobWfh = new JobInfoWfhPage(page);
+      await jobWfh.openEmployeeJobWfh(EMPLOYEE_NAME, EMPLOYEE_SEARCH);
+
+      await jobWfh.ensureWfhActiveForToday(WFH_MANAGER);
+      await expect(jobWfh.wfhActiveRow).toBeVisible();
+      await expect(jobWfh.remoteLoginActiveRow).toHaveCount(0);
+
+      const loginPage = new LoginPage(page);
+      await loginPage.validateUserSession();
+      const tabs = await jobWfh.peekTimeOffTabs();
+      await expect(tabs.wfh).toBeVisible();
+      await expect(tabs.remoteLogin).toHaveCount(0);
+      await tabs.wfh.click();
+      await expect(page).toHaveURL(/\/time-off\/wfh/i);
+      const wfhPage = new WorkFromHomePage(page);
+      await expect(wfhPage.requestWfhButton).toBeVisible();
+    });
+
     test('opens the WFH module from the dashboard', async ({ page }) => {
       const wfhPage = new WorkFromHomePage(page);
       await wfhPage.openFromDashboard();
@@ -59,7 +79,7 @@ test.describe('Work from Home', () => {
       await expect(jobWfh.allocatedManagerHeader).toBeVisible();
       await expect(jobWfh.statusHeader).toBeVisible();
       await expect(jobWfh.wfhActiveRow).toBeVisible();
-      await expect(jobWfh.remoteLoginInactiveRow).toBeVisible();
+      await expect(jobWfh.remoteLoginInactiveRow.first()).toBeVisible();
 
       const wfhPage = new WorkFromHomePage(page);
       await wfhPage.validateUserOnDashboard();
