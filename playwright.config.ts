@@ -93,6 +93,11 @@ export default defineConfig({
       testMatch: /codegen-holidays\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: '11-permissions',
+      testMatch: /permissions\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
