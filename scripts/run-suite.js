@@ -13,6 +13,8 @@ const projects = [
   '08-probation',
   '09-holidays',
   '11-leave-category',
+  '12-leave-allocation',
+  '13-load-entitlements',
 ];
 
 let failed = false;

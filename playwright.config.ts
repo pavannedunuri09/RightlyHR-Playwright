@@ -104,6 +104,11 @@ export default defineConfig({
       testMatch: /leave-allocation\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: '13-load-entitlements',
+      testMatch: /load-entitlements\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
