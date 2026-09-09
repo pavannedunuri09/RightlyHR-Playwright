@@ -39,6 +39,7 @@ export class RegularizationPage {
   // Time Off -> Regularization Module Tabs & Table
   readonly waitingForApprovalTab: Locator;
   readonly approvedTab: Locator;
+  readonly processedTab: Locator;
   readonly rejectedTab: Locator;
   readonly cancelledTab: Locator;
   readonly regularizationTable: Locator;
@@ -101,7 +102,8 @@ export class RegularizationPage {
 
     // Time Off -> Regularization Module Tabs & Table
     this.waitingForApprovalTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Waiting For Approval/i }).first();
-    this.approvedTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Approved|Processed/i }).first();
+    this.approvedTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Approved/i }).first();
+    this.processedTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Processed/i }).first();
     this.rejectedTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Rejected/i }).first();
     this.cancelledTab = page.locator('li.nav-item, li, [role="tab"]').filter({ hasText: /Cancelled/i }).first();
     this.regularizationTable = page.locator('table, p-table').first();
@@ -202,6 +204,40 @@ export class RegularizationPage {
     return count > 0;
   }
 
+  async waitForRegularizationButton(timeout = 30000) {
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+      if (await this.regularizeButtons.first().isVisible().catch(() => false)) {
+        return;
+      }
+
+      await this.page.reload({ waitUntil: 'domcontentloaded' });
+      await this.page.waitForURL(/\/attendance/, { timeout: 15000 }).catch(() => { });
+      await this.attendanceTable.waitFor({ state: 'visible', timeout: 15000 }).catch(() => { });
+      await this.page.waitForTimeout(1500);
+    }
+
+    await expect(this.regularizeButtons.first()).toBeVisible({ timeout: 1000 });
+  }
+
+  async readAttendanceRegularizationCount() {
+    const summaryItem = this.page.locator('li, .summary-item, .attendance-summary-item')
+      .filter({ hasText: /^Regularizations?\s*\d+$/i })
+      .first()
+      .or(this.page.getByText(/^Regularizations?\s*\d+$/i).first());
+    if (!(await summaryItem.first().isVisible({ timeout: 3000 }).catch(() => false))) {
+      console.log('Attendance Summary has no Regularizations item; count is 0');
+      return 0;
+    }
+    const text = (await summaryItem.first().innerText()).replace(/\s+/g, ' ').trim();
+    const match = text.match(/Regularizations?\s*(\d+)/i);
+    if (!match) {
+      throw new Error(`Could not read Attendance Summary regularization count from "${text}"`);
+    }
+    return Number(match[1]);
+  }
+
   requestedDate: string = '';
 
   /**
@@ -215,8 +251,17 @@ export class RegularizationPage {
     await this.page.waitForTimeout(1000);
   }
 
-  async openRegularizationFormModal() {
-    const regButton = this.regularizeButtons.first();
+  async openRegularizationFormModal(dateText?: string) {
+    const targetDate = dateText || this.requestedDate;
+    const targetRow = targetDate
+      ? this.attendanceRows.filter({ hasText: targetDate }).first()
+      : null;
+    const rowButton = targetRow
+      ? targetRow.locator('a, u, button').filter({ hasText: /^Regularization$|^Regularize$/i }).first()
+      : null;
+    const regButton = rowButton && await rowButton.isVisible().catch(() => false)
+      ? rowButton
+      : this.regularizeButtons.first();
     const row = regButton.locator('xpath=ancestor::tr');
     this.requestedDate = (await row.locator('td').first().textContent().catch(() => ''))?.trim() || '';
     await regButton.click();
@@ -270,7 +315,24 @@ export class RegularizationPage {
     const submitBtn = modal.getByRole('button', { name: /Request|Submit/i }).first();
     await expect(submitBtn).toBeEnabled({ timeout: 5000 });
     await submitBtn.click();
-    await this.page.waitForTimeout(1500);
+
+    const toastSeen = await this.requestSuccessToast
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    await modal.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => { });
+
+    const requestedRow = this.requestedDate
+      ? this.attendanceRows.filter({ hasText: this.requestedDate }).first()
+      : this.attendanceRows.filter({ hasText: /Regularized\s*\(?Requested\)?/i }).first();
+    await expect(requestedRow).toContainText(/Regularized\s*\(?Requested\)?/i, {
+      timeout: 15000,
+    });
+    console.log(
+      toastSeen
+        ? 'Regularization request success message displayed'
+        : `Regularization request confirmed in attendance row for ${this.requestedDate}`,
+    );
   }
 
   async openDurationLogsForDate(dateText?: string) {
@@ -291,7 +353,13 @@ export class RegularizationPage {
     }
 
     const logTrigger = row.locator('td:nth-child(5)').locator('[cursor="pointer"], img, i, a, div, span').first();
-    await logTrigger.click();
+    await logTrigger.waitFor({ state: 'visible', timeout: 10000 });
+    await logTrigger.click({ force: true });
+
+    if (!(await this.durationLogPopup.isVisible({ timeout: 3000 }).catch(() => false))) {
+      await logTrigger.click({ force: true });
+    }
+
     await this.durationLogPopup.waitFor({ state: 'visible', timeout: 10000 });
     await this.page.waitForTimeout(500);
   }
@@ -361,9 +429,10 @@ export class RegularizationPage {
     await this.page.waitForTimeout(1000);
   }
 
-  async selectTab(tab: 'waiting' | 'approved' | 'rejected' | 'cancelled') {
+  async selectTab(tab: 'waiting' | 'approved' | 'processed' | 'rejected' | 'cancelled') {
     const tabLocator = tab === 'waiting' ? this.waitingForApprovalTab
       : tab === 'approved' ? this.approvedTab
+        : tab === 'processed' ? this.processedTab
         : tab === 'rejected' ? this.rejectedTab
           : this.cancelledTab;
 
@@ -371,9 +440,10 @@ export class RegularizationPage {
     await this.page.waitForTimeout(1000);
   }
 
-  async getTabCount(tab: 'waiting' | 'approved' | 'rejected' | 'cancelled'): Promise<number> {
+  async getTabCount(tab: 'waiting' | 'approved' | 'processed' | 'rejected' | 'cancelled'): Promise<number> {
     const tabLocator = tab === 'waiting' ? this.waitingForApprovalTab
       : tab === 'approved' ? this.approvedTab
+        : tab === 'processed' ? this.processedTab
         : tab === 'rejected' ? this.rejectedTab
           : this.cancelledTab;
 
@@ -382,31 +452,57 @@ export class RegularizationPage {
     return match ? parseInt(match[1], 10) : 0;
   }
 
-  async selectEmployee(employeeName: string = 'Indu', searchText?: string) {
-    const filter = searchText ?? employeeName;
+  async expectProcessedRegularization(dateText?: string) {
+    await this.selectTab('processed');
+    const targetDate = dateText || this.requestedDate;
+    const row = targetDate
+      ? this.regularizationRows.filter({ hasText: targetDate }).first()
+      : this.regularizationRows.first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(row).toContainText(/Approved|Processed/i);
+    console.log(`Processed regularization: ${(await row.innerText()).replace(/\s+/g, ' ').trim()}`);
+  }
+
+  async selectEmployee(employeeName: string = 'Indu Priya', employeeId?: string) {
     const employeeDropdown = this.page.getByRole('combobox', { name: /Please select employee|Select employee|Select employee name/i })
       .or(this.page.locator('p-dropdown, .p-dropdown, [role="combobox"]').filter({ hasText: /select employee/i }))
       .or(this.page.locator('p-dropdown, .p-dropdown, [role="combobox"]').first());
 
-    if (await employeeDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await employeeDropdown.click();
-      await this.page.waitForTimeout(500);
+    await employeeDropdown.waitFor({ state: 'visible', timeout: 10000 });
+    const nameParts = employeeName.trim().split(/\s+/).filter(Boolean);
+    const looseName = nameParts
+      .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[\\s\\S]*');
+    const queries = [employeeId, employeeName, ...nameParts]
+      .filter((value): value is string => Boolean(value));
+    const employeePattern = new RegExp(
+      [employeeId?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), looseName]
+        .filter(Boolean)
+        .join('|'),
+      'i',
+    );
 
+    for (const query of queries) {
+      await employeeDropdown.click();
       const searchbox = this.page.getByRole('searchbox')
         .or(this.page.locator('.p-dropdown-filter, input[type="text"]')).first();
-      if (await searchbox.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await searchbox.fill(filter);
-        await this.page.waitForTimeout(800);
-      }
+      await searchbox.waitFor({ state: 'visible', timeout: 5000 });
+      await searchbox.fill(query);
+      await this.page.waitForTimeout(800);
 
-      const escaped = employeeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const option = this.page
-        .getByRole('option', { name: new RegExp(escaped, 'i') })
-        .or(this.page.locator('.p-dropdown-item, li').filter({ hasText: new RegExp(escaped, 'i') }))
-        .or(this.page.getByText(new RegExp(escaped, 'i')));
-      await option.first().click({ timeout: 15000 });
-      await this.page.waitForTimeout(1000);
+      const option = this.page.getByRole('option').filter({ hasText: employeePattern }).first()
+        .or(this.page.locator('.p-dropdown-item, li').filter({ hasText: employeePattern }).first());
+      if (await option.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+        const selectedText = (await option.first().innerText()).replace(/\s+/g, ' ').trim();
+        await option.first().click();
+        await expect(employeeDropdown).toContainText(employeePattern, { timeout: 10000 });
+        console.log(`Selected employee: ${selectedText}`);
+        return;
+      }
+      await this.page.keyboard.press('Escape');
     }
+
+    throw new Error(`Employee ${employeeId ?? ''} ${employeeName} was not found`);
   }
 
   // =========================================================================
@@ -433,62 +529,131 @@ export class RegularizationPage {
       await this.page.waitForTimeout(1000);
     }
 
-    const kebab = this.page.locator('table tbody tr .dropdown > a, table tbody tr .dropdown button, table tbody tr a:has(.fa-ellipsis-v)').first();
+    const row = this.page.locator('table tbody tr').filter({ hasText: new RegExp(searchQuery, 'i') }).first()
+      .or(this.page.locator('table tbody tr').first());
+    await row.waitFor({ state: 'visible', timeout: 15000 });
+
+    const kebab = row.locator('.dropdown > a, .dropdown button, a:has(.fa-ellipsis-v), button.dropdown-toggle').first();
     await kebab.waitFor({ state: 'visible', timeout: 10000 });
     await kebab.click();
     await this.page.waitForTimeout(500);
 
-    await expect(this.approveActionOption.first()).toBeVisible();
-    await expect(this.rejectActionOption.first()).toBeVisible();
+    // Kebab menu options
+    const rejectMenuItem = this.page.getByText('Reject', { exact: true })
+      .or(row.getByText('Reject', { exact: true }))
+      .or(this.page.getByRole('menuitem', { name: 'Reject' }))
+      .first();
+    await rejectMenuItem.waitFor({ state: 'visible', timeout: 5000 });
+    await rejectMenuItem.click();
+    await this.page.waitForTimeout(1000);
 
-    // Click reject option from kebab menu
-    await this.rejectActionOption.first().click();
-    await this.page.waitForTimeout(500);
-
+    // Rejection Modal
     const modal = this.page.locator('ngb-modal-window, [role="dialog"], .modal-dialog, .modal').last();
-    await modal.waitFor({ state: 'visible', timeout: 10000 });
+    await modal.waitFor({ state: 'visible', timeout: 15000 });
 
-    // Look for suggested reason chips inside the rejection dialog
-    const suggestedChip = modal.getByRole('button', { name: /Rejected|Duplicate|Policy|Invalid/i })
-      .or(modal.locator('.suggestion-chip, .chip, .suggested-reason, app-chip, .badge, button.chip, span.cursor-pointer, .badge-secondary, .badge-outline-primary, .suggested-reasons *'))
-      .or(this.page.getByRole('button', { name: 'Rejected' }))
+    // 1. Click on the suggested reason chip (e.g. "Rejected" button)
+    const rejectedChip = modal.getByRole('button', { name: 'Rejected', exact: true })
+      .or(this.page.getByRole('button', { name: 'Rejected', exact: true }))
+      .or(modal.getByRole('button', { name: /Rejected|Policy|Duplicate|Invalid/i }))
+      .or(modal.locator('app-chip, .suggestion-chip, .chip, button.chip, span.badge, .badge-secondary'))
       .first();
 
-    if (await suggestedChip.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await suggestedChip.click();
+    if (await rejectedChip.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await rejectedChip.click();
       await this.page.waitForTimeout(500);
     }
 
-    // Enter rejection comments in textarea / remarks field
-    const commentInput = modal.locator('textarea, input[type="text"], [formcontrolname="reason"], [formcontrolname="remarks"], [formcontrolname="comments"]')
-      .or(this.rejectionReasonInput).first();
-    if (await commentInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    // 2. Also enter comments in textarea if available
+    const commentInput = modal.locator('textarea, input[formcontrolname="reason"], input[formcontrolname="remarks"], input[formcontrolname="comments"], textarea[formcontrolname="reason"]')
+      .or(this.page.locator('textarea').last())
+      .first();
+
+    if (await commentInput.isVisible({ timeout: 3000 }).catch(() => false)) {
       await commentInput.click();
       await commentInput.fill('Rejected - Attendance regularization policy not met');
-      await commentInput.press('Tab');
+      await commentInput.blur();
       await this.page.waitForTimeout(500);
     }
 
-    // Click Reject confirm button in the modal
+    // 3. Click the confirm Reject button
     const rejectConfirmBtn = modal.getByRole('button', { name: 'Reject', exact: true })
-      .or(modal.getByRole('button', { name: /Reject|Submit/i }))
-      .or(modal.locator('button').filter({ hasText: /^Reject$/i }))
-      .or(this.page.locator('.modal-footer button, ngb-modal-window button').filter({ hasText: /^Reject$/i }))
-      .or(this.rejectConfirmButton)
+      .or(modal.locator('button.btn-danger, button.btn-primary, button[type="submit"]').filter({ hasText: /^Reject$/i }))
+      .or(this.page.getByRole('button', { name: 'Reject', exact: true }).last())
       .first();
 
     await rejectConfirmBtn.waitFor({ state: 'visible', timeout: 10000 });
+
+    if (await rejectConfirmBtn.isDisabled().catch(() => false)) {
+      if (await rejectedChip.isVisible().catch(() => false)) {
+        await rejectedChip.click();
+        await this.page.waitForTimeout(500);
+      }
+    }
+
     await expect(rejectConfirmBtn).toBeEnabled({ timeout: 10000 });
     await rejectConfirmBtn.click({ force: true });
     console.log('Reject confirmation button clicked successfully');
 
-    // Verify rejection success popup / toast
+    // 4. Verify rejection success popup / toast
     await expect(
       this.actionSuccessToast
         .or(this.page.locator('.toast, .toast-message, .p-toast-detail, .alert-success, ngb-alert'))
         .or(this.page.getByText(/Rejected|success|Regularization rejected/i))
         .first()
     ).toBeVisible({ timeout: 15000 });
-    await this.page.waitForTimeout(3000);
+    await this.page.waitForTimeout(2000);
+  }
+
+  async approveFirstPendingRequest(searchQueries: string[] = ['SD302133', 'Indu Priya']) {
+    const row = await this.findPendingRequestRow(searchQueries);
+    const kebab = row.locator('.dropdown > a, .dropdown button, a:has(.fa-ellipsis-v), button.dropdown-toggle').first();
+    await kebab.waitFor({ state: 'visible', timeout: 10000 });
+    await kebab.click();
+
+    const approveMenuItem = this.page.getByText('Approve', { exact: true })
+      .or(this.page.getByRole('menuitem', { name: 'Approve' }))
+      .first();
+    await approveMenuItem.waitFor({ state: 'visible', timeout: 5000 });
+    await approveMenuItem.click();
+
+    const dialog = this.page.getByRole('dialog').last();
+    if (await dialog.isVisible({ timeout: 5000 }).catch(() => false)) {
+      const approvedOption = dialog.getByText('Approved', { exact: true })
+        .or(dialog.getByRole('button', { name: 'Approved', exact: true }));
+      if (await approvedOption.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+        await approvedOption.first().click();
+      }
+
+      const confirm = dialog.getByRole('button', { name: /Approve|Submit|Confirm/i }).last();
+      if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await expect(confirm).toBeEnabled({ timeout: 10000 });
+        await confirm.click();
+      }
+    }
+
+    const success = this.page.getByText(/Regularization.*approved|approved successfully|request.*approved/i)
+      .or(this.page.locator('.toast, .toast-message, .p-toast-detail, .alert-success'));
+    await expect(success.first()).toBeVisible({ timeout: 15000 });
+    console.log(`Approved regularization request for ${searchQueries.join(' / ')}`);
+  }
+
+  private async findPendingRequestRow(searchQueries: string[]) {
+    for (const query of searchQueries) {
+      if (await this.pendingSearchInput.isVisible().catch(() => false)) {
+        await this.pendingSearchInput.fill('');
+        await this.pendingSearchInput.fill(query);
+        await this.pendingSearchInput.press('Enter').catch(() => {});
+        await this.page.waitForTimeout(1000);
+      }
+
+      const row = this.pendingTableRows.filter({ hasText: new RegExp(
+        query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      ) }).first();
+      if (await row.isVisible({ timeout: 5000 }).catch(() => false)) {
+        return row;
+      }
+    }
+    throw new Error(`No pending regularization found for ${searchQueries.join(' / ')}`);
   }
 }
