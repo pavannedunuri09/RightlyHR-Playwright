@@ -58,6 +58,11 @@ export default defineConfig({
       testMatch: /personalization\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: '07-microsoft-login',
+      testMatch: /microsoftlogin\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },

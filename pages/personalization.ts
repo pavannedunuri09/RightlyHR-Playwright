@@ -1,4 +1,4 @@
-import { type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export const ALL_THEMES = [
   'Default',
@@ -114,7 +114,7 @@ export class PersonalizationPage {
         await this.ellipsesMenuToggle.click();
         await this.personalizationMenuItem.waitFor({ state: 'visible', timeout: 8000 });
         await this.personalizationMenuItem.click();
-        await this.page.waitForURL(/\/theme\/selection|\/personalization/i, { timeout: 15000 }).catch(() => {});
+        await this.page.waitForURL(/\/theme\/selection|\/personalization/i, { timeout: 15000 }).catch(() => { });
       }
       await this.applyThemeButton.or(this.themePersonalizationTab).first().waitFor({ state: 'visible', timeout: 15000 });
     }
@@ -125,7 +125,7 @@ export class PersonalizationPage {
    */
   async switchToThemePersonalization() {
     await this.themePersonalizationTab.click();
-    await this.page.waitForURL(/\/theme\/selection/i, { timeout: 15000 }).catch(() => {});
+    await this.page.waitForURL(/\/theme\/selection/i, { timeout: 15000 }).catch(() => { });
     await this.applyThemeButton.waitFor({ state: 'visible', timeout: 10000 });
     await this.page.waitForTimeout(500);
   }
@@ -135,7 +135,7 @@ export class PersonalizationPage {
    */
   async switchToMenuPersonalization() {
     await this.menuPersonalizationTab.click();
-    await this.page.waitForURL(/\/menus\/personalization/i, { timeout: 15000 }).catch(() => {});
+    await this.page.waitForURL(/\/menus\/personalization/i, { timeout: 15000 }).catch(() => { });
     await this.resetToDefaultButton.waitFor({ state: 'visible', timeout: 10000 });
     await this.page.waitForTimeout(500);
   }
@@ -144,7 +144,13 @@ export class PersonalizationPage {
    * Returns locator for a specific theme card by name
    */
   themeCard(name: string): Locator {
-    return this.page.locator('.themes-grid').first().locator('.theme-content').filter({ hasText: new RegExp(`^${name}$|${name}`, 'i') }).first();
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    return this.themeCards
+      .filter({
+        hasText: new RegExp(`^\\s*${escapedName}\\s*$`, 'i')
+      })
+      .first();
   }
 
   /**
@@ -159,8 +165,19 @@ export class PersonalizationPage {
    */
   async selectTheme(name: string) {
     const card = this.themeCard(name);
-    await card.scrollIntoViewIfNeeded().catch(() => {});
+
+    await card.waitFor({ state: 'visible', timeout: 10000 });
+    await card.scrollIntoViewIfNeeded();
+
+    const cardText = (await card.innerText()).trim();
+
+    console.log(`Selecting theme: ${name}`);
+    console.log(`Matched card: ${cardText}`);
+
+    expect(cardText.toLowerCase()).toContain(name.toLowerCase());
+
     await card.click();
+
     await this.page.waitForTimeout(400);
   }
 
@@ -177,7 +194,7 @@ export class PersonalizationPage {
    */
   async selectFont(name: string) {
     const card = this.fontCard(name);
-    await card.scrollIntoViewIfNeeded().catch(() => {});
+    await card.scrollIntoViewIfNeeded().catch(() => { });
     await card.click();
     await this.page.waitForTimeout(400);
   }
@@ -230,7 +247,7 @@ export class PersonalizationPage {
    */
   async confirmResetToDefault() {
     await this.resetDialogYesButton.click();
-    await this.resetDialogMessage.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    await this.resetDialogMessage.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => { });
   }
 
   /**
@@ -238,7 +255,7 @@ export class PersonalizationPage {
    */
   async cancelResetToDefault() {
     await this.resetDialogNoButton.click();
-    await this.resetDialogMessage.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    await this.resetDialogMessage.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => { });
   }
 
   /**
@@ -248,4 +265,4 @@ export class PersonalizationPage {
     await this.openResetToDefaultDialog();
     await this.confirmResetToDefault();
   }
-}
+}
