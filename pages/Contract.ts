@@ -1,4 +1,12 @@
-    import { Page, Locator } from '@playwright/test';
+import fs from 'fs';
+    import { expect, type Locator, type Page } from '@playwright/test';
+    import { YopmailPage } from './YopmailPage';
+
+    type ContractEmployee = {
+        firstName: string;
+        lastName: string;
+        email: string;
+    };
 
 export class Contract {
     readonly page: Page;
@@ -32,14 +40,9 @@ export class Contract {
             exact: true
         });
 
-        this.prospectiveEmployeeTab = page.getByText(
-            /Prospective\(\d+\)/,
-            { exact: true }
-        );
+        this.prospectiveEmployeeTab = page.getByText('Prospective', { exact: true }).first();
 
-        this.contractorsTab = page.getByRole('link', {
-            name: /Contractors \(\d+\)/
-        });
+        this.contractorsTab = page.getByRole('link', { name: /Contractors/ });
 
         this.addContractEmployeeButton = page.getByRole(
             'button',
@@ -123,12 +126,14 @@ export class Contract {
     // --------------------------------------------------
 
     async clickProspectiveEmployee() {
-        await this.prospectiveEmployeeTab.waitFor({
-            state: 'visible',
-            timeout: 15000
-        });
+        if (!(await this.prospectiveEmployeeTab.isVisible({ timeout: 3000 }).catch(() => false))) {
+            await this.employees.click();
+        }
 
-        await this.prospectiveEmployeeTab.click();
+        const prospective = this.page.getByText('Prospective', { exact: true }).first()
+            .or(this.page.getByRole('link', { name: /Prospective/ }).first());
+        await prospective.first().waitFor({ state: 'visible', timeout: 15000 });
+        await prospective.first().click();
 
         await this.page.waitForTimeout(1000);
     }
@@ -167,66 +172,63 @@ export class Contract {
     // TC05
     // --------------------------------------------------
 
-    async fillContractEmployeeDetails() {
+    async fillContractEmployeeDetails(employee: ContractEmployee) {
 
-        await this.firstNameInput.fill('prospec');
+        await this.firstNameInput.fill(employee.firstName);
 
-        await this.lastNameInput.fill('contractor');
+        await this.lastNameInput.fill(employee.lastName);
 
-        await this.personalEmailInput.fill(
-            'proscon@yopmail.com'
-        );
+        await this.personalEmailInput.fill(employee.email);
 
         await this.designationDropdown.click();
-
-        await this.page.getByRole('option', {
-            name: 'Director of HR'
-        }).click();
+        await this.selectOpenOption('Front End Developer');
 
         await this.employmentTypeDropdown.click();
-
-        await this.page.getByRole('option', {
-            name: 'Fresher'
-        }).click();
+        await this.selectFirstOpenOption();
 
         await this.locationDropdown.click();
-
-        await this.page.getByRole('option', {
-            name: 'Hyderabad'
-        }).click();
+        await this.selectOpenOption('Hyderabad');
 
         await this.sublocationDropdown.click();
+        await this.selectOpenOption('Jai Hind Enclave building');
 
-        await this.page.getByText(
-            'Jai Hind Enclave building'
-        ).click();
+        await this.page.keyboard.press('Tab');
     }
 
     async clickAdd() {
+        await expect(this.addButton).toBeEnabled({ timeout: 10000 });
         await this.addButton.click();
 
         await this.page.waitForTimeout(1500);
+    }
+
+    private async selectOpenOption(name: string) {
+        const option = this.page.getByRole('option', { name, exact: true }).last();
+        await option.waitFor({ state: 'visible', timeout: 10000 });
+        await option.click();
+    }
+
+    private async selectFirstOpenOption() {
+        const option = this.page.getByRole('option')
+            .filter({ hasNotText: /select|please/i })
+            .last();
+        await option.waitFor({ state: 'visible', timeout: 10000 });
+        await option.click();
     }
 
     // --------------------------------------------------
     // TC06
     // --------------------------------------------------
 
-    async clickCreatedEmployee() {
-        await this.page.getByText(
-            'prospec contractor',
-            { exact: true }
-        ).waitFor({
-            state: 'visible',
-            timeout: 15000
-        });
+    async clickCreatedEmployee(email: string, fullName: string) {
+        const searchbox = this.page.getByRole('searchbox', { name: 'Username' }).or(this.page.getByRole('searchbox'));
+        await searchbox.first().fill(email);
+        await searchbox.first().press('Enter');
 
-        await this.page.getByText(
-            'prospec contractor',
-            { exact: true }
-        ).click();
-
-        await this.page.waitForTimeout(1500);
+        const row = this.page.getByRole('row').filter({ hasText: email }).first();
+        await row.waitFor({ state: 'visible', timeout: 15000 });
+        await row.getByRole('cell', { name: fullName, exact: true }).click();
+        await expect(this.requestDocumentsButton).toBeVisible({ timeout: 15000 });
     }
 
     // --------------------------------------------------
@@ -240,8 +242,7 @@ export class Contract {
         });
 
         await this.requestDocumentsButton.click();
-
-        await this.page.waitForTimeout(1000);
+        await expect(this.page.getByText('Email has been sent').first()).toBeVisible({ timeout: 15000 });
     }
 
     // --------------------------------------------------
@@ -249,8 +250,11 @@ export class Contract {
     // --------------------------------------------------
 
     async openYopmail() {
-
-        const yopmailPage = await this.page.context().newPage();
+        const browser = this.page.context().browser();
+        if (!browser) {
+            throw new Error('Unable to open Yopmail without a browser context');
+        }
+        const yopmailPage = await browser.newPage();
 
         await yopmailPage.goto(
             'https://yopmail.com/en/'
@@ -271,24 +275,18 @@ export class Contract {
         yopmailPage: Page,
         emailName: string
     ) {
-
-        const loginField = yopmailPage.getByRole(
-            'textbox',
-            { name: 'Login' }
-        );
-
-        await loginField.waitFor({
-            state: 'visible',
-            timeout: 15000
+        const mailbox = emailName.includes('@') ? emailName.split('@')[0] : emailName;
+        await yopmailPage.bringToFront();
+        await yopmailPage.goto(`https://yopmail.com/en/?login=${encodeURIComponent(mailbox)}`, {
+            waitUntil: 'domcontentloaded'
         });
 
-        await loginField.fill(emailName);
-
-        await yopmailPage.getByTitle(
-            'Check Inbox @yopmail.com'
-        ).click();
-
-        await yopmailPage.waitForTimeout(3000);
+        const mailFrame = yopmailPage.locator('iframe[name="ifmail"]');
+        await mailFrame.waitFor({ state: 'attached', timeout: 30000 });
+        await mailFrame.contentFrame().locator('body').waitFor({
+            state: 'visible',
+            timeout: 30000
+        });
     }
 
     // --------------------------------------------------
@@ -298,49 +296,11 @@ export class Contract {
     async getCredentialsFromEmail(
         yopmailPage: Page
     ) {
-
-        const mailFrame = yopmailPage.locator(
-            'iframe[name="ifmail"]'
-        ).contentFrame();
-
-        await mailFrame.getByRole(
-            'cell'
-        ).first().waitFor({
-            state: 'visible',
-            timeout: 15000
+        const yopmail = new YopmailPage(yopmailPage);
+        return yopmail.findCredentialsInInbox({
+            skipCached: true,
+            preferPattern: /Request for Documents Upload|Request for Documents|Onboarding Portal/i,
         });
-
-        const emailBody =
-            await mailFrame.getByRole(
-                'cell'
-            ).first().innerText();
-
-        const usernameMatch =
-            emailBody.match(
-                /Username\s*:\s*([^\s]+)/i
-            );
-
-        const passwordMatch =
-            emailBody.match(
-                /Password\s*:\s*([^\s]+)/i
-            );
-
-        if (!usernameMatch) {
-            throw new Error(
-                'Username not found in onboarding email'
-            );
-        }
-
-        if (!passwordMatch) {
-            throw new Error(
-                'Password not found in onboarding email'
-            );
-        }
-
-        return {
-            username: usernameMatch[1],
-            password: passwordMatch[1]
-        };
     }
 
     // --------------------------------------------------
@@ -408,6 +368,15 @@ export class Contract {
     async fillPersonalDetails(
         onboardingPage: Page
     ) {
+        const goToApplicationButton = onboardingPage.getByRole('button', { name: 'Go to Application' });
+        if (await goToApplicationButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await goToApplicationButton.click();
+        }
+
+        await onboardingPage.getByRole(
+            'combobox',
+            { name: 'Please select salutation' }
+        ).waitFor({ state: 'visible', timeout: 20000 });
 
         await onboardingPage.getByRole(
             'combobox',
@@ -419,62 +388,37 @@ export class Contract {
             { exact: true }
         ).click();
 
-        await onboardingPage.locator(
-            '#gender'
-        ).click();
+        await onboardingPage.getByRole('combobox', { name: 'Please select gender' }).click();
 
         await onboardingPage.getByRole(
             'option',
             { name: 'Male', exact: true }
         ).click();
 
-        await onboardingPage.getByText(
-            'Select country'
-        ).click();
+        await onboardingPage.getByRole('combobox', { name: 'Select country' }).click()
+            .catch(async () => onboardingPage.getByText('Select country').click());
 
-        await onboardingPage.locator(
-            'lib-country-list'
-        ).getByRole('textbox').fill('india');
+        await onboardingPage.locator('lib-country-list').getByRole('textbox').fill('91');
 
         await onboardingPage.getByText(
             'India (भारत)'
         ).click();
 
-        await onboardingPage.getByRole(
-            'textbox',
-            { name: 'Please enter your mobile' }
-        ).fill('9874544645');
+        await onboardingPage.getByRole('textbox', { name: /Please enter your mobile/ }).fill('9874544645');
 
         await onboardingPage.getByRole(
             'textbox',
             { name: 'Date Of Birth *' }
         ).fill('2000-06-06');
 
-        await onboardingPage.locator(
-            '#currentzipCode'
-        ).fill('500081');
+        await onboardingPage.getByRole('textbox', { name: 'Zip Code*' }).first().fill('500081');
 
-        await onboardingPage.getByRole(
-            'textbox',
-            { name: 'Country*' }
-        ).fill('india');
+        await onboardingPage.getByRole('textbox', { name: 'Country*' }).fill('India');
 
-        await onboardingPage.locator(
-            '#currentState'
-        ).fill('TG');
+        await onboardingPage.getByRole('textbox', { name: 'Please enter state' }).first().fill('Telangana');
 
-        await onboardingPage.locator(
-            '#currentCity'
-        ).fill('Hyderabad');
-
-        await onboardingPage.getByRole(
-            'textbox',
-            { name: 'Address Line2' }
-        ).fill('chandha nagar');
-
-        await onboardingPage.locator(
-            '#currentAddressLine1'
-        ).fill('Meerut colony');
+        await onboardingPage.getByRole('textbox', { name: 'City*' }).first().fill('Hyderabad');
+        await onboardingPage.getByRole('textbox', { name: 'Address Line 1*' }).first().fill('Meerut colony');
 
         await onboardingPage.getByRole(
             'checkbox',
@@ -486,124 +430,251 @@ export class Contract {
             { name: 'Next' }
         ).click();
 
-        await onboardingPage.waitForTimeout(1500);
+        await onboardingPage.getByRole('row', { name: /Requested/ }).first().waitFor({ state: 'visible', timeout: 20000 });
     }
 
     // --------------------------------------------------
     // TC14
     // --------------------------------------------------
 
-    async uploadMandatoryDocuments(
-        onboardingPage: Page
-    ) {
+    async uploadMandatoryDocuments(onboardingPage: Page, pdfPath: string, imagePath: string) {
 
-        // Bank letter
-        const bankLetter =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: 'Bank letter - - - Requested'
-                }
-            );
+        // ================================================
+        // 1. AADHAAR
+        // ================================================
 
-        await bankLetter.getByRole(
-            'button'
-        ).click();
+        const aadhaarRow = onboardingPage
+            .getByRole('row')
+            .filter({ hasText: 'Aadhaar' })
+            .first();
 
-        // Use your actual file path here
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            'Screenshot 2026-06-23 161210.png'
+        await aadhaarRow.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await aadhaarRow
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            })
+            .click();
+
+        const aadhaarDialog = onboardingPage.getByRole('dialog');
+        const aadhaarScope = (await aadhaarDialog.isVisible().catch(() => false))
+            ? aadhaarDialog
+            : onboardingPage.locator('body');
+
+        await aadhaarScope
+            .getByRole('button', {
+                name: 'Choose File'
+            })
+            .setInputFiles(imagePath);
+
+        const aadhaarUpload = aadhaarScope
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            });
+
+        await expect(aadhaarUpload).toBeEnabled({
+            timeout: 10000
+        });
+
+        await aadhaarUpload.click();
+
+        await expect(
+            onboardingPage.getByText(
+                /Document uploaded successfully/i
+            ).first()
+        ).toBeVisible({
+            timeout: 20000
+        });
+
+        await onboardingPage.keyboard.press('Escape').catch(() => {});
+
+
+        // ================================================
+        // 2. PAN
+        // ================================================
+
+        const panRow = onboardingPage
+            .getByRole('row')
+            .filter({ hasText: 'PAN' })
+            .first();
+
+        await panRow.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await panRow
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            })
+            .click();
+
+        const panDialog = onboardingPage.getByRole('dialog');
+        const panScope = (await panDialog.isVisible().catch(() => false))
+            ? panDialog
+            : onboardingPage.locator('body');
+
+        await panScope
+            .getByRole('textbox', {
+                name: /Document Number/i
+            })
+            .fill('ABCDE1234F');
+
+        await panScope
+            .getByRole('button', {
+                name: 'Choose File'
+            })
+            .setInputFiles(imagePath);
+
+        const panUpload = panScope
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            });
+
+        await expect(panUpload).toBeEnabled({
+            timeout: 10000
+        });
+
+        await panUpload.click();
+
+        await expect(
+            onboardingPage.getByText(
+                /Document uploaded successfully/i
+            ).first()
+        ).toBeVisible({
+            timeout: 20000
+        });
+
+        await onboardingPage.keyboard.press('Escape').catch(() => {});
+
+
+        // ================================================
+        // 3. RESUME
+        // ================================================
+
+        const resumeRow = onboardingPage
+            .getByRole('row')
+            .filter({ hasText: 'Resume' })
+            .first();
+
+        await resumeRow.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await resumeRow
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            })
+            .click();
+
+        const resumeDialog = onboardingPage.getByRole('dialog');
+        const resumeScope = (await resumeDialog.isVisible().catch(() => false))
+            ? resumeDialog
+            : onboardingPage.locator('body');
+
+        await resumeScope
+            .getByRole('button', {
+                name: 'Choose File'
+            })
+            .setInputFiles(pdfPath);
+
+        const resumeUpload = resumeScope
+            .getByRole('button', {
+                name: 'Upload',
+                exact: true
+            });
+
+        await expect(resumeUpload).toBeEnabled({
+            timeout: 10000
+        });
+
+        await resumeUpload.click();
+
+        await expect(
+            onboardingPage.getByText(
+                /Document uploaded successfully/i
+            ).first()
+        ).toBeVisible({
+            timeout: 20000
+        });
+
+        await onboardingPage.keyboard.press('Escape').catch(() => {});
+
+
+        // ================================================
+        // 4. SUBMIT ALL DOCUMENTS
+        // ================================================
+
+        const submitButton = onboardingPage.getByRole('button', {
+            name: 'Submit',
+            exact: true
+        });
+
+        await submitButton.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await submitButton.click();
+
+
+        // ================================================
+        // 5. CONFIRM SUBMIT IF CONFIRMATION APPEARS
+        // ================================================
+
+        const confirmationText = onboardingPage.getByText(
+            'Are you sure you want to'
         );
 
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
+        if (
+            await confirmationText
+                .isVisible({ timeout: 3000 })
+                .catch(() => false)
+        ) {
+            const confirmationDialog = onboardingPage.getByRole('dialog');
 
-        // Resume
-        const resume =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: 'Resume* - - - Requested'
-                }
-            );
+            await confirmationDialog
+                .getByRole('button', {
+                    name: 'Submit',
+                    exact: true
+                })
+                .click();
+        }
 
-        await resume.getByRole(
-            'button'
-        ).click();
 
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            'Screenshot 2026-06-24 161649.png'
-        );
+        // ================================================
+        // 6. VERIFY SUBMISSION
+        // ================================================
 
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        // PAN
-        const pan =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: /PAN\*/
-                }
-            );
-
-        await pan.getByRole(
-            'button'
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            'Screenshot 2026-06-24 172317.png'
-        );
-
-        await onboardingPage.getByRole(
-            'textbox',
-            {
-                name: 'Document Number*'
-            }
-        ).fill('123SDS3212');
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Submit' }
-        ).click();
-
-        await onboardingPage.waitForTimeout(2000);
+        await expect(
+            onboardingPage.getByText(
+                /Submitted successfully/i
+            ).first()
+        ).toBeVisible({
+            timeout: 20000
+        });
     }
 
     // --------------------------------------------------
     // TC15
     // --------------------------------------------------
 
-    async clickEmployeeAfterSubmission() {
+    async clickEmployeeAfterSubmission(email: string, fullName: string) {
 
         await this.employees.click();
 
         await this.page.waitForTimeout(1000);
 
-        await this.page.getByText(
-            'prospec contractor',
-            { exact: true }
-        ).click();
-
-        await this.page.waitForTimeout(1000);
+        await this.clickCreatedEmployee(email, fullName);
     }
 
     // --------------------------------------------------
@@ -613,12 +684,10 @@ export class Contract {
     async clickJobAndOnboardingDocuments() {
 
         await this.jobTab.click();
-
-        await this.page.waitForTimeout(1000);
-
-        await this.onboardingDocuments.click();
-
-        await this.page.waitForTimeout(1500);
+        const documents = this.page.getByText('Onboarding Documents', { exact: true });
+        const count = await documents.count();
+        await (count > 1 ? documents.nth(1) : documents.first()).click();
+        await this.page.getByRole('columnheader', { name: 'Document Type' }).waitFor({ state: 'visible', timeout: 20000 });
     }
 
     // --------------------------------------------------
@@ -627,67 +696,17 @@ export class Contract {
 
     async clickKebabMenu() {
 
-        const kebabMenus =
-            this.page.locator('.dropdown > a');
-
-        const count =
-            await kebabMenus.count();
-
-        console.log(
-            'Kebab menus found:',
-            count
-        );
-
-        for (let i = 0; i < count; i++) {
-
-            if (
-                await kebabMenus.nth(i).isVisible()
-            ) {
-
-                await kebabMenus.nth(i)
-                    .scrollIntoViewIfNeeded();
-
-                await kebabMenus.nth(i).click();
-
-                await this.page.waitForTimeout(500);
-
-                return;
-            }
-        }
-
-        throw new Error(
-            'No visible kebab menu found'
-        );
+        const row = this.page.getByRole('row').filter({ hasText: /Bank letter|Resume|PAN/ }).first();
+        const kebab = row.locator('td:last-child .dropdown, td .dropdown, .dropdown > a').last();
+        await kebab.scrollIntoViewIfNeeded();
+        await kebab.click();
     }
 
     async clickApprove() {
 
-        const approveOptions =
-            this.page.getByText(
-                'Approve',
-                { exact: true }
-            );
-
-        const count =
-            await approveOptions.count();
-
-        for (let i = 0; i < count; i++) {
-
-            if (
-                await approveOptions.nth(i).isVisible()
-            ) {
-
-                await approveOptions.nth(i).click();
-
-                await this.page.waitForTimeout(1000);
-
-                return;
-            }
-        }
-
-        throw new Error(
-            'No visible Approve option found'
-        );
+        const approve = this.page.getByText('Approve', { exact: true }).last();
+        await approve.waitFor({ state: 'visible', timeout: 8000 });
+        await approve.click();
     }
 
     // --------------------------------------------------
@@ -696,27 +715,6 @@ export class Contract {
 
     async verifyAllDocumentsApproved() {
 
-        const verifyReject =
-            this.page.getByRole('cell').filter({
-                hasText: 'VerifyReject'
-            });
-
-        const count =
-            await verifyReject.count();
-
-        console.log(
-            'Documents requiring verification:',
-            count
-        );
-
-        if (count > 0) {
-            throw new Error(
-                'One or more documents are still pending verification'
-            );
-        }
-
-        console.log(
-            'All documents are approved'
-        );
+        await expect(this.page.getByRole('cell').filter({ hasText: /Verify|Reject/ })).toHaveCount(0);
     }
 }

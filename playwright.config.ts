@@ -100,11 +100,9 @@ export default defineConfig({
     },
 },{
     name: '11-contract',
-    testMatch: /.*[\\/]Contract\.spec\.ts$/,
-    use: {
-        ...devices['Desktop Chrome'],
-    },
-},
+    testMatch: /Contract\.spec\.ts$/,
+    use: { ...devices['Desktop Chrome'] },
+}
 
     // {
     //   name: 'firefox',
