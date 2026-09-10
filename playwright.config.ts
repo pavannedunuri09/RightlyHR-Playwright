@@ -109,6 +109,11 @@ export default defineConfig({
       testMatch: /load-entitlements\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: '14-leaves',
+      testMatch: /leaves\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
