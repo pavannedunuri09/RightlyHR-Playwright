@@ -125,6 +125,13 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
 },
+{
+  name: '08-my-info',
+  testMatch: /my-info\.spec\.ts$/,
+  use: {
+    ...devices['Desktop Chrome'],
+  },
+},
 
     // Uncomment when needed
     // {
