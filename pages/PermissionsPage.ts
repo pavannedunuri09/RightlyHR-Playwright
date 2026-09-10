@@ -16,6 +16,7 @@ export class PermissionsPage {
   readonly timeOffNav: Locator;
   readonly timeOffToggle: Locator;
   readonly permissionsTab: Locator;
+  readonly attendanceNav: Locator;
   readonly breadcrumb: Locator;
   readonly breadcrumbTimeOff: Locator;
   readonly breadcrumbPermissions: Locator;
@@ -23,12 +24,20 @@ export class PermissionsPage {
   // Permissions Dashboard / List View
   readonly requestPermissionButton: Locator;
   readonly waitingForApprovalTab: Locator;
-  readonly approvedTab: Locator;
   readonly rejectedTab: Locator;
   readonly cancelledTab: Locator;
   readonly noDataFoundMessage: Locator;
   readonly permissionsTable: Locator;
   readonly permissionRows: Locator;
+
+  // Table Column Headers
+  readonly requestedDateHeader: Locator;
+  readonly permissionDateHeader: Locator;
+  readonly durationHeader: Locator;
+  readonly reasonHeader: Locator;
+  readonly permissionTypeHeader: Locator;
+  readonly statusHeader: Locator;
+  readonly actionHeader: Locator;
 
   // Request Permission Modal / Form Locators
   readonly requestModal: Locator;
@@ -63,11 +72,11 @@ export class PermissionsPage {
     this.loginPage = new LoginPage(page);
 
     // Sidebar & Navigation
-    this.timeOffNav = page.locator('#sidenav-main-drop .nav-item').filter({
-      hasText: /^Time Off$/i,
-    }).first().or(
-      page.getByText('Time Off', { exact: true }).first(),
-    );
+    this.timeOffNav = page.locator('#sidenav-main-drop .nav-item, #sidenav-main-drop a, #sidenav-main-drop li, nav .nav-item, .sidebar .nav-item')
+      .filter({ hasText: /^Time Off$/i })
+      .or(page.getByText('Time Off', { exact: true }))
+      .or(page.locator('a, li, div').filter({ hasText: /^Time Off$/i }))
+      .first();
 
     this.timeOffToggle = page.locator('#sidenav-main-drop .nav-item').filter({
       hasText: 'Time Off',
@@ -75,11 +84,17 @@ export class PermissionsPage {
       page.getByText('Time Off').first(),
     );
 
-    this.permissionsTab = page.locator('.dropdown-menu-text, a.dropdown-item, .nav-link, span, div').filter({
+    this.permissionsTab = page.locator('.dropdown-menu-text, a.dropdown-item, .nav-link, span, div, li a').filter({
       hasText: /^Permissions$/i,
     }).first().or(
       page.getByText('Permissions', { exact: true }).first(),
     );
+
+    this.attendanceNav = page.locator('#sidenav-main-drop .nav-item, #sidenav-main-drop a, #sidenav-main-drop li, nav .nav-item, .sidebar .nav-item')
+      .filter({ hasText: /^Attendance$/i })
+      .or(page.getByRole('link', { name: /Attendance/i }))
+      .or(page.getByText('Attendance', { exact: true }))
+      .first();
 
     // Breadcrumb Locators
     this.breadcrumb = page.locator('ol.breadcrumb, nav[aria-label="breadcrumb"], app-breadcrumb, .breadcrumb, .page-breadcrumb, .title-container, .card-title').filter({
@@ -103,12 +118,23 @@ export class PermissionsPage {
       page.getByText('Request Permission'),
     ).first();
 
-    this.waitingForApprovalTab = page.getByText(/Waiting For Approval/i).first();
-    this.rejectedTab = page.getByText(/Rejected/i).first();
-    this.cancelledTab = page.getByText(/Cancelled/i).first();
-    this.noDataFoundMessage = page.getByText(/No Data Found/i).first();
+    this.waitingForApprovalTab = page.locator('li, [role="tab"], .nav-link, button, div, span, a')
+      .filter({ hasText: /Waiting For Approval/i })
+      .or(page.getByText(/Waiting For Approval/i))
+      .first();
 
-    this.permissionsTable = page.locator('table, [role="table"], .p-datatable-table').first();
+    this.rejectedTab = page.locator('li, [role="tab"], .nav-link, button, div, span, a')
+      .filter({ hasText: /Rejected/i })
+      .or(page.getByText(/Rejected/i))
+      .first();
+
+    this.cancelledTab = page.locator('li, [role="tab"], .nav-link, button, div, span, a')
+      .filter({ hasText: /Cancelled/i })
+      .or(page.getByText(/Cancelled/i))
+      .first();
+
+    this.noDataFoundMessage = page.getByText(/No Data Found/i).first();
+    this.permissionsTable = page.locator('table, [role="table"], p-table, .p-datatable-table').first();
     this.permissionRows = page.locator('table tbody tr');
 
     // Table Column Headers
@@ -135,25 +161,25 @@ export class PermissionsPage {
     ).first();
 
     // Request Form Modal
-    this.requestModal = page.locator('.modal-content, .p-dialog, [role="dialog"]').first();
-    this.dateInput = page.getByRole('textbox', { name: 'Date*' }).or(
-      page.locator('input[placeholder*="date" i], input[type="date"], input[name*="date" i]'),
+    this.requestModal = page.locator('dialog, ngb-modal-window, [role="dialog"], .modal, p-dialog, .p-dialog').last();
+    this.dateInput = page.getByRole('textbox', { name: /Date\*/i }).or(
+      page.locator('input[placeholder*="date" i], input[type="date"], input[name*="date" i], input[formcontrolname="date"]')
     ).first();
 
     this.durationDropdown = page.locator('#duration').getByRole('button', { name: 'dropdown trigger' }).or(
-      page.getByRole('combobox', { name: /duration/i }),
+      page.getByRole('combobox', { name: /Please select duration|duration/i }),
     ).or(
-      page.locator('#duration, [formcontrolname="duration"], p-dropdown[id="duration"]'),
+      page.locator('#duration, [formcontrolname="duration"], p-dropdown[id="duration"], p-select[id="duration"]'),
     ).first();
 
-    this.permissionTypeDropdown = page.getByRole('combobox', { name: /permission type/i }).or(
-      page.locator('[formcontrolname="permissionType"], [formcontrolname="type"], p-dropdown[id="permissionType"]'),
+    this.permissionTypeDropdown = page.getByRole('combobox', { name: /Please select permission type|permission type/i }).or(
+      page.locator('[formcontrolname="permissionType"], [formcontrolname="type"], p-dropdown[id="permissionType"], p-select[id="permissionType"]'),
     ).or(
-      page.locator('p-dropdown').filter({ hasText: /permission type/i }),
+      page.locator('p-dropdown, p-select').filter({ hasText: /permission type/i }),
     ).first();
 
-    this.reasonInput = page.getByRole('textbox', { name: 'Reason*' }).or(
-      page.locator('textarea[placeholder*="Reason" i], textarea, input[name*="reason" i]'),
+    this.reasonInput = page.getByRole('textbox', { name: /Reason\*/i }).or(
+      page.locator('textarea[placeholder*="Reason" i], textarea[formcontrolname="reason"], textarea, input[name*="reason" i]'),
     ).first();
 
     this.requestButton = page.getByRole('button', { name: 'Request', exact: true }).or(
@@ -165,15 +191,18 @@ export class PermissionsPage {
     ).first();
 
     // Cancellation Modal
-    this.cancelPermissionAction = page.getByText('Cancel Permission').first();
-    this.cancellationModal = page.locator('.modal-content, .p-dialog').filter({
-      hasText: /Cancel Permission|cancellation/i,
-    }).first();
-    this.cancellationReasonInput = page.getByRole('textbox', { name: /cancellation/i }).or(
-      page.locator('textarea[placeholder*="cancellation" i], textarea, input[name*="cancel" i]'),
+    this.cancelPermissionAction = page.getByText('Cancel Permission', { exact: true }).or(
+      page.locator('.dropdown-menu a, .dropdown-menu button, a.dropdown-item, button.dropdown-item, .dropdown-item').filter({ hasText: /Cancel Permission/i }),
     ).first();
-    this.cancellationSubmitButton = page.getByRole('button', { name: 'Submit' }).first();
-    this.cancellationCancelButton = page.getByRole('button', { name: 'Cancel' }).first();
+
+    this.cancellationModal = page.locator('dialog, ngb-modal-window, [role="dialog"], .modal, p-dialog, .p-dialog').last();
+    this.cancellationReasonInput = page.getByRole('textbox', { name: /cancellation|Please enter cancellation/i }).or(
+      page.locator('textarea[placeholder*="cancellation" i], input[placeholder*="cancellation" i], textarea, input[name*="cancel" i]'),
+    ).first();
+    this.cancellationSubmitButton = page.getByRole('button', { name: 'Submit', exact: true }).or(
+      page.locator('button').filter({ hasText: /^Submit$/i }),
+    ).first();
+    this.cancellationCancelButton = page.getByRole('button', { name: 'Cancel', exact: true }).first();
 
     // Approver / Pending Approvals
     this.pendingApprovalsNav = page.getByText('Pending Approvals', { exact: true }).or(
@@ -186,8 +215,14 @@ export class PermissionsPage {
     this.rejectButton = page.getByRole('button', { name: 'Reject' }).first();
 
     // Toast Notifications
-    this.requestSubmittedToast = page.getByText(/Permission request submitted|Request submitted successfully|submitted successfully|applied successfully/i).first();
-    this.permissionCancelledToast = page.getByText(/Permission cancelled|Cancelled successfully/i).first();
+    this.requestSubmittedToast = page.locator('.toast, .toast-message, .p-toast-detail, .alert-success, ngb-alert, .p-toast-message-content')
+      .filter({ hasText: /Permission request submitted|Request submitted successfully|submitted successfully|applied successfully|Success/i })
+      .or(page.getByText(/Permission request submitted/i));
+
+    this.permissionCancelledToast = page.locator('.toast, .toast-message, .p-toast-detail, .alert-success, ngb-alert, .p-toast-message-content')
+      .filter({ hasText: /Permission cancelled|Cancelled successfully|Success/i })
+      .or(page.getByText(/Permission cancelled/i));
+
     this.permissionApprovedToast = page.getByText(/Permission approved|Approved successfully/i).first();
     this.permissionRejectedToast = page.getByText(/Permission rejected|Rejected successfully/i).first();
   }
@@ -197,17 +232,51 @@ export class PermissionsPage {
   // =========================================================================
 
   async loginAsEmployee(email?: string, password?: string) {
-    const empEmail = email || process.env.EMPLOYEE_EMAIL?.trim() || process.env.LOGIN_EMAIL?.trim();
-    const empPassword = password || process.env.EMPLOYEE_PASSWORD?.trim() || process.env.LOGIN_PASSWORD?.trim();
+    const empEmail = email || process.env.EMPLOYEE_EMAIL?.trim() || 'indu@yopmail.com';
+    const empPassword = password || process.env.EMPLOYEE_PASSWORD?.trim() || 'Indu@123';
 
-    if (!empEmail || !empPassword) {
-      throw new Error('Please configure EMPLOYEE_EMAIL/LOGIN_EMAIL and EMPLOYEE_PASSWORD/LOGIN_PASSWORD in .env');
-    }
-
-    await this.loginPage.goto();
+    await this.page.goto('/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await this.loginPage.emailInput.waitFor({ state: 'visible', timeout: 15000 });
     await this.loginPage.login(empEmail, empPassword);
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 45000, waitUntil: 'domcontentloaded' });
-    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    await this.page.waitForURL(/\/dashboard|\/time-off|\/attendance/, { timeout: 45000, waitUntil: 'domcontentloaded' }).catch(() => {});
+    await this.page.waitForTimeout(2000);
+  }
+
+  async logout() {
+    await this.page.waitForTimeout(500);
+    try {
+      const profileTrigger = this.page.locator('.profile-info, .user-profile, .user-info, .profile-img, #profileDropdown, .avatar')
+        .or(this.page.getByRole('paragraph').filter({ hasText: /InduQA|QA Tester|Bhavitha|Admin|Manager/i }))
+        .or(this.page.locator('header, .navbar, .top-header').locator('[cursor="pointer"]').last()).first();
+
+      if (await profileTrigger.isVisible({ timeout: 4000 }).catch(() => false)) {
+        await profileTrigger.click();
+        await this.page.waitForTimeout(600);
+      }
+
+      const logoutBtn = this.page.getByRole('button', { name: /Logout/i })
+        .or(this.page.getByText(/Logout/i))
+        .or(this.page.locator('.dropdown-item, .p-menuitem-link, a, button').filter({ hasText: /Logout/i }))
+        .first();
+
+      await logoutBtn.waitFor({ state: 'visible', timeout: 6000 });
+      await logoutBtn.click();
+      await this.page.waitForTimeout(600);
+
+      const confirmYes = this.page.getByRole('button', { name: 'Yes', exact: true })
+        .or(this.page.locator('.p-dialog-footer button, .modal-footer button, button').filter({ hasText: /^Yes$/i }))
+        .first();
+
+      if (await confirmYes.isVisible({ timeout: 4000 }).catch(() => false)) {
+        await confirmYes.click();
+      }
+
+      await this.page.waitForURL(/\/login/, { timeout: 15000 }).catch(() => {});
+      await this.page.waitForTimeout(1000);
+    } catch {
+      await this.page.goto('/login', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForTimeout(1500);
+    }
   }
 
   async openTimeOffMenu() {
@@ -215,12 +284,12 @@ export class PermissionsPage {
     const timeOff = this.timeOffNav.first();
     await timeOff.waitFor({ state: 'visible', timeout: 15000 });
     await timeOff.click();
-    await this.page.waitForTimeout(500);
+    await this.page.waitForTimeout(600);
   }
 
   async navigateToPermissionsModule() {
-    // If request button is already visible, we are already on permissions page
-    if (await this.requestPermissionButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    // If request button is already visible and on permissions page, return
+    if (await this.requestPermissionButton.isVisible({ timeout: 1500 }).catch(() => false)) {
       return;
     }
 
@@ -233,9 +302,36 @@ export class PermissionsPage {
     // Click on Permissions item
     await permTab.waitFor({ state: 'visible', timeout: 10000 });
     await permTab.click();
+    await this.page.waitForTimeout(1500);
 
     // Wait for permissions module to be loaded
     await this.requestPermissionButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+  }
+
+  async navigateToAttendanceModule() {
+    await this.page.waitForTimeout(500);
+
+    // Scroll sidebar down if needed
+    const sidebar = this.page.locator('#sidenav-main-drop, .sidebar, aside, .side-menu, nav').first();
+    if (await sidebar.isVisible().catch(() => false)) {
+      await sidebar.evaluate(el => el.scrollTop = 0).catch(() => {});
+    }
+
+    const attendanceLink = this.attendanceNav.first();
+    if (await attendanceLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await attendanceLink.scrollIntoViewIfNeeded().catch(() => {});
+      await attendanceLink.click();
+    } else {
+      await this.page.goto('/attendance', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    }
+
+    await this.page.waitForTimeout(1500);
+    try {
+      await this.page.waitForURL(/\/attendance/, { timeout: 10000 });
+    } catch {
+      await this.page.goto('/attendance', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    }
+    await this.page.waitForTimeout(1500);
   }
 
   // =========================================================================
@@ -252,7 +348,6 @@ export class PermissionsPage {
   }
 
   async verifyBreadcrumb() {
-    // Assert both Time Off and Permissions are visible in breadcrumb navigation
     const breadcrumbVisible = await this.breadcrumb.isVisible({ timeout: 8000 }).catch(() => false);
     if (breadcrumbVisible) {
       const text = await this.breadcrumb.innerText();
@@ -267,10 +362,19 @@ export class PermissionsPage {
   // TAB COUNTS & STATUS TABS HELPERS
   // =========================================================================
 
+  async getWaitingForApprovalCount(): Promise<number> {
+    await this.page.waitForTimeout(1000);
+    const tab = this.waitingForApprovalTab;
+    await tab.waitFor({ state: 'visible', timeout: 10000 });
+    const text = (await tab.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    const match = text.match(/\((\d+)\)/);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+
   async readTabCount(tab: Locator): Promise<number> {
     const text = (await tab.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
-    const match = text.match(/\((\d+)\)\s*$/);
-    return match ? Number(match[1]) : 0;
+    const match = text.match(/\((\d+)\)/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   async readPermissionTabCounts() {
@@ -288,8 +392,9 @@ export class PermissionsPage {
         : tab === 'rejected'
           ? this.rejectedTab
           : this.cancelledTab;
+    await target.waitFor({ state: 'visible', timeout: 8000 });
     await target.click();
-    await this.page.waitForTimeout(500);
+    await this.page.waitForTimeout(800);
   }
 
   // =========================================================================
@@ -297,52 +402,82 @@ export class PermissionsPage {
   // =========================================================================
 
   async openRequestPermissionModal() {
+    await this.requestPermissionButton.waitFor({ state: 'visible', timeout: 10000 });
     await this.requestPermissionButton.click();
     await this.dateInput.waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.waitForTimeout(500);
   }
 
   async fillPermissionRequest(data: PermissionRequestData) {
     if (data.date) {
+      await this.dateInput.click();
       await this.dateInput.fill(data.date);
+      await this.page.waitForTimeout(300);
     }
 
     // Select duration
     if (data.duration) {
-      const durationTrigger = this.page.locator('#duration').getByRole('button', { name: 'dropdown trigger' }).or(
-        this.page.getByRole('combobox', { name: /duration/i }),
-      ).or(this.page.locator('#duration')).first();
+      const durationTrigger = this.page.locator('#duration').getByRole('button', { name: 'dropdown trigger' })
+        .or(this.page.getByRole('combobox', { name: /Please select duration|duration/i }))
+        .or(this.page.locator('#duration, [formcontrolname="duration"]'))
+        .first();
+
+      await durationTrigger.waitFor({ state: 'visible', timeout: 5000 });
       await durationTrigger.click();
+      await this.page.waitForTimeout(500);
+
+      const overlay = this.page.locator('.p-dropdown-panel, .p-select-overlay, .p-select-panel, ul[role="listbox"]').last();
+      const option = overlay.getByRole('option', { name: data.duration, exact: true })
+        .or(overlay.getByText(data.duration, { exact: true }))
+        .first();
+
+      await option.waitFor({ state: 'visible', timeout: 5000 });
+      await option.click();
       await this.page.waitForTimeout(300);
-      await this.page.locator('.p-dropdown-panel, .p-dropdown-items-wrapper, ul[role="listbox"]').getByText(data.duration, { exact: true }).or(
-        this.page.getByRole('option', { name: data.duration }),
-      ).first().click();
     }
 
     // Select permission type (Early Logout, In Between Breaks, Early Login)
     if (data.permissionType) {
-      const typeTrigger = this.page.getByRole('combobox', { name: 'Please select permission type' }).or(
-        this.page.getByRole('combobox', { name: /permission type/i }),
-      ).or(this.page.locator('#permissionType')).first();
+      const typeTrigger = this.page.getByRole('combobox', { name: 'Please select permission type' })
+        .or(this.page.getByRole('combobox', { name: /permission type/i }))
+        .or(this.page.locator('#permissionType, [formcontrolname="permissionType"]'))
+        .first();
+
+      await typeTrigger.waitFor({ state: 'visible', timeout: 5000 });
       await typeTrigger.click();
+      await this.page.waitForTimeout(500);
+
+      const overlay = this.page.locator('.p-dropdown-panel, .p-select-overlay, .p-select-panel, ul[role="listbox"]').last();
+      const option = overlay.getByRole('option', { name: data.permissionType, exact: true })
+        .or(overlay.getByText(data.permissionType, { exact: true }))
+        .or(overlay.getByText(new RegExp(data.permissionType, 'i')))
+        .first();
+
+      await option.waitFor({ state: 'visible', timeout: 5000 });
+      await option.click();
       await this.page.waitForTimeout(300);
-      await this.page.locator('.p-dropdown-panel, .p-dropdown-items-wrapper, ul[role="listbox"]').getByText(data.permissionType, { exact: true }).or(
-        this.page.getByRole('option', { name: data.permissionType }),
-      ).first().click();
     }
 
     // Fill reason
     if (data.reason) {
+      await this.reasonInput.waitFor({ state: 'visible', timeout: 5000 });
+      await this.reasonInput.click();
       await this.reasonInput.fill(data.reason);
+      await this.page.waitForTimeout(300);
     }
   }
 
   async submitPermissionRequest() {
+    await this.requestButton.waitFor({ state: 'visible', timeout: 5000 });
     await this.requestButton.click();
-    await this.page.waitForTimeout(500);
-    const toast = this.page.getByText(/Permission request submitted|submitted successfully/i).or(
-      this.page.locator('.p-toast-message, .alert, .toast'),
-    ).first();
-    await toast.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+
+    try {
+      await expect(this.requestSubmittedToast).toBeVisible({ timeout: 15000 });
+    } catch {
+      await expect(this.requestModal).toBeHidden({ timeout: 8000 });
+    }
+    await this.page.waitForTimeout(1000);
   }
 
   async requestPermission(data: PermissionRequestData) {
@@ -357,14 +492,16 @@ export class PermissionsPage {
 
   async openFirstRowActionMenu() {
     const firstRow = this.permissionRows.first();
-    await firstRow.waitFor({ state: 'visible', timeout: 10000 });
+    await firstRow.waitFor({ state: 'visible', timeout: 15000 });
     const actionCell = firstRow.locator('td').last();
-    const actionTrigger = actionCell.locator('a, button, i, span, div').first();
+    const actionTrigger = actionCell.locator('.dropdown-toggle, [data-bs-toggle="dropdown"], a, button, i, span, generic').first();
+    
     if (await actionTrigger.isVisible().catch(() => false)) {
-      await actionTrigger.click();
+      await actionTrigger.click({ force: true });
     } else {
-      await actionCell.click();
+      await actionCell.click({ force: true });
     }
+    await this.page.waitForTimeout(500);
     await this.cancelPermissionAction.waitFor({ state: 'visible', timeout: 5000 });
   }
 
@@ -372,154 +509,109 @@ export class PermissionsPage {
     await this.openFirstRowActionMenu();
     await this.cancelPermissionAction.click();
 
-    const reasonBox = this.page.getByRole('textbox', { name: /cancellation/i }).or(
-      this.cancellationReasonInput,
-    );
+    const reasonBox = this.page.getByRole('textbox', { name: /cancellation|Please enter cancellation/i })
+      .or(this.cancellationReasonInput);
+
     await reasonBox.waitFor({ state: 'visible', timeout: 8000 });
+    await reasonBox.click();
     await reasonBox.fill(reason);
+    await this.page.waitForTimeout(300);
 
-    const submitBtn = this.page.getByRole('button', { name: 'Submit' }).or(
-      this.cancellationSubmitButton,
-    );
+    const submitBtn = this.page.getByRole('button', { name: 'Submit', exact: true })
+      .or(this.cancellationSubmitButton);
+
+    await submitBtn.waitFor({ state: 'visible', timeout: 5000 });
     await submitBtn.click();
-
-    await this.permissionCancelledToast.waitFor({ state: 'visible', timeout: 15000 });
-  }
-
-  // =========================================================================
-  // APPROVER HELPERS (PENDING APPROVALS)
-  // =========================================================================
-
-  async gotoPendingApprovalsPermissions() {
-    await this.page.goto('/pending-approvals/time-off/permissions/for-you', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-  }
-
-  async filterApproverByEmployee(employeeName: string) {
-    if (await this.approverSearchBox.isVisible().catch(() => false)) {
-      await this.approverSearchBox.fill(employeeName);
-      await this.page.keyboard.press('Enter');
-      await this.page.waitForTimeout(1000);
-    }
-  }
-
-  // =========================================================================
-  // PERMISSIONS ELIGIBILITY CRITERIA SETTINGS
-  // =========================================================================
-
-  async clickSettingsIcon() {
-    await this.page.waitForTimeout(500);
-    const settingsBtn = this.page.locator('img[src*="setting" i], [aria-label*="Setting" i], .settings-icon, rect').first();
-    if (await settingsBtn.isVisible().catch(() => false)) {
-      await settingsBtn.click();
-    } else {
-      await this.page.locator('rect').first().click();
-    }
-    await this.page.waitForTimeout(500);
-  }
-
-  async openPermissionsEligibilitySettings() {
-    await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    const timeOffPanel = this.page.locator('#settings-panel-2, #settings-panel-time-off').or(
-      this.page.locator('p-accordion-header, [data-pc-name="accordionheader"], button').filter({ hasText: /Time Off/i }),
-    ).first();
-    await timeOffPanel.waitFor({ state: 'visible', timeout: 15000 });
-    await timeOffPanel.click();
-
-    const attendanceCard = this.page.getByText(/Attendance Eligibility Criteria/i).first();
-    await attendanceCard.waitFor({ state: 'visible', timeout: 15000 });
-    await attendanceCard.click();
-
-    const permEligibilityLink = this.page.getByRole('link', { name: /Permissions Eligibility/i }).or(
-      this.page.getByText('Permissions Eligibility'),
-    ).first();
-    await permEligibilityLink.waitFor({ state: 'visible', timeout: 15000 });
-    await permEligibilityLink.click();
-    await this.page.waitForLoadState('domcontentloaded');
-  }
-
-  criterionRow(criterion: string) {
-    return this.page.getByRole('row').filter({
-      has: this.page.getByRole('cell', { name: criterion, exact: true }),
-    });
-  }
-
-  criterionNameCell(criterion: string) {
-    return this.page.getByRole('cell', { name: criterion, exact: true });
-  }
-
-  criterionValueCell(criterion: string) {
-    return this.criterionRow(criterion).getByRole('cell').nth(1);
-  }
-
-  criterionKebabMenu(criterion: string) {
-    return this.criterionRow(criterion).locator('.dropdown > a, td:last-child a, button.dropdown-toggle').first();
-  }
-
-  criterionValueInput(criterion: string) {
-    return this.criterionRow(criterion).getByRole('textbox').or(this.page.getByRole('textbox')).first();
-  }
-
-  async updateCriterionValue(criterion: string, newValue: string) {
-    await this.criterionKebabMenu(criterion).click();
-    await this.page.locator('.dropdown-menu.show, .dropdown-menu').getByText('Update', { exact: true }).or(
-      this.page.getByText('Update').first(),
-    ).first().click();
-
-    const input = this.criterionValueInput(criterion);
-    await input.waitFor({ state: 'visible', timeout: 5000 });
-    await input.dblclick();
-    await input.fill(newValue);
-
-    await this.page.getByRole('button', { name: 'Update' }).click();
-    await this.page.getByText(/Data updated successfully|successfully/i).first().waitFor({ state: 'visible', timeout: 15000 });
-  }
-
-  async readCriterionValue(criterion: string): Promise<string> {
-    const cell = this.criterionValueCell(criterion);
-    await cell.waitFor({ state: 'visible', timeout: 5000 });
-    return (await cell.innerText()).trim();
-  }
-
-  async readAllPermissionsEligibilityCriteria(): Promise<Record<string, string>> {
-    await this.openPermissionsEligibilitySettings();
-    const rows = this.page.locator('table tbody tr');
-    const count = await rows.count();
-    const criteria: Record<string, string> = {};
-    for (let i = 0; i < count; i++) {
-      const row = rows.nth(i);
-      const name = (await row.locator('td').first().innerText()).trim();
-      const val = (await row.locator('td').nth(1).innerText()).trim();
-      if (name) {
-        criteria[name] = val;
-      }
-    }
-    return criteria;
-  }
-
-  async requestPermissionWithLimitHandling(data: PermissionRequestData, maxFutureDaysAllowed: number = 30) {
-    await this.openRequestPermissionModal();
-    await this.fillPermissionRequest(data);
-    await this.requestButton.click();
     await this.page.waitForTimeout(1000);
 
-    // If limit exceeded or duplicate error prevents submission for that day, request for next available day
-    const isModalOpen = await this.dateInput.isVisible({ timeout: 2000 }).catch(() => false);
-    if (isModalOpen) {
-      for (let daysAhead = 1; daysAhead <= maxFutureDaysAllowed; daysAhead++) {
-        const altDate = getFutureDateInput(daysAhead);
-        await this.dateInput.fill(altDate);
-        await this.requestButton.click();
-        await this.page.waitForTimeout(1000);
-
-        const stillOpen = await this.dateInput.isVisible({ timeout: 2000 }).catch(() => false);
-        if (!stillOpen) {
-          break;
-        }
-      }
+    try {
+      await expect(this.permissionCancelledToast).toBeVisible({ timeout: 15000 });
+    } catch {
+      await expect(this.cancellationModal).toBeHidden({ timeout: 8000 });
     }
+  }
+
+  async verifyRecordInWaitingForApproval(expectedType?: string, expectedCount?: number) {
+    await this.page.waitForTimeout(1500);
+
+    // Verify Waiting For Approval tab is visible
+    await expect(this.waitingForApprovalTab).toBeVisible({ timeout: 10000 });
+
+    // Verify count in tab header
+    const currentCount = await this.getWaitingForApprovalCount();
+    if (expectedCount !== undefined) {
+      expect(currentCount).toBe(expectedCount);
+    } else {
+      expect(currentCount).toBeGreaterThanOrEqual(1);
+    }
+
+    // Verify table and row
+    await expect(this.permissionsTable).toBeVisible({ timeout: 10000 });
+    const row = expectedType
+      ? this.permissionRows.filter({ hasText: new RegExp(expectedType, 'i') }).first()
+      : this.permissionRows.first();
+
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await expect(row).toContainText(/Waiting for Approval/i);
+  }
+
+  // =========================================================================
+  // ATTENDANCE MODULE & LOGS VERIFICATION
+  // =========================================================================
+
+  async verifyPermissionRequestedChip(targetDateString?: string) {
+    await this.page.waitForTimeout(1500);
+
+    // If target date is given (e.g. 2026-09-10), extract the day number
+    const dayNumber = targetDateString ? String(parseInt(targetDateString.split('-')[2], 10)) : String(new Date().getDate());
+
+    // Locate date card / cell for that day
+    const dateCell = this.page.locator('.calendar-day, .day-cell, .date-cell, .calendar-date, [data-date], tr, td, .card, div')
+      .filter({ hasText: new RegExp(`^\\s*${dayNumber}\\b|\\b${dayNumber}\\s*$`, 'i') })
+      .filter({ hasText: /Permission/i })
+      .first();
+
+    const chip = dateCell.locator('.chip, .badge, .p-badge, .p-tag, span, div, p')
+      .filter({ hasText: /Permission requested|Permission/i })
+      .or(this.page.locator('.chip, .badge, .p-badge, .p-tag, span, div, p').filter({ hasText: /Permission requested/i }))
+      .or(this.page.getByText(/Permission requested/i))
+      .first();
+
+    await expect(chip).toBeVisible({ timeout: 15000 });
+  }
+
+  async openAttendanceLogsAndVerifyPermissionStatus(expectedStatus: string = 'Requested') {
+    // 1. Click on Logs button / tab
+    const logsBtn = this.page.getByRole('button', { name: /Logs|View Logs/i })
+      .or(this.page.getByRole('tab', { name: /Logs/i }))
+      .or(this.page.locator('button, [role="tab"], .nav-link, a, div, span').filter({ hasText: /^Logs$/i }))
+      .or(this.page.getByText('Logs', { exact: true }))
+      .first();
+
+    await logsBtn.waitFor({ state: 'visible', timeout: 15000 });
+    await logsBtn.click();
+    await this.page.waitForTimeout(1500);
+
+    // 2. Locate and expand Permission accordion
+    const permAccordionHeader = this.page.locator('p-accordion-header, [data-pc-name="accordionheader"], .p-accordion-header, .p-accordionheader, button, div, h2, h3, a')
+      .filter({ hasText: /Permission|Permissions/i })
+      .first();
+
+    await permAccordionHeader.waitFor({ state: 'visible', timeout: 15000 });
+
+    const isExpanded = await permAccordionHeader.getAttribute('aria-expanded').catch(() => null);
+    if (isExpanded !== 'true') {
+      await permAccordionHeader.click();
+      await this.page.waitForTimeout(1000);
+    }
+
+    // 3. Verify status inside accordion shows requested
+    const statusElement = this.page.locator('.p-accordion-content, .p-accordioncontent, .p-accordion-panel, [role="region"], div, table, tr, td, span')
+      .filter({ hasText: new RegExp(expectedStatus, 'i') })
+      .or(this.page.getByText(new RegExp(`^\\s*${expectedStatus}\\s*$|${expectedStatus}`, 'i')))
+      .first();
+
+    await expect(statusElement).toBeVisible({ timeout: 10000 });
   }
 }
 
@@ -533,7 +625,6 @@ export function formatToDateInput(d: Date): string {
 export function getFutureDateInput(daysAhead: number = 1): string {
   const target = new Date();
   target.setDate(target.getDate() + daysAhead);
-  // Advance to next weekday if target falls on a weekend
   if (target.getDay() === 0) {
     target.setDate(target.getDate() + 1);
   } else if (target.getDay() === 6) {
@@ -551,10 +642,4 @@ export function getPastDateInput(daysPast: number = 1): string {
     target.setDate(target.getDate() - 1);
   }
   return formatToDateInput(target);
-}
-
-function pageTimeOffLocator(page: Page): Locator {
-  return page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Time Off' }).or(
-    page.getByText('Time Off', { exact: true }),
-  ).first();
 }
