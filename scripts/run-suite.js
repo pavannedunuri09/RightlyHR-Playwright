@@ -15,6 +15,8 @@ const projects = [
   '11-leave-category',
   '12-leave-allocation',
   '13-load-entitlements',
+  '14-leaves',
+  '15-onbehalf-leaves',
 ];
 
 let failed = false;

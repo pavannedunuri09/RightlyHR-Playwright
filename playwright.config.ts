@@ -111,7 +111,16 @@ export default defineConfig({
     },
     {
       name: '14-manage-shifts',
-      testMatch: /manage-shifts\.spec\.ts$/,
+      testMatch: /manage-shifts\.spec\.ts$/
+    },
+    {
+      name: '14-leaves',
+      testMatch: /(?:^|[\\/])leaves\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '15-onbehalf-leaves',
+      testMatch: /(?:^|[\\/])on-behalf-leaves\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
