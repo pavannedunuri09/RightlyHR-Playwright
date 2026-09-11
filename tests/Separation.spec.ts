@@ -21,14 +21,15 @@ test.describe.serial('Employee Separation Flow', () => {
             new LoginPage(employeePage);
 
         const username =
-            process.env.EMPLOYEE_USERNAME;
+            process.env.EMPLOYEE_USERNAME?.trim() ||
+            process.env.EMPLOYEE_EMAIL?.trim();
 
         const password =
-            process.env.EMPLOYEE_PASSWORD;
+            process.env.EMPLOYEE_PASSWORD?.trim();
 
         if (!username || !password) {
             throw new Error(
-                'Employee credentials are missing in .env'
+                'Set EMPLOYEE_USERNAME (or EMPLOYEE_EMAIL) and EMPLOYEE_PASSWORD in .env'
             );
         }
 
@@ -175,14 +176,15 @@ test.describe.serial('Manager Separation Flow', () => {
             new LoginPage(managerPage);
 
         const username =
-            process.env.MANAGER_USERNAME;
+            process.env.MANAGER_USERNAME?.trim() ||
+            process.env.MANAGER_EMAIL?.trim();
 
         const password =
-            process.env.MANAGER_PASSWORD;
+            process.env.MANAGER_PASSWORD?.trim();
 
         if (!username || !password) {
             throw new Error(
-                'Manager credentials are missing in .env'
+                'Set MANAGER_USERNAME and MANAGER_PASSWORD in .env'
             );
         }
 
@@ -390,14 +392,16 @@ test.describe.serial('HR Separation Flow', () => {
             new LoginPage(hrPage);
 
         const username =
-            process.env.HR_USERNAME;
+            process.env.HR_USERNAME?.trim() ||
+            process.env.LOGIN_EMAIL?.trim();
 
         const password =
-            process.env.HR_PASSWORD;
+            process.env.HR_PASSWORD?.trim() ||
+            process.env.LOGIN_PASSWORD?.trim();
 
         if (!username || !password) {
             throw new Error(
-                'HR credentials are missing in .env'
+                'Set HR_USERNAME and HR_PASSWORD in .env (or LOGIN_EMAIL and LOGIN_PASSWORD)'
             );
         }
 
