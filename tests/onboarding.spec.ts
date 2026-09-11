@@ -107,9 +107,11 @@ test.describe('Onboarding Flow', () => {
   let page: Page;
 
   test.beforeAll(async ({ browser }) => {
-    onboardingContext = await browser.newContext({ storageState: '.auth/user.json' });
+    onboardingContext = await browser.newContext();
     context = onboardingContext;
     page = await context.newPage();
+    const loginPage = new LoginPage(page);
+    await loginPage.loginFromEnv();
     const stored = loadLastOnboardingEmployee();
     if (stored?.email) {
       createdEmployee = stored;
@@ -125,7 +127,6 @@ test.describe('Onboarding Flow', () => {
   });
 
   test('Test-01: Navigate to Prospective Employees list as HR', async () => {
-    // Navigate directly to prospective employees page with saved storageState
     await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
 
     // Verify HR is in prospective employees list view & Add button is visible
@@ -247,25 +248,19 @@ test.describe('Onboarding Flow', () => {
     await yopmail.waitForMailSubject(createdEmployee.fullName, 120000, createdEmployee.email);
 
     const documentRequestPattern = /Request for Documents Upload|Request for Documents/i;
-    const { portal: portalTab, credentials } = await yopmail.readCredentialsAndOpenPortal(documentRequestPattern).catch(async () => {
-      await yopmail.openMatchingMailInViewer(documentRequestPattern);
+    await yopmail.openMatchingMailInViewer(documentRequestPattern);
+    const credentials = await yopmail.readCredentials({ preferPattern: documentRequestPattern }).catch(async () => {
       const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
-      const credentials = await yopmail.findCredentialsInInbox({
-        skipCached: true,
-        preferPattern: documentRequestPattern,
-      }).catch(async () => {
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
-        const mailBodyText = await mailFrame.locator('body').innerText();
-        const uMatch = mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
-        const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
-        return {
-          username: uMatch ? uMatch[1].trim() : createdEmployee.email,
-          password: pMatch ? pMatch[1].trim() : '',
-        };
-      });
-      const portalTab = await yopmail.openOnboardingPortal();
-      return { portal: portalTab, credentials };
+      await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
+      const mailBodyText = await mailFrame.locator('body').innerText();
+      const uMatch = mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
+      const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
+      return {
+        username: uMatch ? uMatch[1].trim() : createdEmployee.email,
+        password: pMatch ? pMatch[1].trim() : '',
+      };
     });
+    const portalTab = await yopmail.openOnboardingPortalFromDocumentRequestMail();
 
     const { username, password } = credentials;
     console.log(`Extracted credentials for ${createdEmployee.fullName} -> Username: ${username}, Password: ${password}`);
@@ -319,10 +314,11 @@ test.describe('Onboarding Flow', () => {
       await loginPage.loginFromEnv();
     }
 
-    await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
+    const employees = new ProspectiveEmployeePage(page);
+    await employees.openProspectiveEmployeesList();
+    await employees.openEmployeeProfile(createdEmployee);
 
     const docsHr = new OnboardingDocumentsHrPage(page);
-    await docsHr.openEmployeeProfileFromList(createdEmployee.email, createdEmployee.fullName);
     await docsHr.openFromProfile();
     await docsHr.verifyPendingDocuments();
 
@@ -408,27 +404,21 @@ test.describe('Onboarding Flow', () => {
     );
 
     const offerLetterPattern = /Offer Letter Issued|Offer Letter Released/i;
-    const { portal: portalTab, credentials } = await yopmail.readCredentialsAndOpenPortal(offerLetterPattern).catch(async () => {
-      await yopmail.openMatchingMailInViewer(offerLetterPattern);
-      const credentials = await yopmail.findCredentialsInInbox({
-        skipCached: true,
-        preferPattern: offerLetterPattern,
-      }).catch(async () => {
-        const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
-        const mailBodyText = await mailFrame.locator('body').innerText();
-        const uMatch =
-          mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) ||
-          mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
-        const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
-        return {
-          username: uMatch ? uMatch[1].trim() : createdEmployee.username ?? createdEmployee.email,
-          password: pMatch ? pMatch[1].trim() : createdEmployee.password ?? '',
-        };
-      });
-      const portalTab = await yopmail.openOnboardingPortalFromOfferLetterMail();
-      return { portal: portalTab, credentials };
+    await yopmail.openMatchingMailInViewer(offerLetterPattern);
+    const credentials = await yopmail.readCredentials({ preferPattern: offerLetterPattern }).catch(async () => {
+      const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
+      await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
+      const mailBodyText = await mailFrame.locator('body').innerText();
+      const uMatch =
+        mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) ||
+        mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
+      const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
+      return {
+        username: uMatch ? uMatch[1].trim() : createdEmployee.username ?? createdEmployee.email,
+        password: pMatch ? pMatch[1].trim() : createdEmployee.password ?? '',
+      };
     });
+    const portalTab = await yopmail.openOnboardingPortalFromOfferLetterMail();
 
     const { username, password } = credentials;
     console.log(`Extracted offer-letter credentials -> Username: ${username}, Password: ${password}`);
