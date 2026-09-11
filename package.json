@@ -32,6 +32,7 @@
     "test:trainee": "playwright test --project=17-prospective-trainee --headed --workers=1 --no-deps",
     "test:trainee:from07": "playwright test --project=17-prospective-trainee --grep \"Test-(0[7-9]|1[0-7])\" --headed --workers=1 --no-deps",
     "test:onboarding": "playwright test --project=18-onboarding --headed --workers=1 --no-deps",
+    "test:permissions": "playwright test --project=11-permissions --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },
   "keywords": [],
