@@ -107,7 +107,7 @@ test.describe('Onboarding Flow', () => {
   let page: Page;
 
   test.beforeAll(async ({ browser }) => {
-    onboardingContext = await browser.newContext();
+    onboardingContext = await browser.newContext({ storageState: '.auth/user.json' });
     context = onboardingContext;
     page = await context.newPage();
     const loginPage = new LoginPage(page);
@@ -127,6 +127,7 @@ test.describe('Onboarding Flow', () => {
   });
 
   test('Test-01: Navigate to Prospective Employees list as HR', async () => {
+    // Navigate directly to prospective employees page with saved storageState
     await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
 
     // Verify HR is in prospective employees list view & Add button is visible
@@ -181,7 +182,7 @@ test.describe('Onboarding Flow', () => {
     // 4. Verify success message/modal close
     await expect(page.getByText('Prospective employee created').or(page.getByText(/created successfully|added successfully/i)))
       .toBeVisible({ timeout: 15000 })
-      .catch(() => {});
+      .catch(() => { });
 
     // 5. Search for the newly created employee by full email
     const searchbox = page.getByRole('searchbox', { name: 'Username' }).or(page.getByRole('searchbox'));
@@ -231,7 +232,7 @@ test.describe('Onboarding Flow', () => {
     await expect(toast).toBeVisible({ timeout: 15000 });
 
     // Close the opened profile drawer so it doesn't linger into Test-04
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await page.waitForTimeout(1000);
   });
 
@@ -280,10 +281,10 @@ test.describe('Onboarding Flow', () => {
     portalUsernameForApp = username;
     saveLastOnboardingEmployee({ ...createdEmployee, username, password });
 
-    await mailTab.close().catch(() => {});
+    await mailTab.close().catch(() => { });
   });
 
-  test('Test-05: Click Go to Application, fill personal details, upload documents, and submit', async ({}, testInfo) => {
+  test('Test-05: Click Go to Application, fill personal details, upload documents, and submit', async ({ }, testInfo) => {
     test.setTimeout(180000);
     createdEmployee = ensureCreatedEmployee();
     const portalTab = await ensurePortalSession();
@@ -322,7 +323,7 @@ test.describe('Onboarding Flow', () => {
     await docsHr.openFromProfile();
     await docsHr.verifyPendingDocuments();
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
 
     const searchbox = page.getByRole('searchbox', { name: 'Username' }).or(page.getByRole('searchbox'));
@@ -388,7 +389,7 @@ test.describe('Onboarding Flow', () => {
       .toBeVisible({ timeout: 20000 });
   });
 
-  test('Test-09: Accept offer letter via Yopmail and submit academic and emergency details', async ({}, testInfo) => {
+  test('Test-09: Accept offer letter via Yopmail and submit academic and emergency details', async ({ }, testInfo) => {
     test.setTimeout(isHeadedYopmailRun() ? 1_200_000 : 600_000);
     createdEmployee = ensureCreatedEmployee();
 
@@ -445,7 +446,7 @@ test.describe('Onboarding Flow', () => {
 
     portalTabForApp = portalTab;
     portalUsernameForApp = username;
-    await mailTab.close().catch(() => {});
+    await mailTab.close().catch(() => { });
 
     await page.bringToFront();
     if (page.url().includes('/login') || (await page.getByRole('textbox', { name: 'Please enter email' }).isVisible().catch(() => false))) {
@@ -489,7 +490,7 @@ test.describe('Onboarding Flow', () => {
     await onboardingInfo.openFromProfile();
     await onboardingInfo.setStatusActiveAndSave();
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await employees.expectEmployeeHiddenInList(createdEmployee.email);
     console.log(`${createdEmployee.email} removed from prospective employees`);
 
@@ -530,7 +531,7 @@ test.describe('Onboarding Flow', () => {
 
     await expect(page.getByText(/Basic information updated|Contact Information updated|Job details updated/i).first())
       .toBeVisible({ timeout: 15000 })
-      .catch(() => {});
+      .catch(() => { });
     console.log(
       `Probation employee updated -> ID: ${createdEmployee.employeeId}, Work mail: ${createdEmployee.workEmail}`,
     );
