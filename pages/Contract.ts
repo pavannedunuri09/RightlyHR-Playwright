@@ -21,6 +21,7 @@ export class Contract {
     readonly employees: Locator;
     readonly prospectiveEmployeeTab: Locator;
     readonly contractorsTab: Locator;
+    activeEmployeeName: string = '';
     readonly addContractEmployeeButton: Locator;
 
     // Add Contract Employee form
@@ -375,8 +376,8 @@ export class Contract {
             const currentUrl = onboardingPage.url();
             try {
                 const origin = new URL(currentUrl).origin;
-                await onboardingPage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-            } catch {}
+                await onboardingPage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' }).catch(() => { });
+            } catch { }
         }
 
         if (!(await usernameInput.isVisible({ timeout: 10000 }).catch(() => false))) {
@@ -394,7 +395,7 @@ export class Contract {
                         passwordsToTry.push(c.password);
                     }
                 }
-            } catch {}
+            } catch { }
         }
 
         for (let attempt = 0; attempt < passwordsToTry.length; attempt++) {
@@ -413,7 +414,7 @@ export class Contract {
             const isInvalid = await invalidMsg.first().isVisible({ timeout: 4000 }).catch(() => false);
 
             if (!isInvalid) {
-                await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+                await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => { });
                 await onboardingPage.waitForTimeout(1000);
                 const goToApp = onboardingPage.getByRole('button', { name: 'Go to Application' });
                 if (await goToApp.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -426,8 +427,8 @@ export class Contract {
 
             console.log(`Login attempt ${attempt + 1} failed with Invalid Credentials`);
             if (attempt < passwordsToTry.length - 1) {
-                await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
-                await usernameInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+                await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
+                await usernameInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
             }
         }
 
@@ -438,13 +439,13 @@ export class Contract {
             const yop = new YopmailPage(yopmailPage);
             for (let poll = 0; poll < 6; poll++) {
                 await yopmailPage.waitForTimeout(5000);
-                await yopmailPage.locator('#refresh, button#refresh, a#refresh').first().click().catch(() => {});
+                await yopmailPage.locator('#refresh, button#refresh, a#refresh').first().click().catch(() => { });
                 const freshCreds = await yop.findAllCredentialsInInbox().catch(() => []);
                 for (const fc of freshCreds) {
                     if (fc.password && !passwordsToTry.includes(fc.password)) {
                         console.log(`New credentials received in Yopmail: trying new password...`);
                         await onboardingPage.bringToFront();
-                        await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+                        await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
                         await usernameInput.waitFor({ state: 'visible', timeout: 10000 });
                         await usernameInput.fill(username);
                         await onboardingPage.getByRole('textbox', { name: 'Password*' }).fill(fc.password);
@@ -452,7 +453,7 @@ export class Contract {
 
                         const invalid = await onboardingPage.getByText(/Invalid Credentials/i).first().isVisible({ timeout: 4000 }).catch(() => false);
                         if (!invalid) {
-                            await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+                            await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => { });
                             const goToApp = onboardingPage.getByRole('button', { name: 'Go to Application' });
                             if (await goToApp.isVisible({ timeout: 3000 }).catch(() => false)) {
                                 await goToApp.click();
@@ -815,8 +816,8 @@ export class Contract {
             const rowText = await targetRow.innerText().catch(() => '');
             console.log(`Approving document row: ${rowText.replace(/\s+/g, ' ').trim()}`);
 
-            await this.page.keyboard.press('Escape').catch(() => {});
-            await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+            await this.page.keyboard.press('Escape').catch(() => { });
+            await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 2000 }).catch(() => { });
 
             const kebab = targetRow.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted, .dropdown-toggle').last();
             await kebab.scrollIntoViewIfNeeded();
@@ -845,8 +846,8 @@ export class Contract {
             }
 
             const toast = this.page.getByText(/Document verified successfully|verified successfully/i);
-            await toast.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-            await toast.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+            await toast.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => { });
+            await toast.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => { });
             await this.page.waitForTimeout(1000);
         }
 
@@ -868,7 +869,7 @@ export class Contract {
     async clickGenerateDocuments() {
         await this.page.bringToFront();
         await this.page.waitForTimeout(500);
-        await this.page.keyboard.press('Escape').catch(() => {});
+        await this.page.keyboard.press('Escape').catch(() => { });
 
         const generateBtn = this.page.getByRole('button', { name: 'Generate Documents' })
             .or(this.page.getByText('Generate Documents', { exact: true }));
@@ -944,8 +945,8 @@ export class Contract {
     }
 
     private async selectAddressDropdown() {
-        await this.page.keyboard.press('Escape').catch(() => {});
-        await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+        await this.page.keyboard.press('Escape').catch(() => { });
+        await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => { });
         await this.page.waitForTimeout(500);
 
         const currentAddress = this.page.getByRole('option', { name: 'Current Address' });
@@ -967,7 +968,7 @@ export class Contract {
             if (await addressOption.isVisible({ timeout: 4000 }).catch(() => false)) {
                 break;
             }
-            await this.page.keyboard.press('Escape').catch(() => {});
+            await this.page.keyboard.press('Escape').catch(() => { });
             await this.page.waitForTimeout(1000);
         }
 
@@ -984,7 +985,7 @@ export class Contract {
     }
 
     private async selectComboboxOption(comboboxName: RegExp | string, preferredText?: RegExp | string) {
-        await this.page.keyboard.press('Escape').catch(() => {});
+        await this.page.keyboard.press('Escape').catch(() => { });
         await this.page.waitForTimeout(300);
 
         const combobox = this.page.getByRole('combobox', { name: comboboxName }).first();
@@ -994,7 +995,7 @@ export class Contract {
         if (!(await combobox.isEnabled().catch(() => false))) {
             return;
         }
-        await combobox.scrollIntoViewIfNeeded().catch(() => {});
+        await combobox.scrollIntoViewIfNeeded().catch(() => { });
         await combobox.click();
         await this.page.waitForTimeout(400);
 
@@ -1022,7 +1023,7 @@ export class Contract {
         const salary = this.page.getByRole('spinbutton', {
             name: 'Please enter salary'
         });
-        await salary.scrollIntoViewIfNeeded().catch(() => {});
+        await salary.scrollIntoViewIfNeeded().catch(() => { });
         await salary.fill('100000');
 
         await this.selectComboboxOption(/frequency/i, 'Yearly');
@@ -1031,7 +1032,7 @@ export class Contract {
         const futureDate = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
 
         const issued = this.page.getByPlaceholder('Please enter offer issued date');
-        await issued.scrollIntoViewIfNeeded().catch(() => {});
+        await issued.scrollIntoViewIfNeeded().catch(() => { });
         await issued.fill(today).catch(() => { });
         await this.page.getByPlaceholder('Please enter expected start').fill(today).catch(() => { });
         await this.page.getByPlaceholder('Please enter offer expiry date').fill(futureDate).catch(() => { });
@@ -1177,11 +1178,11 @@ export class Contract {
         await yopmail.waitForMailMatching(offerPattern, 60000).catch(() => {
             console.log('waitForMailMatching for Offer Letter timed out, checking inbox directly...');
         });
-        await yopmail.openMatchingMailInViewer(offerPattern).catch(() => {});
+        await yopmail.openMatchingMailInViewer(offerPattern).catch(() => { });
 
         // Prefer reading directly from open ifmail iframe (which is the actual opened mail)
         const mailFrame = yopmailPage.locator('iframe[name="ifmail"]').contentFrame();
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
         const bodyText = await mailFrame.locator('body').innerText().catch(() => '');
         const uMatch = bodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || bodyText.match(/Username\s*[:*]\s*(\S+)/i);
         const pMatch = bodyText.match(/Password\s*[:*]\s*(\S+)/i);
@@ -1247,15 +1248,15 @@ export class Contract {
             if (await logoutBtn.first().isVisible({ timeout: 2000 }).catch(() => false)) {
                 await logoutBtn.first().click();
             } else {
-                await onboardingPage.context().clearCookies().catch(() => {});
+                await onboardingPage.context().clearCookies().catch(() => { });
                 await onboardingPage.evaluate(() => {
                     try {
                         localStorage.clear();
                         sessionStorage.clear();
-                    } catch {}
-                }).catch(() => {});
+                    } catch { }
+                }).catch(() => { });
                 const origin = new URL(onboardingPage.url()).origin;
-                await onboardingPage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+                await onboardingPage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' }).catch(() => { });
             }
         }
         await usernameField.waitFor({ state: 'visible', timeout: 15000 });
@@ -1286,15 +1287,15 @@ export class Contract {
 
         const issued = this.page.getByPlaceholder('Please enter offer issued date');
         if (await issued.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await issued.fill(today).catch(() => {});
+            await issued.fill(today).catch(() => { });
         }
         const expected = this.page.getByPlaceholder('Please enter expected start');
         if (await expected.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await expected.fill(today).catch(() => {});
+            await expected.fill(today).catch(() => { });
         }
         const expiry = this.page.getByPlaceholder('Please enter offer expiry date');
         if (await expiry.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await expiry.fill(futureDate).catch(() => {});
+            await expiry.fill(futureDate).catch(() => { });
         }
 
         await this.selectComboboxOption(/document type/i, 'Soft Copy');
@@ -1330,7 +1331,7 @@ export class Contract {
     async acceptContractOffer(onboardingPage: Page) {
         const offerPage = new PreOnboardingOfferLetterPage(onboardingPage);
         await offerPage.acceptIfNeeded();
-        await offerPage.continueAfterAccept().catch(() => {});
+        await offerPage.continueAfterAccept().catch(() => { });
         await onboardingPage.waitForTimeout(1000);
     }
 
@@ -1397,7 +1398,7 @@ export class Contract {
         for (let i = 0; i < dateCount; i++) {
             const input = dateInputs.nth(i);
             if (await input.isVisible().catch(() => false) && !(await input.inputValue().catch(() => ''))) {
-                await input.fill(today).catch(() => {});
+                await input.fill(today).catch(() => { });
             }
         }
     }
@@ -1468,7 +1469,7 @@ export class Contract {
             .or(onboardingPage.locator('app-detailed-step-progressbar').getByText(/Non-Disclosure Agreement Letter/i).first())
             .or(onboardingPage.locator('.number-container .step').filter({ hasText: '7' }).first());
         if (await ndaStepText.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await ndaStepText.click().catch(() => {});
+            await ndaStepText.click().catch(() => { });
             await onboardingPage.waitForTimeout(1000);
             if (await isNdaScreen()) {
                 console.log('Navigated to NDA Letter screen via progress bar click.');
@@ -1504,7 +1505,7 @@ export class Contract {
                 .or(onboardingPage.getByRole('button', { name: 'Skip & continue' }));
 
             if (await next.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-                await next.first().scrollIntoViewIfNeeded().catch(() => {});
+                await next.first().scrollIntoViewIfNeeded().catch(() => { });
                 await next.first().click();
                 await onboardingPage.waitForTimeout(1500);
             } else {
@@ -1529,8 +1530,8 @@ export class Contract {
             .or(page.getByRole('button', { name: /Approve|Accept/i }));
 
         await approve.first().waitFor({ state: 'visible', timeout: 25000 });
-        await approve.first().scrollIntoViewIfNeeded().catch(() => {});
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+        await approve.first().scrollIntoViewIfNeeded().catch(() => { });
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => { });
         await expect(approve.first()).toBeEnabled({ timeout: 10000 });
 
         console.log('Clicking Approve / Accept button on NDA Letter...');
@@ -1551,7 +1552,7 @@ export class Contract {
         const next = page.getByRole('button', { name: 'Next', exact: true })
             .or(page.getByRole('button', { name: /^Next$/i }));
         await next.first().waitFor({ state: 'visible', timeout: 15000 });
-        await next.first().scrollIntoViewIfNeeded().catch(() => {});
+        await next.first().scrollIntoViewIfNeeded().catch(() => { });
         await expect(next.first()).toBeEnabled({ timeout: 10000 });
         await next.first().click();
         await page.waitForTimeout(1500);
@@ -1567,7 +1568,7 @@ export class Contract {
                 .or(page.locator('app-detailed-step-progressbar').getByText(/Review/i).first());
             if (await reviewStep.isVisible({ timeout: 2000 }).catch(() => false)) {
                 console.log('Clicking Review step in progress bar...');
-                await reviewStep.click().catch(() => {});
+                await reviewStep.click().catch(() => { });
                 await page.waitForTimeout(1500);
             }
         }
@@ -1579,7 +1580,7 @@ export class Contract {
         const submit = page.getByRole('button', { name: 'Submit', exact: true })
             .or(page.getByRole('button', { name: /^Submit$/i }));
         await submit.first().waitFor({ state: 'visible', timeout: 15000 });
-        await submit.first().scrollIntoViewIfNeeded().catch(() => {});
+        await submit.first().scrollIntoViewIfNeeded().catch(() => { });
         await expect(submit.first()).toBeEnabled({ timeout: 10000 });
         await submit.first().click();
         await page.waitForTimeout(1000);
@@ -1673,8 +1674,15 @@ export class Contract {
             console.log('Status: NDA letter accepted (row found)');
         }
 
-        // Click the employee name link in the row to open the contractor profile
+        // Capture employee name from the row before navigating
         const empLink = empRow.locator('a.data-nav-btn, a').first();
+        const clickedName = (await empLink.innerText().catch(() => '')) || (await empRow.getByRole('cell').nth(1).innerText().catch(() => ''));
+        if (clickedName.trim()) {
+            this.activeEmployeeName = clickedName.trim().replace(/\s+/g, ' ');
+            console.log(`Selected contractor for onboarding: ${this.activeEmployeeName}`);
+        }
+
+        // Click the employee name link in the row to open the contractor profile
         if (await empLink.isVisible({ timeout: 5000 }).catch(() => false)) {
             await empLink.click();
         } else {
@@ -1754,13 +1762,25 @@ export class Contract {
     }
 
     async searchActiveContractEmployee(employeeName: string) {
+        const targetName = this.activeEmployeeName || employeeName;
         const search = this.page.getByRole('searchbox', { name: 'Username' })
             .or(this.page.getByPlaceholder(/search|username/i));
         await search.first().waitFor({ state: 'visible', timeout: 10000 });
-        await search.first().fill(employeeName);
+        const nameParts = targetName.trim().split(/\s+/);
+        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : targetName;
+        await search.first().fill(lastName);
+        await search.first().press('Enter');
         await this.page.waitForTimeout(1000);
-        const employee = this.page.getByRole('cell', { name: employeeName, exact: true })
-            .or(this.page.getByText(employeeName, { exact: true })).first();
+        let employee = this.page.getByRole('cell', { name: new RegExp(lastName, 'i') })
+            .or(this.page.getByText(new RegExp(lastName, 'i'))).first();
+        if (!(await employee.isVisible({ timeout: 5000 }).catch(() => false))) {
+            await search.first().fill('');
+            await search.first().fill(targetName);
+            await search.first().press('Enter');
+            await this.page.waitForTimeout(1000);
+            employee = this.page.getByRole('cell', { name: targetName, exact: true })
+                .or(this.page.getByText(targetName, { exact: true })).first();
+        }
         await expect(employee).toBeVisible({ timeout: 15000 });
     }
 }
