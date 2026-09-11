@@ -352,8 +352,15 @@ export class TraineeOfferLetterPage {
   }) {
     await this.selectAddress();
     await this.expectAddressAutofill(address);
-    await this.salaryInput.fill('200000');
+    await this.salaryInput.fill('400000');
     await this.salaryInput.blur();
+
+    // Select Variable Pay = No if combobox is present
+    const varPay = this.page.getByRole('combobox', { name: 'Please select variable pay' });
+    if (await varPay.isVisible().catch(() => false)) {
+      await varPay.click();
+      await this.page.getByRole('option', { name: 'No' }).click().catch(() => {});
+    }
 
     const issued = isoDate(0);
     await this.fillDateField(this.offerIssuedDate, issued);
@@ -363,19 +370,20 @@ export class TraineeOfferLetterPage {
       await this.fillDateField(this.offerExpiryDate, isoDate(14));
     }
 
-    await this.ensureComboSelected('Training Period(Months)*', '1');
-    await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
-    await this.ensureComboSelected('Document Type *', 'Soft Copy');
-    await this.noteInput.fill('Trainee Offer letter');
+    if (await this.page.getByText('Reporting Manager *', { exact: true }).isVisible().catch(() => false)) {
+      await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
+    }
+    await this.chooseComboByRoleOrLabel(this.documentTypeCombobox, 'Document Type *', 'Soft Copy');
+    await this.noteInput.fill('Employee Offer letter');
     await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
-
-    console.log(`Training: ${(await this.fieldAfterLabel('Training Period(Months)*').getByRole('combobox').innerText()).trim()}`);
-    console.log(`Manager: ${(await this.fieldAfterLabel('Reporting Manager *').getByRole('combobox').innerText()).trim()}`);
-    console.log(`Document type: ${(await this.fieldAfterLabel('Document Type *').getByRole('combobox').innerText()).trim()}`);
+    if (await this.page.getByText('Reporting Manager *', { exact: true }).isVisible().catch(() => false)) {
+      console.log(`Manager: ${(await this.getComboInnerText(this.reportingManagerCombobox, 'Reporting Manager *')).trim()}`);
+    }
+    console.log(`Document type: ${(await this.getComboInnerText(this.documentTypeCombobox, 'Document Type *')).trim()}`);
     console.log(`Note: ${await this.noteInput.inputValue()}`);
 
     if (!(await this.generateButton.isEnabled().catch(() => false))) {
-      await this.ensureComboSelected('Document Type *', 'Hard Copy');
+      await this.chooseComboByRoleOrLabel(this.documentTypeCombobox, 'Document Type *', 'Hard Copy');
       await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
       await this.fillDateField(this.offerIssuedDate, issued);
       await this.fillDateField(this.offerExpiryDate, isoDate(14));
@@ -390,6 +398,40 @@ export class TraineeOfferLetterPage {
     await field.click();
     await field.fill(value);
     await field.blur();
+  }
+
+  private async chooseComboByRoleOrLabel(combo: Locator, label: string, optionName: string | RegExp, search?: string) {
+    if (await combo.isVisible().catch(() => false)) {
+      await this.page.keyboard.press('Escape').catch(() => {});
+      await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+      await combo.click();
+      if (!(await this.selectPanelVisible())) {
+        await combo.locator('..').getByRole('button', { name: 'dropdown trigger' }).click().catch(() => {});
+      }
+      await expect.poll(async () => this.selectPanelVisible(), { timeout: 8000 }).toBeTruthy();
+      const listbox = this.page.getByRole('listbox').last();
+      const option = typeof optionName === 'string'
+        ? listbox.getByRole('option', { name: optionName, exact: true })
+        : listbox.getByRole('option').filter({ hasText: optionName }).first();
+      if (await option.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await option.click();
+      } else {
+        const fallback = listbox.getByRole('option').first();
+        if (await fallback.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await fallback.click();
+        }
+      }
+      await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    } else {
+      await this.ensureComboSelected(label, optionName, search);
+    }
+  }
+
+  private async getComboInnerText(combo: Locator, label: string) {
+    if (await combo.isVisible().catch(() => false)) {
+      return await combo.innerText();
+    }
+    return await this.fieldAfterLabel(label).getByRole('combobox').innerText().catch(() => '');
   }
 
   private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {

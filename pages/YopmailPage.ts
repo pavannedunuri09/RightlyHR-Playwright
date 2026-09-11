@@ -1264,7 +1264,7 @@ function defaultPreOnboardingBaseUrl() {
   return (
     process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
     process.env.RHR_BASE_URL?.trim() ||
-    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
+    'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com'
   ).replace(/\/$/, '');
 }
 

@@ -30,6 +30,7 @@ export class PreOnboardingPage {
   async login(username: string, password: string) {
     await this.usernameInput.fill(username);
     await this.passwordInput.fill(password);
+    await expect(this.loginButton).toBeEnabled({ timeout: 15000 }).catch(() => {});
     await this.loginButton.click();
   }
 

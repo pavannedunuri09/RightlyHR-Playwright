@@ -45,19 +45,33 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
+  outputDir: path.resolve(process.env.LOCALAPPDATA || process.cwd(), 'playwright-results'),
   use: {
     baseURL,
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     video: 'on',
+    screenshot: 'only-on-failure',
     actionTimeout: 15000,
     navigationTimeout: 45000,
   },
 
   projects: [
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: '.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
     {
       name: '01-login',
       testMatch: /(?:^|[\\/])login\.spec\.ts$/,
@@ -204,13 +218,5 @@ export default defineConfig({
       testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
   ],
 });

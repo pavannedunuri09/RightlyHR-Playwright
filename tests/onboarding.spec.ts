@@ -247,11 +247,16 @@ test.describe('Onboarding Flow', () => {
 
     // 2. Wait for document request mail & open it in viewer
     await yopmail.waitForMailSubject(createdEmployee.fullName, 120000, createdEmployee.email);
+    await yopmail.openMatchingMailInViewer(/Request for Documents Upload|Request for Documents/i);
 
-    const documentRequestPattern = /Request for Documents Upload|Request for Documents/i;
-    await yopmail.openMatchingMailInViewer(documentRequestPattern);
-    const credentials = await yopmail.readCredentials({ preferPattern: documentRequestPattern }).catch(async () => {
-      const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
+    // 3. Extract credentials via YopmailPage helper
+    const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
+
+    const credentials = await yopmail.findCredentialsInInbox({
+      skipCached: true,
+      preferPattern: /Request for Documents Upload|Request for Documents/i,
+    }).catch(async () => {
+      // Fallback: parse from live iframe body if helper poll missed
       await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
       const mailBodyText = await mailFrame.locator('body').innerText();
       const uMatch = mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
@@ -261,12 +266,12 @@ test.describe('Onboarding Flow', () => {
         password: pMatch ? pMatch[1].trim() : '',
       };
     });
-    const portalTab = await yopmail.openOnboardingPortalFromDocumentRequestMail();
 
     const { username, password } = credentials;
     console.log(`Extracted credentials for ${createdEmployee.fullName} -> Username: ${username}, Password: ${password}`);
 
-    // 4. Pre-onboarding portal opened from email "Click here" link
+    // 4. Open Pre-onboarding portal from email link
+    const portalTab = await yopmail.openOnboardingPortalFromDocumentRequestMail();
 
     // 5. Fill login credentials received via Yopmail and log in
     const preOnboarding = new PreOnboardingPage(portalTab);
