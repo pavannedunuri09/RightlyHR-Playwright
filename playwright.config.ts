@@ -20,13 +20,15 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
+  outputDir: path.resolve(process.env.LOCALAPPDATA || process.cwd(), 'playwright-results'),
   use: {
     baseURL: 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : 1000,
     },
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
     actionTimeout: 15000,
     navigationTimeout: 45000,
   },
