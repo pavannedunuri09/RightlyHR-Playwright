@@ -20,6 +20,7 @@
     "test:probation-from-14": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"14. RM Confirm|15. Verify Approved status and confirm|16. HR Process probation\"",
     "test:probation-from-17": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"Generate Document and Move to Active\"",
     "test:probation-extend": "playwright test --project=08-probation --headed --workers=1 --no-deps -g \"HR Reject and Extend from Rejected\"",
+    "test:personalization": "playwright test --project=06-personalization --headed --workers=1 --no-deps",
     "test:headed": "playwright test --headed --workers=1 --no-deps",
     "test:holidays": "playwright test --project=06-holidays --headed --workers=1 --no-deps",
     "test:codegen-holidays": "playwright test --project=07-codegen-holidays --headed --workers=1 --no-deps",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.4.1",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "xlsx": "^0.18.5"
   }
 }
