@@ -189,8 +189,8 @@ test.describe('My Info Module Automation Suite', () => {
       university: university,
       specialization: 'CSE',
       gpa: '8',
-      fromDate: '2014-06-01',
-      toDate: '2018-05-30',
+      fromDate: '2006-06-01',
+      toDate: '2010-05-30',
     });
     await expect(myInfoPage.getTableRow(university)).toBeVisible();
 

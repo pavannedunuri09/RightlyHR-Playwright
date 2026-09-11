@@ -102,7 +102,7 @@ export class MyInfoPage {
   constructor(private page: Page) {
     this.defaultAttachmentPath = path.resolve(
       __dirname,
-      '../tests/images/Screenshot 2026-07-15 210525.png'
+      '../tests/images/pexels-quang-nguyen-vinh-222549-6348018.jpg'
     );
   }
 
@@ -231,17 +231,29 @@ export class MyInfoPage {
   }
 
   private async setFileInput(buttonOrInput: Locator, filePath: string) {
-    const dialog = this.page.locator('.modal.show, ngb-modal-window, [role="dialog"]').first();
+    const dialog = this.page.locator('.modal.show, ngb-modal-window, [role="dialog"], .p-dialog').first();
     const modalInput = dialog.locator('input[type="file"]').first();
 
     if (await modalInput.count() > 0) {
       await modalInput.setInputFiles(filePath);
-    } else if (await this.page.locator('input[type="file"]').count() > 0) {
-      await this.page.locator('input[type="file"]').first().setInputFiles(filePath);
-    } else {
+      await modalInput.evaluate((el: HTMLInputElement) => {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }).catch(() => {});
+    } else if (await buttonOrInput.isVisible({ timeout: 1000 }).catch(() => false)) {
       await buttonOrInput.setInputFiles(filePath);
+      await buttonOrInput.evaluate((el: HTMLInputElement) => {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }).catch(() => {});
+    } else {
+      const lastInput = this.page.locator('input[type="file"]').last();
+      await lastInput.setInputFiles(filePath);
+      await lastInput.evaluate((el: HTMLInputElement) => {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }).catch(() => {});
     }
-    await this.page.waitForTimeout(500);
   }
 
   private async confirmYes() {
@@ -556,6 +568,12 @@ export class MyInfoPage {
 
   async addIdentity(data: IdentityData) {
     await this.openIdentityInfo();
+
+    const existingTypeRow = this.getTableRow(data.type);
+    if (await existingTypeRow.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await this.deleteIdentity(data.type).catch(() => {});
+    }
+
     await this.page.getByText('Add New', { exact: true }).click();
 
     const typeDropdown = this.page.getByRole('combobox', { name: 'Please select identity type' });
@@ -569,7 +587,8 @@ export class MyInfoPage {
     const filePath = data.filePath || this.defaultAttachmentPath;
     await this.setFileInput(this.page.getByRole('button', { name: 'Choose File' }), filePath);
 
-    const addButton = this.page.getByRole('button', { name: 'Add', exact: true });
+    const dialog = this.page.locator('.modal.show, ngb-modal-window, [role="dialog"], .p-dialog').first();
+    const addButton = dialog.getByRole('button', { name: 'Add', exact: true });
     await expect(addButton).toBeEnabled();
     await addButton.click();
 
@@ -1286,6 +1305,7 @@ export class MyInfoPage {
       .filter({ hasText: config.expectedHeading })
       .or(this.page.getByRole('heading', { name: config.expectedHeading }))
       .or(this.page.getByText(config.expectedHeading))
+      .filter({ visible: true })
       .first();
 
     await expect(heading).toBeVisible({ timeout: 15000 });

@@ -92,8 +92,11 @@ export class ManageWeekendsPage {
   // =====================================================
 
   async openEmployeeFields() {
-    // Open sidebar
-    await this.page.locator('rect').first().click();
+    const isVisible = await this.employeeFieldsButton.isVisible().catch(() => false);
+    if (!isVisible) {
+      // Open sidebar if not already visible
+      await this.page.locator('rect').first().click().catch(() => {});
+    }
 
     // Open Employee Fields
     await this.employeeFieldsButton.click();

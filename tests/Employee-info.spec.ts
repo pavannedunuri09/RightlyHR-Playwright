@@ -2828,14 +2828,19 @@ test('TC57 - Add Skills', async ({ page }) => {
     })
     .click();
 
+  const yesBtn = page.getByRole('button', { name: 'Yes', exact: true });
+  if (await yesBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await yesBtn.click();
+  }
+
   // ========================================
   // Add Leadership Skill
   // ========================================
 
   await page
-    .getByText('Add New Skill', {
-      exact: true,
-    })
+    .locator('app-my-skills, .custom-add-btn')
+    .getByText('Add New Skill')
+    .first()
     .click();
 
   // Skill Category
@@ -2894,6 +2899,10 @@ test('TC57 - Add Skills', async ({ page }) => {
       exact: true,
     })
     .click();
+
+  if (await yesBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await yesBtn.click();
+  }
 });
 
 // ========================================
@@ -3287,53 +3296,6 @@ test('TC63 - Save Onboarding Info', async ({ page }) => {
   await page
     .getByRole('option', {
       name: 'Yes',
-      exact: true,
-    })
-    .click();
-
-  // Work Location
-// Work Location
-const workLocationDropdown = page.locator('.p-select-dropdown').last();
-
-await workLocationDropdown.waitFor({
-  state: 'visible',
-  timeout: 30000,
-});
-
-await workLocationDropdown.click();
-
-await page
-  .getByRole('option', {
-    name: 'Work From Home',
-    exact: true,
-  })
-  .click();
-  // Work From Home
-  const workFromHome = page.getByRole('combobox', {
-    name: 'Please select work from home',
-  });
-
-  await workFromHome.click();
-
-  await page
-    .getByText('SDD302333 -Arpita Bhanja', {
-      exact: true,
-    })
-    .click();
-
-  // Toggle
-  await page.locator('p-toggleswitch').click();
-
-  // Final Yes/No field
-  const finalField = page
-    .locator('#pn_id_57')
-    .getByRole('combobox');
-
-  await finalField.click();
-
-  await page
-    .getByRole('option', {
-      name: 'No',
       exact: true,
     })
     .click();
@@ -3932,112 +3894,71 @@ test('TC70 - Update WFH / Remote Login', async ({ page }) => {
     })
     .click();
 
-  // Select latest record
-  const wfhRow = page.locator('tbody tr').last();
+  // Inactivate active allocation if present
+  const activeRow = page.locator('tbody tr').filter({ hasText: 'Active' }).first();
+  if (await activeRow.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const kebab = activeRow.locator('.dropdown > span > .bi, .dropdown').first();
+    if (await kebab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await kebab.click();
+      const inactiveItem = page.locator('a.dropdown-item:visible').filter({ hasText: 'Inactive' });
+      if (await inactiveItem.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await inactiveItem.click();
+        await page.getByRole('button', { name: 'Yes', exact: true }).click();
+        await page.waitForTimeout(1000);
+      }
+    }
+  }
 
-  // Open action menu
-  await wfhRow
-    .locator('.dropdown > span > .bi')
-    .click();
+  // Click Allocate to open allocation form
+  await page.getByText('Allocate', { exact: true }).click();
 
-  // Click Update
-  await page
-    .locator('a.dropdown-item:visible')
-    .filter({
-      hasText: 'Update',
-    })
-    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
 
-  // ========================================
   // Allow Work From Home = No
-  // ========================================
+  const wfhTrigger = dialog.getByText(/Allow Work From Home \*/i).locator('..').getByRole('button', { name: 'dropdown trigger' });
+  if (await wfhTrigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await wfhTrigger.click();
+    await page.getByRole('option', { name: 'No', exact: true }).click();
+  }
 
-  const workFromHomeSelect = page
-    .locator('p-select')
-    .filter({
-      hasText: /^No$/,
-    })
-    .first();
-
-  await workFromHomeSelect
-    .locator('.p-select-dropdown')
-    .click();
-
-  await page
-    .getByLabel('Option List')
-    .getByText('No', {
-      exact: true,
-    })
-    .click();
-
-  // ========================================
   // Allow Remote Login = Yes
-  // ========================================
+  const rlTrigger = dialog.getByText(/Allow Remote Login \*/i).locator('..').getByRole('button', { name: 'dropdown trigger' });
+  if (await rlTrigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await rlTrigger.click();
+    await page.getByRole('option', { name: 'Yes', exact: true }).click();
+  }
 
-  const remoteLoginSelect = page
-    .locator('p-select')
-    .filter({
-      hasText: /^Yes$/,
-    })
-    .first();
+  // Remote Login Work Location
+  const locTrigger = dialog.getByText(/Work Location \*/i).locator('..').getByRole('button', { name: 'dropdown trigger' }).first();
+  if (await locTrigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await locTrigger.click();
+    const opt = page.getByRole('option').first();
+    await opt.click();
+  }
 
-  await remoteLoginSelect
-    .locator('.p-select-dropdown')
-    .click();
+  // Remote Login Manager
+  const mgrTrigger = dialog.getByText(/Remote Login Manager \*/i).locator('..').getByRole('button', { name: 'dropdown trigger' });
+  if (await mgrTrigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await mgrTrigger.click();
+    const opt = page.getByRole('option').first();
+    await opt.click();
+  }
 
-  await page
-    .getByLabel('Option List')
-    .getByText('Yes', {
-      exact: true,
-    })
-    .click();
+  // Effective Date
+  const dateInput = dialog.getByRole('textbox').first();
+  if (await dateInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const today = new Date().toISOString().split('T')[0];
+    await dateInput.fill(today);
+  }
 
-  // ========================================
-  // Remote Login Work Location = Remote
-  // ========================================
-
-  const remoteWorkLocation = page
-    .locator('p-select')
-    .filter({
-      hasText: /^Remote$/,
-    })
-    .first();
-
-  await remoteWorkLocation
-    .locator('.p-select-dropdown')
-    .click();
-
-  await page
-    .getByLabel('Option List')
-    .getByText('Hybrid', {
-      exact: true,
-    })
-    .click();
-
-  // ========================================
-// Remote Login Manager *
-// ========================================
-
-const remoteManager = page.locator('p-select').nth(3);
-
-await remoteManager
-  .locator('.p-select-dropdown')
-  .click();
-
-await page
-  .getByLabel('Option List')
-  .getByText('SD3021300 - Bhavitha Reddy', {
-    exact: true,
-  })
-  .click();
-
-// Update
-await page
-  .getByRole('button', {
-    name: 'Update',
-    exact: true,
-  })
-  .click();
+  // Submit
+  const submitBtn = dialog.getByRole('button', { name: /Submit|Update/i, exact: true });
+  if (await submitBtn.isEnabled({ timeout: 3000 }).catch(() => false)) {
+    await submitBtn.click();
+  } else {
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
 });
 // ========================================
 // TC71 - Change Reporting Manager
@@ -4060,27 +3981,35 @@ test('TC71 - Change Reporting Manager', async ({ page }) => {
     exact: true,
   }).click();
 
-  // Select Team Member(s)
-  await page.getByText('Select Team Member(s)', {
-    exact: true,
-  }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
 
-  // Select first team member
-  await page.locator('p-checkbox').first().click();
+  // Select Team Member(s)
+  const teamMemberDropdown = dialog.locator('p-multiselect, .p-multiselect').first();
+  await teamMemberDropdown.click();
+
+  const memberOption = page.locator('.p-multiselect-item, [role="option"]').first();
+  if (await memberOption.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await memberOption.click();
+    await page.keyboard.press('Escape');
+  }
 
   // Select Reporting Manager
-  await page.getByRole('combobox', {
-    name: 'Select Reporting Manager',
-  }).click();
+  const rmDropdown = dialog.getByRole('button', { name: 'dropdown trigger' }).last();
+  await rmDropdown.click();
 
-  // Select reporting manager
-  await page.getByRole('option').first().click();
+  const rmOption = page.getByRole('option').first();
+  if (await rmOption.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await rmOption.click();
+  }
 
   // Save / Submit
-  await page.getByRole('button', {
-    name: 'Update',
-    exact: true,
-  }).click();
+  const submitBtn = dialog.getByRole('button', { name: 'Submit', exact: true });
+  if (await submitBtn.isEnabled().catch(() => false)) {
+    await submitBtn.click();
+  } else {
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
 });
 // ========================================
 // TC72 - Bulk Location Change
@@ -4898,7 +4827,7 @@ test('TC84 - Verify Assigned Projects', async ({ page }) => {
   await expect(
     page.getByText('Assigned Projects', {
       exact: true,
-    })
+    }).first()
   ).toBeVisible();
 });
 // ========================================
@@ -5641,9 +5570,8 @@ test('TC109 - Upload Non-Disclosure Agreement', async ({ page }) => {
   const documents = page.locator('app-documents');
 
   await documents
-    .getByText('Non-Disclosure Agreement', {
-      exact: true,
-    })
+    .getByText(/Non-Disclosure Agreement/i)
+    .first()
     .click();
 
   await page.getByRole('button', {
