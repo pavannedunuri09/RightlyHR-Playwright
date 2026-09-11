@@ -28,6 +28,9 @@
     "test:load-entitlements": "playwright test --project=13-load-entitlements --headed --workers=1 --no-deps",
     "test:leaves": "playwright test --project=14-leaves --headed --workers=1 --no-deps",
     "test:on-behalf-leaves": "playwright test --project=15-onbehalf-leaves --headed --workers=1 --no-deps",
+    "test:trainee": "playwright test --project=17-prospective-trainee --headed --workers=1 --no-deps",
+    "test:trainee:from07": "playwright test --project=17-prospective-trainee --grep \"Test-(0[7-9]|1[0-7])\" --headed --workers=1 --no-deps",
+    "test:onboarding": "playwright test --project=18-onboarding --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },
   "keywords": [],

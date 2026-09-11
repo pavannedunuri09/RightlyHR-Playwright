@@ -23,6 +23,7 @@ export default defineConfig({
     '**/pages/codegen-onbehalf-wfh.ts',
     '**/pages/codegen-onbehalf-remote.ts',
     '**/pages/codegen-probtion.ts',
+    '**/codegen.addtrainee.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -32,7 +33,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    headless: !!process.env.CI,
+    headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
@@ -115,12 +116,26 @@ export default defineConfig({
     },
     {
       name: '14-leaves',
+      testMatch: /manage-shifts\.spec\.ts$/,
+    },
+    {
+      name: '15-leaves',
       testMatch: /(?:^|[\\/])leaves\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '15-onbehalf-leaves',
+      name: '16-onbehalf-leaves',
       testMatch: /(?:^|[\\/])on-behalf-leaves\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '17-prospective-trainee',
+      testMatch: /prospective-trainee\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '18-onboarding',
+      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {

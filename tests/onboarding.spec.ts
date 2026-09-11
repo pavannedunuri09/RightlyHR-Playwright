@@ -110,6 +110,8 @@ test.describe('Onboarding Flow', () => {
     onboardingContext = await browser.newContext({ storageState: '.auth/user.json' });
     context = onboardingContext;
     page = await context.newPage();
+    const loginPage = new LoginPage(page);
+    await loginPage.loginFromEnv();
     const stored = loadLastOnboardingEmployee();
     if (stored?.email) {
       createdEmployee = stored;
@@ -180,7 +182,7 @@ test.describe('Onboarding Flow', () => {
     // 4. Verify success message/modal close
     await expect(page.getByText('Prospective employee created').or(page.getByText(/created successfully|added successfully/i)))
       .toBeVisible({ timeout: 15000 })
-      .catch(() => {});
+      .catch(() => { });
 
     // 5. Search for the newly created employee by full email
     const searchbox = page.getByRole('searchbox', { name: 'Username' }).or(page.getByRole('searchbox'));
@@ -230,7 +232,7 @@ test.describe('Onboarding Flow', () => {
     await expect(toast).toBeVisible({ timeout: 15000 });
 
     // Close the opened profile drawer so it doesn't linger into Test-04
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await page.waitForTimeout(1000);
   });
 
@@ -247,25 +249,19 @@ test.describe('Onboarding Flow', () => {
     await yopmail.waitForMailSubject(createdEmployee.fullName, 120000, createdEmployee.email);
 
     const documentRequestPattern = /Request for Documents Upload|Request for Documents/i;
-    const { portal: portalTab, credentials } = await yopmail.readCredentialsAndOpenPortal(documentRequestPattern).catch(async () => {
-      await yopmail.openMatchingMailInViewer(documentRequestPattern);
+    await yopmail.openMatchingMailInViewer(documentRequestPattern);
+    const credentials = await yopmail.readCredentials({ preferPattern: documentRequestPattern }).catch(async () => {
       const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
-      const credentials = await yopmail.findCredentialsInInbox({
-        skipCached: true,
-        preferPattern: documentRequestPattern,
-      }).catch(async () => {
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
-        const mailBodyText = await mailFrame.locator('body').innerText();
-        const uMatch = mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
-        const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
-        return {
-          username: uMatch ? uMatch[1].trim() : createdEmployee.email,
-          password: pMatch ? pMatch[1].trim() : '',
-        };
-      });
-      const portalTab = await yopmail.openOnboardingPortal();
-      return { portal: portalTab, credentials };
+      await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
+      const mailBodyText = await mailFrame.locator('body').innerText();
+      const uMatch = mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
+      const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
+      return {
+        username: uMatch ? uMatch[1].trim() : createdEmployee.email,
+        password: pMatch ? pMatch[1].trim() : '',
+      };
     });
+    const portalTab = await yopmail.openOnboardingPortalFromDocumentRequestMail();
 
     const { username, password } = credentials;
     console.log(`Extracted credentials for ${createdEmployee.fullName} -> Username: ${username}, Password: ${password}`);
@@ -285,10 +281,10 @@ test.describe('Onboarding Flow', () => {
     portalUsernameForApp = username;
     saveLastOnboardingEmployee({ ...createdEmployee, username, password });
 
-    await mailTab.close().catch(() => {});
+    await mailTab.close().catch(() => { });
   });
 
-  test('Test-05: Click Go to Application, fill personal details, upload documents, and submit', async ({}, testInfo) => {
+  test('Test-05: Click Go to Application, fill personal details, upload documents, and submit', async ({ }, testInfo) => {
     test.setTimeout(180000);
     createdEmployee = ensureCreatedEmployee();
     const portalTab = await ensurePortalSession();
@@ -319,14 +315,15 @@ test.describe('Onboarding Flow', () => {
       await loginPage.loginFromEnv();
     }
 
-    await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
+    const employees = new ProspectiveEmployeePage(page);
+    await employees.openProspectiveEmployeesList();
+    await employees.openEmployeeProfile(createdEmployee);
 
     const docsHr = new OnboardingDocumentsHrPage(page);
-    await docsHr.openEmployeeProfileFromList(createdEmployee.email, createdEmployee.fullName);
     await docsHr.openFromProfile();
     await docsHr.verifyPendingDocuments();
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
 
     const searchbox = page.getByRole('searchbox', { name: 'Username' }).or(page.getByRole('searchbox'));
@@ -392,7 +389,7 @@ test.describe('Onboarding Flow', () => {
       .toBeVisible({ timeout: 20000 });
   });
 
-  test('Test-09: Accept offer letter via Yopmail and submit academic and emergency details', async ({}, testInfo) => {
+  test('Test-09: Accept offer letter via Yopmail and submit academic and emergency details', async ({ }, testInfo) => {
     test.setTimeout(isHeadedYopmailRun() ? 1_200_000 : 600_000);
     createdEmployee = ensureCreatedEmployee();
 
@@ -408,27 +405,21 @@ test.describe('Onboarding Flow', () => {
     );
 
     const offerLetterPattern = /Offer Letter Issued|Offer Letter Released/i;
-    const { portal: portalTab, credentials } = await yopmail.readCredentialsAndOpenPortal(offerLetterPattern).catch(async () => {
-      await yopmail.openMatchingMailInViewer(offerLetterPattern);
-      const credentials = await yopmail.findCredentialsInInbox({
-        skipCached: true,
-        preferPattern: offerLetterPattern,
-      }).catch(async () => {
-        const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
-        const mailBodyText = await mailFrame.locator('body').innerText();
-        const uMatch =
-          mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) ||
-          mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
-        const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
-        return {
-          username: uMatch ? uMatch[1].trim() : createdEmployee.username ?? createdEmployee.email,
-          password: pMatch ? pMatch[1].trim() : createdEmployee.password ?? '',
-        };
-      });
-      const portalTab = await yopmail.openOnboardingPortalFromOfferLetterMail();
-      return { portal: portalTab, credentials };
+    await yopmail.openMatchingMailInViewer(offerLetterPattern);
+    const credentials = await yopmail.readCredentials({ preferPattern: offerLetterPattern }).catch(async () => {
+      const mailFrame = mailTab.frameLocator('iframe[name="ifmail"]');
+      await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 15000 });
+      const mailBodyText = await mailFrame.locator('body').innerText();
+      const uMatch =
+        mailBodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) ||
+        mailBodyText.match(/Username\s*[:*]\s*(\S+)/i);
+      const pMatch = mailBodyText.match(/Password\s*[:*]\s*(\S+)/i);
+      return {
+        username: uMatch ? uMatch[1].trim() : createdEmployee.username ?? createdEmployee.email,
+        password: pMatch ? pMatch[1].trim() : createdEmployee.password ?? '',
+      };
     });
+    const portalTab = await yopmail.openOnboardingPortalFromOfferLetterMail();
 
     const { username, password } = credentials;
     console.log(`Extracted offer-letter credentials -> Username: ${username}, Password: ${password}`);
@@ -455,7 +446,7 @@ test.describe('Onboarding Flow', () => {
 
     portalTabForApp = portalTab;
     portalUsernameForApp = username;
-    await mailTab.close().catch(() => {});
+    await mailTab.close().catch(() => { });
 
     await page.bringToFront();
     if (page.url().includes('/login') || (await page.getByRole('textbox', { name: 'Please enter email' }).isVisible().catch(() => false))) {
@@ -499,7 +490,7 @@ test.describe('Onboarding Flow', () => {
     await onboardingInfo.openFromProfile();
     await onboardingInfo.setStatusActiveAndSave();
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await employees.expectEmployeeHiddenInList(createdEmployee.email);
     console.log(`${createdEmployee.email} removed from prospective employees`);
 
@@ -540,7 +531,7 @@ test.describe('Onboarding Flow', () => {
 
     await expect(page.getByText(/Basic information updated|Contact Information updated|Job details updated/i).first())
       .toBeVisible({ timeout: 15000 })
-      .catch(() => {});
+      .catch(() => { });
     console.log(
       `Probation employee updated -> ID: ${createdEmployee.employeeId}, Work mail: ${createdEmployee.workEmail}`,
     );
