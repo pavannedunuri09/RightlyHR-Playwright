@@ -144,7 +144,11 @@ export default defineConfig({
     },
     {
       name: '20-microsoft-login',
-      testMatch: /microsoftlogin\.spec\.ts$/,
+      testMatch: /microsoftlogin\.spec\.ts$/
+    },
+    {
+      name: '21-permissions',
+      testMatch: /permissions\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
