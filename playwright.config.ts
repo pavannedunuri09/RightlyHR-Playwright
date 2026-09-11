@@ -24,6 +24,8 @@ export default defineConfig({
     '**/pages/codegen-onbehalf-remote.ts',
     '**/pages/codegen-probtion.ts',
     '**/codegen.addtrainee.ts',
+    '**/codegen.permissions.ts',
+    '**/codegen,regularization.ts',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -117,6 +119,7 @@ export default defineConfig({
     {
       name: '14-leaves',
       testMatch: /manage-shifts\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: '15-leaves',
@@ -135,7 +138,8 @@ export default defineConfig({
     },
     {
       name: '18-onboarding',
-      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/
+      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: '19-personalization',
@@ -144,11 +148,17 @@ export default defineConfig({
     },
     {
       name: '20-microsoft-login',
-      testMatch: /microsoftlogin\.spec\.ts$/
+      testMatch: /microsoftlogin\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: '21-permissions',
       testMatch: /permissions\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '22-regularization',
+      testMatch: /regularization\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
