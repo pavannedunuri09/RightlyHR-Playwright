@@ -131,7 +131,16 @@ export default defineConfig({
     },
     {
       name: '18-onboarding',
-      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/,
+      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/
+    },
+    {
+      name: '19-personalization',
+      testMatch: /personalization\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '20-microsoft-login',
+      testMatch: /microsoftlogin\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
