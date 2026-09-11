@@ -1,14 +1,24 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { OnboardingApplicationPage } from './OnboardingApplicationPage';
 
 export class OfferLetterPage {
   readonly page: Page;
   readonly generateDocumentsButton: Locator;
   readonly offerLetterCard: Locator;
+  readonly employeeOfferLetterCard: Locator;
   readonly employeeCombobox: Locator;
   readonly employeeSearch: Locator;
   readonly personalEmailInput: Locator;
   readonly firstNameInput: Locator;
+  readonly middleNameInput: Locator;
   readonly lastNameInput: Locator;
+  readonly designationInput: Locator;
+  readonly addressLine1Input: Locator;
+  readonly addressLine2Input: Locator;
+  readonly cityInput: Locator;
+  readonly stateInput: Locator;
+  readonly countryInput: Locator;
+  readonly pincodeInput: Locator;
   readonly addressCombobox: Locator;
   readonly salaryInput: Locator;
   readonly variablePayCombobox: Locator;
@@ -16,6 +26,7 @@ export class OfferLetterPage {
   readonly offerIssuedDate: Locator;
   readonly expectedStartDate: Locator;
   readonly offerExpiryDate: Locator;
+  readonly reportingManagerCombobox: Locator;
   readonly documentTypeCombobox: Locator;
   readonly signatureAuthorityCombobox: Locator;
   readonly noteInput: Locator;
@@ -29,11 +40,20 @@ export class OfferLetterPage {
     this.page = page;
     this.generateDocumentsButton = page.getByRole('button', { name: 'Generate Documents' });
     this.offerLetterCard = page.locator('div').filter({ hasText: /^Offer Letter$/ }).first();
+    this.employeeOfferLetterCard = this.offerLetterCard;
     this.employeeCombobox = page.getByRole('combobox', { name: 'Please select employee' });
     this.employeeSearch = page.getByRole('searchbox', { name: 'Search employee' });
     this.personalEmailInput = page.getByRole('textbox', { name: 'Personal email ID' });
     this.firstNameInput = page.getByRole('textbox', { name: 'First name' });
+    this.middleNameInput = page.getByRole('textbox', { name: 'Middle name' });
     this.lastNameInput = page.getByRole('textbox', { name: 'Last name' });
+    this.designationInput = page.getByRole('textbox', { name: 'Designation' });
+    this.addressLine1Input = page.getByRole('textbox', { name: 'Address line 1' });
+    this.addressLine2Input = page.getByRole('textbox', { name: 'Address line 2' });
+    this.cityInput = page.getByRole('textbox', { name: 'City' });
+    this.stateInput = page.getByRole('textbox', { name: 'State' });
+    this.countryInput = page.getByRole('textbox', { name: 'Country' });
+    this.pincodeInput = page.getByRole('textbox', { name: 'Pincode' });
     this.addressCombobox = page.getByRole('combobox', { name: 'Please select address' });
     this.salaryInput = page.getByRole('spinbutton', { name: 'Please enter salary' });
     this.variablePayCombobox = page.getByRole('combobox', { name: /Please select variable pay|^Yes$|^No$/ });
@@ -41,6 +61,7 @@ export class OfferLetterPage {
     this.offerIssuedDate = page.getByPlaceholder('Please enter offer issued date');
     this.expectedStartDate = page.getByPlaceholder(/Please enter expected start date/i);
     this.offerExpiryDate = page.getByPlaceholder('Please enter offer expiry date');
+    this.reportingManagerCombobox = page.getByRole('combobox', { name: 'Please select reporting manager' });
     this.documentTypeCombobox = page.getByRole('combobox', { name: 'Please select document type' });
     this.signatureAuthorityCombobox = page.getByRole('combobox', { name: 'Please select signature authority' });
     this.noteInput = page.getByRole('textbox', { name: 'Please enter note' });
@@ -57,6 +78,24 @@ export class OfferLetterPage {
     await this.offerLetterCard.waitFor({ state: 'visible', timeout: 15000 });
     await this.offerLetterCard.click();
     await this.employeeCombobox.waitFor({ state: 'visible', timeout: 20000 });
+  }
+
+  async expectEmployeeInDropdown(firstName: string, lastName: string, employeeId?: string) {
+    await this.employeeCombobox.click();
+    await this.employeeSearch.waitFor({ state: 'visible', timeout: 10000 });
+    const queries = [employeeId, firstName, lastName].filter((value): value is string => Boolean(value));
+    for (const query of queries) {
+      await this.employeeSearch.fill(query);
+      await this.page.waitForTimeout(1500);
+      const option = this.page.getByRole('option').filter({ hasText: new RegExp(`${firstName}|${lastName}`) }).first();
+      if (await option.isVisible().catch(() => false)) {
+        const label = ((await option.innerText().catch(() => '')) || '').trim();
+        console.log(`Offer Letter dropdown has: ${label}`);
+        await this.page.keyboard.press('Escape').catch(() => {});
+        return;
+      }
+    }
+    throw new Error(`${firstName} ${lastName} was not found in the Offer Letter employee dropdown`);
   }
 
   async selectEmployee(firstName: string, lastName: string, email?: string, employeeId?: string) {
@@ -97,16 +136,35 @@ export class OfferLetterPage {
           await this.page.waitForTimeout(1500);
           return;
         }
-
         await this.openEmployeePicker();
+      }
+    }
+
+    const firstOption = this.page.getByRole('option').first();
+    if (await firstOption.isVisible().catch(() => false)) {
+      const text = ((await firstOption.innerText().catch(() => '')) || '').trim();
+      console.log(`Fallback selecting first employee option: ${text}`);
+      await firstOption.click();
+      if (await this.waitForSelectedEmployee(firstName, email)) {
+        return;
       }
     }
 
     throw new Error(`Employee ${firstName} ${lastName} was not found in Offer Letter search`);
   }
 
-  async fillRequiredDetails() {
+  async fillRequiredDetails(address?: {
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
+  }) {
     await this.selectAddress();
+    if (await this.addressLine1Input.isVisible().catch(() => false)) {
+      await this.expectAddressAutofill(address);
+    }
     await this.salaryInput.scrollIntoViewIfNeeded();
     await this.salaryInput.fill('400000');
 
@@ -159,6 +217,8 @@ export class OfferLetterPage {
     const download = await downloadPromise;
     if (download && downloadPath) {
       await download.saveAs(downloadPath);
+    } else if (downloadPath) {
+      console.log('Offer letter generated without browser download; verified success toast only');
     }
 
     await this.generatedToast.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
@@ -195,6 +255,83 @@ export class OfferLetterPage {
       await this.page.waitForTimeout(400);
     }
     return false;
+  }
+
+  async expectEmployeeDefaults(details: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    salutation?: string;
+    middleName?: string;
+    gender?: string;
+    designation?: string;
+  }) {
+    const expected = {
+      ...OnboardingApplicationPage.expectedPersonalDefaults(details.firstName),
+      ...details,
+    };
+
+    await expect(this.personalEmailInput).toHaveValue(expected.email, { timeout: 15000 });
+    await expect(this.firstNameInput).toHaveValue(expected.firstName);
+    await expect(this.middleNameInput).toHaveValue(expected.middleName ?? '');
+    await expect(this.lastNameInput).toHaveValue(expected.lastName);
+    await expect(this.designationInput).toHaveValue(expected.designation ?? 'Front End Developer');
+
+    const salutation = (await this.labeledCombobox('Salutation*').innerText()).trim();
+    const gender = (await this.labeledCombobox('Gender*').innerText()).trim();
+
+    console.log(`Default email: ${await this.personalEmailInput.inputValue()}`);
+    console.log(`Default salutation: ${salutation}`);
+    console.log(`Default first name: ${await this.firstNameInput.inputValue()}`);
+    console.log(`Default middle name: ${(await this.middleNameInput.inputValue()).trim() || '(empty)'}`);
+    console.log(`Default last name: ${await this.lastNameInput.inputValue()}`);
+    console.log(`Default gender: ${gender}`);
+    console.log(`Default designation: ${await this.designationInput.inputValue()}`);
+
+    expect(salutation).toMatch(/^(Mr\.|Miss\.|Mrs\.|Ms\.)$/);
+    expect(gender).toMatch(/^(Male|Female|Other)$/);
+  }
+
+  async expectAddressAutofill(details?: {
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
+  }) {
+    await expect(this.addressLine1Input).not.toHaveValue('', { timeout: 10000 });
+    await expect(this.cityInput).not.toHaveValue('');
+    await expect(this.stateInput).not.toHaveValue('');
+    await expect(this.countryInput).not.toHaveValue('');
+    await expect(this.pincodeInput).not.toHaveValue('');
+
+    if (details?.addressLine1) {
+      await expect(this.addressLine1Input).toHaveValue(details.addressLine1);
+    }
+    if (details?.city) {
+      await expect(this.cityInput).toHaveValue(details.city);
+    }
+    if (details?.state) {
+      await expect(this.stateInput).toHaveValue(details.state);
+    }
+    if (details?.country) {
+      await expect(this.countryInput).toHaveValue(details.country);
+    }
+    if (details?.pincode) {
+      await expect(this.pincodeInput).toHaveValue(details.pincode);
+    }
+
+    console.log(`Default address line 1: ${await this.addressLine1Input.inputValue()}`);
+    console.log(`Default address line 2: ${(await this.addressLine2Input.inputValue()).trim() || '(empty)'}`);
+    console.log(`Default city: ${await this.cityInput.inputValue()}`);
+    console.log(`Default state: ${await this.stateInput.inputValue()}`);
+    console.log(`Default country: ${await this.countryInput.inputValue()}`);
+    console.log(`Default pincode: ${await this.pincodeInput.inputValue()}`);
+  }
+
+  private labeledCombobox(label: string) {
+    return this.page.getByText(label, { exact: true }).locator('..').getByRole('combobox');
   }
 
   async selectAddress() {
