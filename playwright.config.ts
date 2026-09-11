@@ -23,6 +23,7 @@ export default defineConfig({
     '**/codegen-onbehalf-wfh.ts',
     '**/codegen-onbehalf-remote.ts',
     '**/codegen-probtion.ts',
+    '**/codegen-onbehalfofapprovalspermissions*',
   ],
   timeout: 120000,
   fullyParallel: false,
@@ -91,6 +92,11 @@ export default defineConfig({
     {
       name: '10-codegen-holidays',
       testMatch: /codegen-holidays\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '11-onbehalf-permissions',
+      testMatch: /on-behalf-permissions\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {

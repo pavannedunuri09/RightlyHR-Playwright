@@ -36,6 +36,25 @@ export class LoginPage {
     await this.loginButton.click();
   }
 
+  async logoutOrClearSession() {
+    await this.page.context().clearCookies();
+    await this.page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    }).catch(() => {});
+  }
+
+  async loginWithCredentials(email: string, password: string) {
+    await this.logoutOrClearSession();
+    await this.goto();
+    await this.login(email, password);
+    await this.page.waitForURL(/\/dashboard\/emp/, {
+      timeout: 45000,
+      waitUntil: 'domcontentloaded',
+    });
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
+  }
+
   async togglePasswordVisibility() {
     await this.passwordVisibilityToggle.click();
   }
@@ -46,6 +65,7 @@ export class LoginPage {
     if (!email || !password) {
       throw new Error('Set LOGIN_EMAIL and LOGIN_PASSWORD in .env');
     }
+    await this.logoutOrClearSession();
     await this.goto();
     await this.login(email, password);
     try {
@@ -54,6 +74,7 @@ export class LoginPage {
         waitUntil: 'domcontentloaded',
       });
     } catch {
+      await this.logoutOrClearSession();
       await this.goto();
       await this.login(email, password);
       await this.page.waitForURL(/\/dashboard\/emp/, {
