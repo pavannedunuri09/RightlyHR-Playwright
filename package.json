@@ -26,6 +26,8 @@
     "test:leave-category": "playwright test --project=11-leave-category --headed --workers=1 --no-deps",
     "test:leave-allocation": "playwright test --project=12-leave-allocation --headed --workers=1 --no-deps",
     "test:load-entitlements": "playwright test --project=13-load-entitlements --headed --workers=1 --no-deps",
+    "test:leaves": "playwright test --project=14-leaves --headed --workers=1 --no-deps",
+    "test:on-behalf-leaves": "playwright test --project=15-onbehalf-leaves --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },
   "keywords": [],
