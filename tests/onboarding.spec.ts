@@ -1,4 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
 import { LoginPage } from '../pages/LoginPage';
 import { YopmailPage } from '../pages/YopmailPage';
 import { PreOnboardingPage } from '../pages/PreOnboardingPage';
@@ -107,11 +109,24 @@ test.describe('Onboarding Flow', () => {
   let page: Page;
 
   test.beforeAll(async ({ browser }) => {
-    onboardingContext = await browser.newContext({ storageState: '.auth/user.json' });
+    const authPath = path.resolve('.auth/user.json');
+    if (fs.existsSync(authPath)) {
+      onboardingContext = await browser.newContext({ storageState: authPath });
+    } else {
+      onboardingContext = await browser.newContext();
+    }
     context = onboardingContext;
     page = await context.newPage();
     const loginPage = new LoginPage(page);
     await loginPage.loginFromEnv();
+    try {
+      if (!fs.existsSync('.auth')) {
+        fs.mkdirSync('.auth', { recursive: true });
+      }
+      await page.context().storageState({ path: authPath });
+    } catch {
+      // ignore storage state saving error if any
+    }
     const stored = loadLastOnboardingEmployee();
     if (stored?.email) {
       createdEmployee = stored;

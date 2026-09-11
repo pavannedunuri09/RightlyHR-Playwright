@@ -1,12 +1,12 @@
 {
-  "firstName": "Varun",
-  "lastName": "Gupta",
-  "fullName": "Varun Gupta",
-  "email": "varun.gupta8738@yopmail.com",
+  "firstName": "Ananya",
+  "lastName": "Mehta",
+  "fullName": "Ananya Mehta",
+  "email": "ananya.mehta6941@yopmail.com",
   "designation": "Front End Developer",
   "employmentType": "Fresher",
   "location": "Hyderabad",
   "sublocation": "Jai Hind Enclave building",
-  "employeeId": "RHR381657",
-  "workEmail": "varun1657@yopmail.com"
+  "username": "ananya.mehta6941@yopmail.com",
+  "password": "1t#xM5s!"
 }
