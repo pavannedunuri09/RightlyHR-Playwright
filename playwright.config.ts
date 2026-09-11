@@ -2,7 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
+dotenv.config({
+  path: path.resolve(process.cwd(), '.env'),
+  override: true
+});
 
 const baseURL = process.env.BASE_URL?.trim();
 if (!baseURL) {
@@ -173,6 +176,36 @@ export default defineConfig({
     {
       name: '23-onbehalf-permissions',
       testMatch: /on-behalf-permissions\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '24-separation',
+      testMatch: /Separation\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '25-helpdesk',
+      testMatch: /(?:^|[\\/])HelpDesk\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '26-separation-rejected',
+      testMatch: /SeparationRejected\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '27-recall',
+      testMatch: /recall\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '28-extra-log-hours',
+      testMatch: /ExtraLogHours\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '29-contract',
+      testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
