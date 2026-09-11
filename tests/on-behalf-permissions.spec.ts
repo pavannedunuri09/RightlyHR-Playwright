@@ -10,6 +10,15 @@ const TARGET_EMPLOYEE_NAME = 'SD302135 - Induu Priyaa';
 const TARGET_EMPLOYEE_SEARCH = 'indu';
 const REPORTING_MANAGER_NAME = 'saii Pavan Dinesh';
 const REPORTING_MANAGER_SEARCH = 'saii pavan';
+const DEFAULT_EMPLOYEE_EMAIL = 'indu@yopmail.com';
+const DEFAULT_EMPLOYEE_PASSWORD = 'Indu@123';
+
+function employeeCredentials() {
+  return {
+    email: process.env.EMPLOYEE_EMAIL?.trim() || DEFAULT_EMPLOYEE_EMAIL,
+    password: process.env.EMPLOYEE_PASSWORD?.trim() || DEFAULT_EMPLOYEE_PASSWORD,
+  };
+}
 
 // Shared state for end-to-end multi-step continuation flow
 let sharedPage: Page;
@@ -44,10 +53,7 @@ test.describe('On Behalf Of — Permission Flow', () => {
   });
 
   test('test 01: login as employee, open Time Off Permissions, and request a permission', async () => {
-    const employeeEmail = process.env.EMPLOYEE_EMAIL?.trim();
-    const employeePassword = process.env.EMPLOYEE_PASSWORD?.trim();
-    test.skip(!employeeEmail || !employeePassword, 'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env');
-
+    const { email: employeeEmail, password: employeePassword } = employeeCredentials();
     await loginPage.loginWithCredentials(employeeEmail, employeePassword);
     await oboPermissionsPage.openEmployeePermissions();
     requestedDate = await oboPermissionsPage.submitPermissionOnBehalf({
@@ -64,6 +70,9 @@ test.describe('On Behalf Of — Permission Flow', () => {
   });
 
   test('test 02: verify the requested permission chip, logs duration, and requested status in Attendance', async () => {
+    if (!formattedDate) {
+      throw new Error('Test 01 did not set formattedDate. Run this serial suite from test 01.');
+    }
     await oboPermissionsPage.verifyAttendancePermissionRequestedChipAndLogs(
       formattedDate.cellDate,
       formattedDate.dayNumber,
@@ -98,10 +107,7 @@ test.describe('On Behalf Of — Permission Flow', () => {
   });
 
   test('test 06: request a second permission, verify it in Attendance, and logout as employee', async () => {
-    const employeeEmail = process.env.EMPLOYEE_EMAIL?.trim();
-    const employeePassword = process.env.EMPLOYEE_PASSWORD?.trim();
-    test.skip(!employeeEmail || !employeePassword, 'Set EMPLOYEE_EMAIL and EMPLOYEE_PASSWORD in .env');
-
+    const { email: employeeEmail, password: employeePassword } = employeeCredentials();
     await loginPage.loginWithCredentials(employeeEmail, employeePassword);
     await oboPermissionsPage.openEmployeePermissions();
     secondRequestedDate = await oboPermissionsPage.submitPermissionOnBehalf({
