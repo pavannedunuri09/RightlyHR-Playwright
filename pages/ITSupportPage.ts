@@ -30,6 +30,10 @@ export class ITSupportPage {
   readonly searchInput: Locator;
   readonly myTicketsTab: Locator;
   readonly teamTicketsTab: Locator;
+  readonly openTicketsTab: Locator;
+  readonly awaitOnUserTicketsTab: Locator;
+  readonly rejectedTicketsTab: Locator;
+  readonly closedTicketsTab: Locator;
 
   // Add Ticket Modal
   readonly ticketModal: Locator;
@@ -79,9 +83,21 @@ export class ITSupportPage {
     this.teamTicketsTab = page.getByRole('tab', { name: /Team Tickets/i })
       .or(page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, div, span, a').filter({ hasText: /^Team Tickets$/i }))
       .or(page.getByText(/Team Tickets/i)).first();
+    this.openTicketsTab = page.getByRole('tab', { name: /Open Tickets|Open/i })
+      .or(page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, div, span, a').filter({ hasText: /^Open Tickets$|^Open$/i }))
+      .or(page.getByText(/Open Tickets/i)).first();
+    this.awaitOnUserTicketsTab = page.getByRole('tab', { name: /Await\s*on\s*User/i })
+      .or(page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, div, span, a').filter({ hasText: /Await\s*on\s*User/i }))
+      .or(page.getByText(/Await\s*on\s*User/i)).first();
+    this.rejectedTicketsTab = page.getByRole('tab', { name: /Rejected Tickets|Rejected/i })
+      .or(page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, div, span, a').filter({ hasText: /Rejected Tickets|Rejected/i }))
+      .or(page.getByText(/Rejected Tickets/i)).first();
+    this.closedTicketsTab = page.getByRole('tab', { name: /Closed Tickets|Closed/i })
+      .or(page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, a, div, span').filter({ hasText: /^Closed Tickets$|^Closed/i }))
+      .or(page.getByText(/Closed Tickets/i)).first();
 
     // Modal Locators
-    this.ticketModal = page.locator('dialog, ngb-modal-window, [role="dialog"], .modal, p-dialog').last();
+    this.ticketModal = page.locator('.custom-main-popup-container, .modal-dialog, ngb-modal-window, .modal.show').first();
     
     const modalSelects = this.ticketModal.locator('p-select, p-dropdown');
     this.ticketForDropdown = modalSelects.nth(0);
@@ -234,6 +250,147 @@ export class ITSupportPage {
     await expect(teamTab).toBeVisible({ timeout: 15000 });
     await teamTab.click();
     await this.page.waitForTimeout(1000);
+  }
+
+  async clickOpenTicketsTab() {
+    const openTab = this.page.getByRole('tab', { name: /Open Tickets|Open/i })
+      .or(this.page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs .nav-link, button, a, div, span').filter({ hasText: /^Open Tickets$|^Open$/i }))
+      .or(this.page.getByText(/Open Tickets/i))
+      .first();
+
+    await expect(openTab).toBeVisible({ timeout: 15000 });
+    await openTab.click();
+    await this.page.waitForTimeout(1000);
+  }
+
+  async clickAwaitOnUserTicketsTab() {
+    const awaitTab = this.page.getByRole('tab', { name: /Await\s*on\s*User/i })
+      .or(this.page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs li, .nav-link, button, a, div, span').filter({ hasText: /Await\s*on\s*User/i }))
+      .or(this.page.getByText(/Await\s*on\s*User/i))
+      .first();
+
+    await expect(awaitTab).toBeVisible({ timeout: 15000 });
+    await awaitTab.click();
+    await this.page.waitForTimeout(1000);
+  }
+
+  async getTabCount(tabNameRegex: RegExp): Promise<number> {
+    await this.page.waitForTimeout(1000);
+    const tab = this.page.locator('.p-tabview-nav > li, ul.nav > li, .nav-tabs > li, .p-tabview-nav li, [role="tab"]')
+      .filter({ hasText: tabNameRegex })
+      .first();
+    await tab.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    const text = (await tab.innerText().catch(() => '')) || (await tab.textContent().catch(() => '')) || '';
+    const match = text.match(/\((\d+)\)/);
+    if (match) return parseInt(match[1], 10);
+    const numMatch = text.match(/(\d+)/);
+    return numMatch ? parseInt(numMatch[1], 10) : 0;
+  }
+
+  async getAllTicketsCount(): Promise<number> {
+    return await this.getTabCount(/All Tickets/i);
+  }
+
+  async getOpenTicketsCount(): Promise<number> {
+    return await this.getTabCount(/Open Tickets/i);
+  }
+
+  async getAwaitOnUserTicketsCount(): Promise<number> {
+    return await this.getTabCount(/Await\s*on\s*User/i);
+  }
+
+  async getRejectedTicketsCount(): Promise<number> {
+    return await this.getTabCount(/Rejected Tickets/i);
+  }
+
+  async getClosedTicketsCount(): Promise<number> {
+    return await this.getTabCount(/Closed/i);
+  }
+
+  async clickRejectedTicketsTab() {
+    const rejectedTab = this.page.getByRole('tab', { name: /Rejected Tickets|Rejected/i })
+      .or(this.page.locator('.p-tabview-nav li, [role="tab"], .nav-tabs li, .nav-link, button, a, div, span').filter({ hasText: /Rejected Tickets|Rejected/i }))
+      .or(this.page.getByText(/Rejected Tickets/i))
+      .first();
+
+    await expect(rejectedTab).toBeVisible({ timeout: 15000 });
+    await rejectedTab.click();
+    await this.page.waitForTimeout(1000);
+  }
+
+  async verifyTicketInAwaitOnUserTab(subjectText?: string) {
+    await this.clickAwaitOnUserTicketsTab();
+    await this.page.waitForTimeout(1000);
+    let row: Locator;
+    if (subjectText) {
+      row = this.ticketRows.filter({ hasText: subjectText }).first();
+    } else {
+      row = this.ticketRows.first();
+    }
+    await expect(row).toBeVisible({ timeout: 15000 });
+    if (subjectText) {
+      console.log(`Verified ticket with subject "${subjectText}" is transferred to Await on User tab.`);
+    } else {
+      console.log('Verified ticket is transferred to Await on User tab.');
+    }
+  }
+
+  async verifyTicketInRejectedTab(subjectText?: string) {
+    await this.clickRejectedTicketsTab();
+    await this.page.waitForTimeout(1000);
+    let row: Locator;
+    if (subjectText) {
+      row = this.ticketRows.filter({ hasText: subjectText }).first();
+    } else {
+      row = this.ticketRows.first();
+    }
+    await expect(row).toBeVisible({ timeout: 15000 });
+    if (subjectText) {
+      console.log(`Verified ticket with subject "${subjectText}" is transferred to Rejected tab.`);
+    } else {
+      console.log('Verified ticket is transferred to Rejected tab.');
+    }
+  }
+
+  async clickClosedTicketsTab() {
+    await expect(this.closedTicketsTab).toBeVisible({ timeout: 15000 });
+    await this.closedTicketsTab.click();
+    await this.page.waitForTimeout(1000);
+  }
+
+  async verifyTicketInOpenTab(subjectText?: string) {
+    await this.clickOpenTicketsTab();
+    const row = subjectText
+      ? this.ticketRows.filter({ hasText: subjectText }).first()
+      : this.ticketRows.first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+  }
+
+  async verifyTicketInClosedTab(subjectText?: string) {
+    await this.clickClosedTicketsTab();
+    const row = subjectText
+      ? this.ticketRows.filter({ hasText: subjectText }).first()
+      : this.ticketRows.first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+  }
+
+  async verifyClosedTicketHasNoUpdate(subjectText: string) {
+    await this.clickClosedTicketsTab();
+    const row = this.ticketRows.filter({ hasText: subjectText }).first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+
+    const actionMenu = row.locator(
+      '.text-center .dropdown, [data-bs-toggle="dropdown"], .dropdown-toggle',
+    ).first();
+    if (await actionMenu.isVisible().catch(() => false)) {
+      await actionMenu.click({ force: true });
+      await this.page.waitForTimeout(500);
+    }
+
+    const updateItem = this.page.locator(
+      '.dropdown-menu.show a, .dropdown-menu.show button, .dropdown-menu.show .dropdown-item, [role="menuitem"]:visible',
+    ).filter({ hasText: /^Update$/i }).first();
+    await expect(updateItem).not.toBeVisible();
   }
 
   async clickMyTicketsTab() {
@@ -542,6 +699,7 @@ export class ITSupportPage {
   // TICKET UPDATE & ASSIGNMENT (MANAGER VIEW)
   // =========================================================================
   async openTicketRowKebab(subjectText?: string): Promise<Locator> {
+    await this.page.waitForTimeout(1000);
     let row: Locator;
     if (subjectText) {
       const matchedRow = this.ticketRows.filter({ hasText: subjectText }).first();
@@ -555,7 +713,7 @@ export class ITSupportPage {
     }
 
     await row.waitFor({ state: 'visible', timeout: 15000 });
-    await row.scrollIntoViewIfNeeded();
+    await row.scrollIntoViewIfNeeded().catch(() => {});
 
     const kebab = row.locator('.text-center > .dropdown, .text-center .dropdown, [data-bs-toggle="dropdown"], .dropdown-toggle, i, td:last-child generic, td:last-child').first();
     await kebab.waitFor({ state: 'visible', timeout: 5000 });
@@ -635,18 +793,27 @@ export class ITSupportPage {
     await assignedDropdown.click({ force: true });
     await this.page.waitForTimeout(800);
 
-    // 2. Scroll and find the target user or select first available option
+    // 2. Filter via search input if available, or scroll to find target user
     const overlay = this.page.locator('.p-select-overlay, .p-select-panel, .p-dropdown-panel, [role="listbox"]').last();
     await overlay.waitFor({ state: 'visible', timeout: 8000 });
 
     let selected = false;
-    const scrollContainer = overlay.locator('.p-select-list-container, .p-dropdown-items-wrapper, .p-select-items-wrapper, [role="listbox"], ul').first();
+    const filterInput = overlay.locator('input.p-select-filter, input.p-dropdown-filter, input[type="text"], input[role="searchbox"]').first();
+    if (await filterInput.isVisible().catch(() => false)) {
+      await filterInput.fill(targetName);
+      await this.page.waitForTimeout(600);
+    }
 
-    if (targetName && targetName.length > 0) {
-      const hrOption = overlay.locator('.p-select-option, .p-select-item, .p-dropdown-item, [role="option"], li')
-        .filter({ hasText: new RegExp(targetName, 'i') })
-        .or(this.page.getByText(new RegExp(targetName, 'i')))
-        .first();
+    const hrOption = overlay.locator('.p-select-option, .p-select-item, .p-dropdown-item, [role="option"], li')
+      .filter({ hasText: new RegExp(targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') })
+      .or(this.page.getByText(new RegExp(targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')))
+      .first();
+
+    if (await hrOption.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await hrOption.click({ force: true });
+      selected = true;
+    } else {
+      const scrollContainer = overlay.locator('.p-select-list-container, .p-dropdown-items-wrapper, .p-select-items-wrapper, [role="listbox"], ul').first();
 
       // Scroll progressively through the dropdown list to locate the user
       for (let step = 0; step < 25; step++) {
@@ -681,6 +848,7 @@ export class ITSupportPage {
       }
     }
     await this.page.waitForTimeout(500);
+    console.log(`Ticket assigned to: ${targetName}`);
 
     // 3. Fill comments if present
     const commentsInput = this.page.getByRole('textbox', { name: /Please enter comments/i })
@@ -695,25 +863,72 @@ export class ITSupportPage {
     }
   }
 
-  async submitUpdateTicket() {
-    const updateBtn = this.page.getByRole('button', { name: 'Update', exact: true })
-      .or(this.ticketModal.getByRole('button', { name: /^Update$/i }))
-      .or(this.ticketModal.locator('button').filter({ hasText: /^Update$/i }))
+  async updateTicketStatus(status: string = 'Await on User', comments: string = 'Status changed to Await on User') {
+    const modal = this.ticketModal;
+    await modal.waitFor({ state: 'visible', timeout: 8000 });
+
+    // 1. Locate Status field in update modal
+    const statusDropdown = modal.locator('p-select[formcontrolname="ticketStatus"], [formcontrolname="ticketStatus"]')
+      .or(modal.locator('p-select, p-dropdown').filter({ hasText: /Open|Await|In Progress|Rejected|Closed|Status/i }))
+      .or(modal.getByRole('combobox').filter({ hasText: /Open|Await|In Progress|Rejected|Closed/i }))
       .first();
 
-    await updateBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await statusDropdown.waitFor({ state: 'visible', timeout: 10000 });
+    await statusDropdown.scrollIntoViewIfNeeded().catch(() => {});
+    await statusDropdown.click({ force: true });
+    await this.page.waitForTimeout(600);
+
+    // 2. Select matching status option in overlay
+    const overlay = this.page.locator('.p-select-overlay, .p-select-panel, .p-dropdown-panel, [role="listbox"]').last();
+    await overlay.waitFor({ state: 'visible', timeout: 8000 });
+
+    const targetPattern = new RegExp(`^\\s*${status.replace(/\bon\b/i, 'On|on').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$|${status}`, 'i');
+    const statusOption = overlay.locator('.p-select-option, [role="option"], li')
+      .filter({ hasText: targetPattern })
+      .or(this.page.getByRole('option', { name: new RegExp(status, 'i') }))
+      .or(this.page.getByText(new RegExp(status, 'i')))
+      .first();
+
+    await statusOption.waitFor({ state: 'visible', timeout: 8000 });
+    await statusOption.scrollIntoViewIfNeeded().catch(() => {});
+    await statusOption.click({ force: true });
+    await this.page.waitForTimeout(600);
+
+    console.log(`Status changed to: ${status}`);
+
+    // 3. Fill comments if present
+    const commentsInput = this.page.getByRole('textbox', { name: /Please enter comments/i })
+      .or(modal.locator('textarea[formcontrolname="comments"], input[formcontrolname="comments"], textarea, input').last())
+      .first();
+
+    if (await commentsInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await commentsInput.scrollIntoViewIfNeeded().catch(() => {});
+      await commentsInput.click();
+      await commentsInput.fill(comments);
+      await this.page.waitForTimeout(300);
+    }
+  }
+
+  async submitUpdateTicket() {
+    const updateBtn = this.page.locator('.custom-main-popup-container button[type="submit"], .modal button[type="submit"], button[type="submit"]')
+      .filter({ hasText: /Update/i })
+      .first();
+
+    await updateBtn.waitFor({ state: 'visible', timeout: 8000 });
+    await updateBtn.scrollIntoViewIfNeeded().catch(() => {});
     await updateBtn.click();
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(1500);
 
     const toast = this.page.locator('.p-toast, .p-toast-detail, .p-toast-summary, .p-toast-message, .toast, .toast-message, .alert, ngb-alert')
-      .filter({ hasText: /Ticket updated successfully|Updated|Success/i })
+      .filter({ hasText: /Ticket updated successfully|Updated successfully|Updated|Success/i })
       .or(this.page.getByText(/Ticket updated successfully/i));
 
     try {
-      await expect(toast).toBeVisible({ timeout: 8000 });
+      await expect(toast).toBeVisible({ timeout: 10000 });
     } catch {
       await expect(this.ticketModal).toBeHidden({ timeout: 5000 });
     }
+    await this.page.waitForTimeout(1000);
   }
 }
 

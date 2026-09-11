@@ -169,9 +169,9 @@ test.describe.serial('IT Support Module End-to-End Test Suite', () => {
   });
 
   // =========================================================================
-  // TEST 06: TEAM TICKETS - KEBAB MENU -> UPDATE -> VERIFY VALUES -> ASSIGN TO HR -> UPDATE
+  // TEST 06: TEAM TICKETS - KEBAB MENU -> UPDATE -> VERIFY VALUES -> ASSIGN TO BHAVITHA REDDY -> UPDATE
   // =========================================================================
-  test('06. in team tickets click on kebab menu for the ticket raised, click update, verify auto-populated values, select logged in HR in ticket assigned to, and click update', async () => {
+  test('06. in team tickets click on kebab menu for the ticket raised, click update, verify auto-populated values, select bhavitha reddy in ticket assigned to, and click update', async () => {
     // 1. Click on the kebab menu for the ticket raised and click Update
     await itSupportPage.clickUpdateTicketAction(testSubject);
 
@@ -183,5 +183,130 @@ test.describe.serial('IT Support Module End-to-End Test Suite', () => {
 
     // 4. Click on Update button
     await itSupportPage.submitUpdateTicket();
+  });
+
+  // =========================================================================
+  // TEST 07: OPEN TICKETS - KEBAB MENU -> UPDATE -> VERIFY DETAILS -> ASSIGN TO SAII PAVAN -> UPDATE
+  // =========================================================================
+  test('07. in open tickets tab, click update option, verify details filled while raising ticket, select saii pavan in ticket assigned to, and click update', async () => {
+    // 1. Click on Open Tickets tab
+    await itSupportPage.clickOpenTicketsTab();
+
+    // 2. Click on the kebab menu for the ticket and click Update
+    await itSupportPage.clickUpdateTicketAction(testSubject);
+
+    // 3. Verify details that employee filled while raising the ticket
+    await itSupportPage.verifyAutoPopulatedUpdateForm(testSubject, testDescription);
+
+    // 4. Click on ticket assigned to dropdown and select saii pavan
+    await itSupportPage.assignTicketTo('saii pavan');
+
+    // 5. Click on Update button
+    await itSupportPage.submitUpdateTicket();
+  });
+
+  // =========================================================================
+  // TEST 08: CLICK UPDATE POPUP, CLICK STATUS FIELD AND CHANGE FROM OPEN TO AWAIT ON USER, VERIFY MOVED TO AWAIT ON USER TAB & COUNTS
+  // =========================================================================
+  test('08. click on update popup, click on status field and change the status from open to await on user, verify ticket moved to await on user tab and verify counts', async () => {
+    // 1. Log tab counts before update
+    const allCountBefore = await itSupportPage.getAllTicketsCount();
+    const openCountBefore = await itSupportPage.getOpenTicketsCount();
+    const awaitCountBefore = await itSupportPage.getAwaitOnUserTicketsCount();
+    console.log(`All Tickets count before update: ${allCountBefore}`);
+    console.log(`Open Tickets count before update: ${openCountBefore}`);
+    console.log(`Await on User count before update: ${awaitCountBefore}`);
+
+    // 2. Click on the kebab menu for the ticket and click Update to open update popup
+    await itSupportPage.clickUpdateTicketAction(testSubject);
+
+    // 3. Click on status field, change status from Open to Await on User, and click on Await on User option
+    await itSupportPage.updateTicketStatus('Await on User');
+
+    // 4. Click on Update button
+    await itSupportPage.submitUpdateTicket();
+
+    // 5. Verify request is moved from open tickets tab to await on user tab
+    await itSupportPage.verifyTicketInAwaitOnUserTab(testSubject);
+
+    // 6. Log tab counts after update reflecting moved ticket
+    const rawAll = await itSupportPage.getAllTicketsCount();
+    const rawOpen = await itSupportPage.getOpenTicketsCount();
+    const rawAwait = await itSupportPage.getAwaitOnUserTicketsCount();
+    
+    expect(rawAll).toBe(allCountBefore);
+    expect(rawOpen).toBe(openCountBefore - 1);
+    expect(rawAwait).toBe(awaitCountBefore + 1);
+  });
+
+  // =========================================================================
+  // TEST 09: CLICK UPDATE POPUP, CLICK STATUS FIELD AND CHANGE FROM AWAIT ON USER TO REJECTED, VERIFY MOVED TO REJECTED TAB & COUNTS
+  // =========================================================================
+  test('09. click on update popup, click on status field and change the status from await on user to rejected, verify ticket moved to rejected tab and verify counts', async () => {
+    // 1. Log tab counts before update
+    const allCountBefore = await itSupportPage.getAllTicketsCount();
+    const awaitCountBefore = await itSupportPage.getAwaitOnUserTicketsCount();
+    const rejectedCountBefore = await itSupportPage.getRejectedTicketsCount();
+    console.log(`All Tickets count before update: ${allCountBefore}`);
+    console.log(`Await on User count before update: ${awaitCountBefore}`);
+    console.log(`Rejected Tickets count before update: ${rejectedCountBefore}`);
+
+    // 2. Click on the kebab menu for the ticket and click Update to open update popup
+    await itSupportPage.clickUpdateTicketAction(testSubject);
+
+    // 3. Click on status field, change status from Await on User to Rejected, and click on Rejected option
+    await itSupportPage.updateTicketStatus('Rejected', 'Ticket rejected by manager');
+
+    // 4. Click on Update button
+    await itSupportPage.submitUpdateTicket();
+
+    // 5. Verify request is moved from await on user tab to rejected tab
+    await itSupportPage.verifyTicketInRejectedTab(testSubject);
+
+    // 6. Log tab counts after update reflecting moved ticket
+    const allCountAfter = await itSupportPage.getAllTicketsCount();
+    const awaitCountAfter = await itSupportPage.getAwaitOnUserTicketsCount();
+    const rejectedCountAfter = await itSupportPage.getRejectedTicketsCount();
+
+    expect(allCountAfter).toBe(allCountBefore);
+    expect(awaitCountAfter).toBe(awaitCountBefore - 1);
+    expect(rejectedCountAfter).toBe(rejectedCountBefore + 1);
+  });
+
+  test('10. move the rejected ticket back to Open and verify tab and counts', async () => {
+    const allCountBefore = await itSupportPage.getAllTicketsCount();
+    const rejectedCountBefore = await itSupportPage.getRejectedTicketsCount();
+    const openCountBefore = await itSupportPage.getOpenTicketsCount();
+
+    await itSupportPage.clickRejectedTicketsTab();
+    await itSupportPage.clickUpdateTicketAction(testSubject);
+    await itSupportPage.updateTicketStatus('Open', 'Reopening ticket');
+    await itSupportPage.submitUpdateTicket();
+
+    await itSupportPage.verifyTicketInOpenTab(testSubject);
+    expect(await itSupportPage.getAllTicketsCount()).toBe(allCountBefore);
+    expect(await itSupportPage.getRejectedTicketsCount()).toBe(rejectedCountBefore - 1);
+    expect(await itSupportPage.getOpenTicketsCount()).toBe(openCountBefore + 1);
+  });
+
+  test('11. assign the open ticket to Bhavitha Reddy, close it, and verify Closed counts', async () => {
+    const allCountBefore = await itSupportPage.getAllTicketsCount();
+    const openCountBefore = await itSupportPage.getOpenTicketsCount();
+    const closedCountBefore = await itSupportPage.getClosedTicketsCount();
+
+    await itSupportPage.clickOpenTicketsTab();
+    await itSupportPage.clickUpdateTicketAction(testSubject);
+    await itSupportPage.assignTicketTo('Bhavitha Reddy');
+    await itSupportPage.updateTicketStatus('Closed', 'Ticket closed by manager');
+    await itSupportPage.submitUpdateTicket();
+
+    await itSupportPage.verifyTicketInClosedTab(testSubject);
+    expect(await itSupportPage.getAllTicketsCount()).toBe(allCountBefore);
+    expect(await itSupportPage.getOpenTicketsCount()).toBe(openCountBefore - 1);
+    expect(await itSupportPage.getClosedTicketsCount()).toBe(closedCountBefore + 1);
+  });
+
+  test('12. verify Closed tickets do not display the Update action', async () => {
+    await itSupportPage.verifyClosedTicketHasNoUpdate(testSubject);
   });
 });
