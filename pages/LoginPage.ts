@@ -49,4 +49,17 @@ export class LoginPage {
     await this.login(email, password);
     await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 45000, waitUntil: 'commit' });
   }
+
+  async logout() {
+    await this.page.locator('.profile-dropdown').click();
+
+    await this.page
+        .getByRole('button', { name: 'LogoutLogout' })
+        .click();
+
+    await this.page
+        .getByRole('button', { name: 'Yes' })
+        .click();
+}
+
 }

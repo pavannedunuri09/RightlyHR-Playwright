@@ -347,7 +347,7 @@ export class ProspectiveTraineePage {
     const email = (await row.getByRole('cell').nth(3).innerText()).trim();
     const parts = name.split(/\s+/).filter(Boolean);
     return {
-      employeeId: id.replace(/\D/g, '') || id,
+      employeeId: id.replace(/\D/g, '') || undefined,
       firstName: parts[0] ?? name,
       lastName: parts.slice(1).join(' ') || parts[0] || name,
       email,

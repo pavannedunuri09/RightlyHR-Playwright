@@ -133,10 +133,40 @@ export class PreOnboardingOfferLetterPage {
   async acceptIfNeeded() {
     if (!(await this.acceptButton.isVisible().catch(() => false))) {
       console.log('Offer letter already accepted; continuing remaining steps');
+      await this.advancePastOfferLetter();
       return;
     }
     await this.accept();
     await this.continueAfterAccept();
+  }
+
+  async advancePastOfferLetter() {
+    for (let step = 0; step < 8; step += 1) {
+      if (await this.isPostOfferStepVisible()) {
+        return;
+      }
+      if ((await this.nextButton.isVisible().catch(() => false)) && (await this.nextButton.isEnabled().catch(() => false))) {
+        await this.nextButton.click();
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      if (await this.offerLetterEntry.first().isVisible().catch(() => false)) {
+        await this.offerLetterEntry.first().click();
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      break;
+    }
+  }
+
+  private async isPostOfferStepVisible() {
+    return (
+      (await this.page.getByRole('button', { name: 'Add' }).isVisible().catch(() => false)) ||
+      (await this.page.getByRole('textbox', { name: 'University*' }).isVisible().catch(() => false)) ||
+      (await this.page.getByRole('textbox', { name: 'Please enter name' }).first().isVisible().catch(() => false)) ||
+      (await this.page.getByRole('textbox', { name: 'Company Name' }).isVisible().catch(() => false)) ||
+      (await this.page.getByRole('button', { name: 'Submit' }).isVisible().catch(() => false))
+    );
   }
 
   async accept() {

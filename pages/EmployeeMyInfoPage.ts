@@ -19,10 +19,24 @@ export class EmployeeMyInfoPage {
   }
 
   async requestDocuments() {
+    await expect(this.requestDocumentsButton).toBeEnabled({ timeout: 10000 });
     await this.requestDocumentsButton.click();
-    await expect(this.successPopup).toBeVisible({ timeout: 15000 });
-    const text = (await this.successPopup.innerText()).trim();
+    await expect(this.successPopup.first()).toBeVisible({ timeout: 15000 });
+    const text = (await this.successPopup.first().innerText()).trim();
     console.log(`Success popup: ${text}`);
+    await this.page.keyboard.press('Escape').catch(() => {});
+    return text;
+  }
+
+  async regenerateOnboardingCredentials() {
+    const button = this.page.getByRole('button', { name: 'Generate Credentials' });
+    await expect(button).toBeVisible({ timeout: 15000 });
+    await button.click();
+    const toast = this.page.getByText(/credential|password|sent|generated|email has been sent/i);
+    await expect(toast.first()).toBeVisible({ timeout: 20000 });
+    const text = (await toast.first().innerText()).trim();
+    console.log(`Generate credentials: ${text}`);
+    await this.page.keyboard.press('Escape').catch(() => {});
     return text;
   }
 }

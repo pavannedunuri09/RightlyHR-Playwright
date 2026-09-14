@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 export class PreOnboardingPostOfferPage {
@@ -20,6 +21,7 @@ export class PreOnboardingPostOfferPage {
   }
 
   async addAcademicRecordIfNeeded(attachmentPath: string) {
+    await this.ensureAcademicStep();
     if (await this.isEmergencyPage() || await this.isEmploymentPage() || await this.isReviewPage()) {
       return;
     }
@@ -33,6 +35,24 @@ export class PreOnboardingPostOfferPage {
       return;
     }
     await this.addAcademicRecord(attachmentPath);
+  }
+
+  private async ensureAcademicStep() {
+    for (let step = 0; step < 8; step += 1) {
+      if (await this.isEmergencyPage() || await this.isEmploymentPage() || await this.isReviewPage()) {
+        return;
+      }
+      if (await this.addButton.isVisible().catch(() => false)
+        || await this.page.getByRole('textbox', { name: 'University*' }).isVisible().catch(() => false)) {
+        return;
+      }
+      if ((await this.nextButton.isVisible().catch(() => false)) && (await this.nextButton.isEnabled().catch(() => false))) {
+        await this.nextButton.click();
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      break;
+    }
   }
 
   async fillEmergencyContactsIfNeeded() {
@@ -73,6 +93,34 @@ export class PreOnboardingPostOfferPage {
       return;
     }
     await this.addEmploymentHistory(attachmentPath);
+  }
+
+  async completePostOfferApplication(attachmentPath: string, options?: { skipEmployment?: boolean }) {
+    await this.addAcademicRecordIfNeeded(attachmentPath);
+    await this.fillEmergencyContactsIfNeeded();
+    if (options?.skipEmployment) {
+      await this.skipEmploymentIfNeeded();
+    } else {
+      await this.addEmploymentHistoryIfNeeded(attachmentPath);
+    }
+  }
+
+  async skipEmploymentIfNeeded() {
+    if (await this.isReviewPage()) {
+      return;
+    }
+
+    const skip = this.page.getByRole('button', { name: /Skip & continue|Skip and continue/i });
+    if (await skip.first().isVisible({ timeout: 8000 }).catch(() => false)) {
+      await skip.first().click();
+      console.log('Skipped employment history');
+      return;
+    }
+
+    if (await this.isEmploymentPage() && await this.nextButton.isEnabled().catch(() => false)) {
+      await this.nextButton.click();
+      console.log('Continued past employment history without adding a record');
+    }
   }
 
   private async isEmergencyPage() {
@@ -149,6 +197,9 @@ export class PreOnboardingPostOfferPage {
       await this.page.getByRole('textbox').nth(2).fill('2026-01-12');
     }
     await this.page.getByRole('textbox', { name: 'Job Role' }).fill('QA');
+    if (!fs.existsSync(attachmentPath)) {
+      throw new Error(`Employment attachment missing: ${attachmentPath}`);
+    }
     await this.page.getByRole('button', { name: 'Choose File' }).setInputFiles(attachmentPath);
 
     await this.addButton.click();
@@ -157,7 +208,7 @@ export class PreOnboardingPostOfferPage {
     await this.nextButton.click();
   }
 
-  async expectReviewPage() {
+  async expectReviewPage(options?: { requireEmployment?: boolean }) {
     await expect(this.reviewHeading.first()).toBeVisible({ timeout: 15000 });
     await expect(this.page.getByText('Offer Letter Accepted')).toBeVisible();
 
@@ -168,6 +219,11 @@ export class PreOnboardingPostOfferPage {
     await expect(this.page.getByText(/California University/i).first()).toBeVisible({ timeout: 10000 });
     await expect(this.page.getByText(/B\.TECH/i).first()).toBeVisible();
     await expect(this.page.getByText(/CSE/i).first()).toBeVisible();
+
+    if (options?.requireEmployment === false) {
+      console.log('Review page verified: offer accepted, academic (employment skipped)');
+      return;
+    }
 
     const employmentToggle = this.page.getByRole('heading', { name: 'Employment History' }).getByRole('button')
       .or(this.page.getByRole('button', { name: 'Employment History' }));

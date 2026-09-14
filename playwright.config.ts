@@ -23,7 +23,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    baseURL: 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
+    baseURL: process.env.BASE_URL || process.env.RHR_BASE_URL || 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : 1000,
