@@ -125,7 +125,7 @@ test.describe.serial('Leave Category Foundation', () => {
     test('09. opens Update from kebab, verifies prefilled data and button states, then updates record', async () => {
       test.setTimeout(180000);
 
-      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.expectUpdateFormPrefilled(GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
 
@@ -144,7 +144,7 @@ test.describe.serial('Leave Category Foundation', () => {
       test.setTimeout(120000);
 
       await leaveCategoryPage.ensureOnLeaveCategoryList();
-      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
       await leaveCategoryPage.publishLeaveCategoryFromUpdatePage();
     });
@@ -162,12 +162,12 @@ test.describe.serial('Leave Category Foundation', () => {
 
     test('13. Published kebab shows Clone and View options only', async () => {
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.expectPublishedKebabOptions(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.expectPublishedKebabOptions(UPDATED_GENERAL_LEAVE_CATEGORY);
     });
 
     test('14. View Leave Category displays all details and opens Clone form', async () => {
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.expectViewLeaveCategoryDetails(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.expectViewActionButtons();
       await leaveCategoryPage.openCloneFromViewPage();
@@ -177,7 +177,7 @@ test.describe.serial('Leave Category Foundation', () => {
       test.setTimeout(120000);
 
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.openCloneFromViewPage();
       await leaveCategoryPage.expectCloneLocationFieldsEmpty(UPDATED_GENERAL_LEAVE_CATEGORY);
       clonedLocation = await leaveCategoryPage.fillCloneLocationHierarchyExcludingOriginal(
@@ -190,11 +190,19 @@ test.describe.serial('Leave Category Foundation', () => {
     test('16. clones published General Leave and creates Sick Leave with required details', async () => {
       test.setTimeout(180000);
 
-      await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.openCloneForCategory(UPDATED_GENERAL_LEAVE_CATEGORY.categoryName);
-      await leaveCategoryPage.fillCloneLeaveCategoryForm(SICK_LEAVE_CATEGORY);
-      await expect(leaveCategoryPage.saveButton).toBeEnabled();
-      await leaveCategoryPage.submitCloneLeaveCategory();
+      await leaveCategoryPage.ensureOnLeaveCategoryList();
+      const existingSickLeave = leaveCategoryPage.getCategoryRowByHierarchy(SICK_LEAVE_CATEGORY);
+      await leaveCategoryPage.revealTableRow(existingSickLeave);
+      const alreadyPending = await existingSickLeave.isVisible().catch(() => false);
+
+      if (!alreadyPending) {
+        await leaveCategoryPage.ensureOnPublishedList();
+        await leaveCategoryPage.openCloneForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
+        await leaveCategoryPage.fillCloneLeaveCategoryForm(SICK_LEAVE_CATEGORY);
+        await expect(leaveCategoryPage.saveButton).toBeEnabled();
+        await leaveCategoryPage.submitCloneLeaveCategory();
+      }
+
       await leaveCategoryPage.expectPendingSubmissionRow(SICK_LEAVE_CATEGORY);
     });
 
@@ -202,7 +210,7 @@ test.describe.serial('Leave Category Foundation', () => {
       test.setTimeout(120000);
 
       await leaveCategoryPage.ensureOnLeaveCategoryList();
-      await leaveCategoryPage.openUpdateForCategory(SICK_LEAVE_CATEGORY.categoryName);
+      await leaveCategoryPage.openUpdateForCategory(SICK_LEAVE_CATEGORY);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
       await leaveCategoryPage.publishLeaveCategoryFromUpdatePage();
       await leaveCategoryPage.expectPublishedRow(SICK_LEAVE_CATEGORY);

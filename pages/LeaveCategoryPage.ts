@@ -302,26 +302,52 @@ export class LeaveCategoryPage {
 
   kebabMenuItem(name: string): Locator {
     return this.page
-      .locator('a.dropdown-item, button.dropdown-item, .dropdown-item, [role="menuitem"]')
+      .locator('.dropdown-menu.show a, .dropdown-menu.show button, .dropdown-menu.show .dropdown-item, .p-menu-overlay .p-menuitem-link, a.dropdown-item, button.dropdown-item, .dropdown-item, [role="menuitem"]')
       .filter({ hasText: new RegExp(`^\\s*${name}\\s*$`, 'i') })
       .filter({ visible: true })
       .first();
   }
 
-  async openRowKebab(row: Locator): Promise<boolean> {
-    await row.scrollIntoViewIfNeeded().catch(() => {});
-
-    const kebab = row
-      .locator('.dropdown > a, [data-bs-toggle="dropdown"], .dropdown-toggle, i.fa-ellipsis-v, td:last-child a, td:last-child button')
+  rowKebabTrigger(row: Locator): Locator {
+    return row
+      .locator(
+        'td:last-child .dropdown > a, td:last-child [data-bs-toggle="dropdown"], td:last-child .dropdown-toggle, td:last-child a:has(i.fa-ellipsis-v), td:last-child a:has(i.fa-ellipsis-vertical), td:last-child i.fa-ellipsis-v, td:last-child i.fa-ellipsis-vertical',
+      )
       .first();
+  }
+
+  async closeOpenKebab() {
+    const openMenu = this.page
+      .locator('.dropdown-menu.show, .p-menu-overlay, [role="menu"]')
+      .filter({ visible: true })
+      .first();
+    if (!(await openMenu.isVisible().catch(() => false))) {
+      return;
+    }
+
+    await this.page.keyboard.press('Escape');
+    await openMenu.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    if (await openMenu.isVisible().catch(() => false)) {
+      await this.page.mouse.click(8, 8);
+      await openMenu.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    }
+  }
+
+  async openRowKebab(row: Locator): Promise<boolean> {
+    await this.closeOpenKebab();
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' })).catch(() => {});
+
+    const kebab = this.rowKebabTrigger(row);
     if (await kebab.isVisible().catch(() => false)) {
       await kebab.click({ force: true });
+      await this.page.waitForTimeout(400);
       return true;
     }
 
     const lastCell = row.getByRole('cell').last();
     if (await lastCell.isVisible().catch(() => false)) {
       await lastCell.click({ force: true });
+      await this.page.waitForTimeout(400);
       return true;
     }
 
@@ -329,10 +355,27 @@ export class LeaveCategoryPage {
   }
 
   async clickRowAction(row: Locator, actionName: 'Update' | 'Clone' | 'Publish' | 'View' | 'Delete') {
-    await this.openRowKebab(row);
-    const actionItem = this.kebabMenuItem(actionName);
-    await actionItem.waitFor({ state: 'visible', timeout: 10000 });
-    await actionItem.click({ force: true });
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' })).catch(() => {});
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.openRowKebab(row);
+      const actionItem = this.kebabMenuItem(actionName);
+      if (await actionItem.isVisible({ timeout: 4000 }).catch(() => false)) {
+        await actionItem.click({ force: true });
+        return;
+      }
+    }
+
+    const inlineAction = row
+      .locator('a, button')
+      .filter({ hasText: new RegExp(`^\\s*${actionName}\\s*$`, 'i') })
+      .first();
+    if (await inlineAction.isVisible().catch(() => false)) {
+      await inlineAction.click({ force: true });
+      return;
+    }
+
+    throw new Error(`Failed to click '${actionName}' on the leave category row.`);
   }
 
   async ensureOnLeaveCategoryList() {
@@ -346,8 +389,8 @@ export class LeaveCategoryPage {
 
   async expectPendingSubmissionRow(data: LeaveCategoryFormData) {
     await this.ensureOnLeaveCategoryList();
-    const row = this.getCategoryRow(data.categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getCategoryRowByHierarchy(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await expect(row.getByRole('cell', { name: /Pending\s*for\s*submission/i })).toBeVisible();
     await expect(row).toContainText(data.year);
@@ -359,10 +402,10 @@ export class LeaveCategoryPage {
     await expect(row).toContainText(data.categoryCode);
   }
 
-  async openUpdateForCategory(categoryName: string) {
+  async openUpdateForCategory(data: LeaveCategoryFormData) {
     await this.ensureOnLeaveCategoryList();
-    const row = this.getCategoryRow(categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getCategoryRowByHierarchy(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await this.clickRowAction(row, 'Update');
     await this.categoryNameInput.waitFor({ state: 'visible', timeout: 15000 });
@@ -415,8 +458,8 @@ export class LeaveCategoryPage {
 
   async expectPublishedRow(data: LeaveCategoryFormData) {
     await this.ensureOnPublishedList();
-    const row = this.getPublishedCategoryRow(data.categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getPublishedCategoryRow(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await expect(row.getByRole('cell', { name: /^Published$/i })).toBeVisible();
     await expect(row).toContainText(data.year);
@@ -437,12 +480,8 @@ export class LeaveCategoryPage {
     await this.switchToPublished();
   }
 
-  getPublishedCategoryRow(categoryName: string): Locator {
-    return this.table
-      .locator('tbody tr, [role="row"]')
-      .filter({ hasText: categoryName })
-      .filter({ hasText: /Published/i })
-      .first();
+  getPublishedCategoryRow(data: LeaveCategoryFormData): Locator {
+    return this.getCategoryRowByHierarchy(data).filter({ hasText: /Published/i });
   }
 
   getCategoryRowByHierarchy(data: LeaveCategoryFormData): Locator {
@@ -452,30 +491,61 @@ export class LeaveCategoryPage {
       .filter({ hasText: data.location })
       .filter({ hasText: data.subLocation })
       .filter({ hasText: data.shift })
+      .filter({ hasText: data.categoryCode })
       .first();
   }
 
-  async expectPublishedKebabOptions(categoryName: string) {
+  async revealTableRow(row: Locator) {
+    const first = this.page.locator('.p-paginator-first').last();
+    const next = this.page.locator('.p-paginator-next').last();
+
+    if (await first.isVisible().catch(() => false)) {
+      const firstClass = (await first.getAttribute('class')) || '';
+      if (!firstClass.includes('p-disabled') && !(await first.isDisabled().catch(() => false))) {
+        await first.click();
+        await this.page.waitForTimeout(400);
+      }
+    }
+
+    for (let pageIndex = 0; pageIndex < 25; pageIndex += 1) {
+      if ((await row.count()) > 0 && (await row.isVisible().catch(() => false))) {
+        await row.scrollIntoViewIfNeeded().catch(() => {});
+        return;
+      }
+
+      if (!(await next.isVisible().catch(() => false))) {
+        break;
+      }
+      const className = (await next.getAttribute('class')) || '';
+      if (className.includes('p-disabled') || (await next.isDisabled().catch(() => false))) {
+        break;
+      }
+      await next.click();
+      await this.page.waitForTimeout(400);
+    }
+  }
+
+  async expectPublishedKebabOptions(data: LeaveCategoryFormData) {
     await this.ensureOnPublishedList();
-    const row = this.getPublishedCategoryRow(categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getPublishedCategoryRow(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await this.openRowKebab(row);
 
     await expect(this.kebabMenuItem('Clone')).toBeVisible();
     await expect(this.kebabMenuItem('View')).toBeVisible();
     await expect(this.kebabMenuItem('Update')).toHaveCount(0);
-    await this.page.keyboard.press('Escape');
+    await this.closeOpenKebab();
   }
 
-  async openViewForCategory(categoryName: string) {
+  async openViewForCategory(data: LeaveCategoryFormData) {
     await this.ensureOnPublishedList();
-    const row = this.getPublishedCategoryRow(categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getPublishedCategoryRow(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await this.clickRowAction(row, 'View');
     await this.page.getByText('View Leave Category', { exact: false }).first().waitFor({ state: 'visible', timeout: 15000 });
-    await expect(this.categoryNameInput).toHaveValue(categoryName, { timeout: 15000 });
+    await expect(this.categoryNameInput).toHaveValue(data.categoryName, { timeout: 15000 });
   }
 
   async expectViewLeaveCategoryDetails(data: LeaveCategoryFormData) {
@@ -504,10 +574,10 @@ export class LeaveCategoryPage {
     await expect(this.saveButton).toBeVisible({ timeout: 15000 });
   }
 
-  async openCloneForCategory(categoryName: string) {
+  async openCloneForCategory(data: LeaveCategoryFormData) {
     await this.ensureOnPublishedList();
-    const row = this.getPublishedCategoryRow(categoryName);
-    await row.scrollIntoViewIfNeeded();
+    const row = this.getPublishedCategoryRow(data);
+    await this.revealTableRow(row);
     await expect(row).toBeVisible({ timeout: 30000 });
     await this.clickRowAction(row, 'Clone');
     await this.page.getByText('Clone Leave Category', { exact: false }).first().waitFor({ state: 'visible', timeout: 15000 });
