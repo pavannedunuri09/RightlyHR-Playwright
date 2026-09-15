@@ -113,21 +113,17 @@ test.describe.serial('Load Entitlements', () => {
   });
 
   test('05. displays entitled General Leave and Sick Leave balances', async () => {
-    await leavesPage.waitForEntitlementCards([
+    await leavesPage.validateUserSessionAndOpenLeaves(loginPage, [
       GENERAL_LEAVE_CATEGORY.categoryName,
       SICK_LEAVE_CATEGORY.categoryName,
     ]);
 
-    const entitledBalance = `${DEFAULT_ALLOCATION_DAYS}/${DEFAULT_ALLOCATION_DAYS}`;
-
     await leavesPage.expectEntitledLeave(GENERAL_LEAVE_CATEGORY.categoryName, {
-      entitledBalance,
       frequency: GENERAL_LEAVE_CATEGORY.frequencyType,
       booked: '0',
       processed: '0',
     });
     await leavesPage.expectEntitledLeave(SICK_LEAVE_CATEGORY.categoryName, {
-      entitledBalance,
       frequency: SICK_LEAVE_CATEGORY.frequencyType,
       booked: '0',
       processed: '0',

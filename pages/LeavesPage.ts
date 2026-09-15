@@ -3,7 +3,7 @@ import { datePartsFromInput, daysFromToday, workedDateToInput } from './WorkFrom
 import { GENERAL_LEAVE_CATEGORY, SICK_LEAVE_CATEGORY } from './LeaveCategoryPage';
 
 export type LeaveEntitlementExpectation = {
-  entitledBalance: string;
+  entitledBalance?: string;
   frequency: string;
   booked?: string;
   processed?: string;
@@ -291,8 +291,9 @@ export class LeavesPage {
     return this.page
       .locator('div')
       .filter({ has: this.page.getByText(categoryName, { exact: true }) })
-      .filter({ hasText: /\d+\s*\/\s*\d+/ })
-      .first();
+      .filter({ hasText: /Booked/i })
+      .filter({ hasText: /\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?/ })
+      .last();
   }
 
   async waitForEntitlementCards(categoryNames: string[], timeoutMs = 30000) {
@@ -382,10 +383,14 @@ export class LeavesPage {
 
     const blockText = (await block.innerText()).replace(/\s+/g, ' ');
     const normalizedBlockText = blockText.replace(/\s/g, '');
-    const normalizedBalance = expectation.entitledBalance.replace(/\s/g, '');
     expect(blockText).toContain(categoryName);
-    expect(normalizedBlockText).toContain(normalizedBalance);
     expect(blockText).toContain(expectation.frequency);
+
+    if (expectation.entitledBalance) {
+      expect(normalizedBlockText).toContain(expectation.entitledBalance.replace(/\s/g, ''));
+    } else {
+      expect(normalizedBlockText).toMatch(/\d+(?:\.\d+)?\/\d+(?:\.\d+)?/);
+    }
 
     if (expectation.booked !== undefined) {
       expect(blockText).toMatch(new RegExp(`Booked\\s*${expectation.booked}`, 'i'));

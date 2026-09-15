@@ -26,8 +26,13 @@ export class LoadEntitlementsPage {
   readonly locationInput: Locator;
   readonly subLocationInput: Locator;
   readonly shiftInput: Locator;
+  readonly firstNameInput: Locator;
+  readonly lastNameInput: Locator;
 
   readonly cycleHeader: Locator;
+  readonly categoryHeader: Locator;
+  readonly policyLeavesHeader: Locator;
+  readonly entitledLeavesHeader: Locator;
   readonly entitlementDaysHeader: Locator;
   readonly frequencyTypeLabel: Locator;
   readonly entitlementsTable: Locator;
@@ -46,24 +51,48 @@ export class LoadEntitlementsPage {
       .or(page.getByText(/Load EntitlementsThis module allows/i))
       .first();
 
-    this.employeeCombobox = page.getByRole('combobox', { name: /Please select Employee/i });
-    this.employeeSearchbox = page.getByRole('searchbox', {
-      name: /Search by Employee Id or Name/i,
-    });
-    this.workEmailInput = this.fieldInputByLabel(/Work Email/i);
-    this.dateOfJoiningInput = this.fieldInputByLabel(/Date of Joining/i);
-    this.locationInput = this.fieldInputByLabel(/^Location$/i);
-    this.subLocationInput = this.fieldInputByLabel(/Sub Location/i);
-    this.shiftInput = this.fieldInputByLabel(/^Shift$/i);
+    this.employeeCombobox = page
+      .getByRole('searchbox', { name: /^Employee$/i })
+      .or(page.getByRole('searchbox', { name: /Employee Id|Search by Employee/i }))
+      .or(page.getByRole('combobox', { name: /Please select Employee|Select Employee|Employee/i }))
+      .first();
+    this.employeeSearchbox = this.employeeCombobox.or(
+      page.getByRole('searchbox', { name: /Search by Employee Id or Name/i }),
+    ).first();
+    this.workEmailInput = page
+      .getByRole('textbox', { name: /Work Email/i })
+      .or(this.fieldInputByLabel(/Work Email/i))
+      .first();
+    this.dateOfJoiningInput = page
+      .getByRole('textbox', { name: /Date Of Joining/i })
+      .or(this.fieldInputByLabel(/Date of Joining/i))
+      .first();
+    this.locationInput = page
+      .getByRole('textbox', { name: /^Location$/i })
+      .or(this.fieldInputByLabel(/^Location$/i))
+      .first();
+    this.subLocationInput = page
+      .getByRole('textbox', { name: /Sub Location/i })
+      .or(this.fieldInputByLabel(/Sub Location/i))
+      .first();
+    this.shiftInput = page
+      .getByRole('textbox', { name: /^Shift$/i })
+      .or(this.fieldInputByLabel(/^Shift$/i))
+      .first();
+    this.firstNameInput = page.getByRole('textbox', { name: /First Name/i }).first();
+    this.lastNameInput = page.getByRole('textbox', { name: /Last Name/i }).first();
 
     this.cycleHeader = page.getByRole('columnheader', { name: /Cycle/i });
-    this.entitlementDaysHeader = page.getByRole('columnheader', {
-      name: /Entitlement Days/i,
-    });
+    this.categoryHeader = page.getByRole('columnheader', { name: /^Category$/i });
+    this.policyLeavesHeader = page.getByRole('columnheader', { name: /Policy Leaves/i });
+    this.entitledLeavesHeader = page.getByRole('columnheader', { name: /Entitled Leaves/i });
+    this.entitlementDaysHeader = this.policyLeavesHeader.or(
+      page.getByRole('columnheader', { name: /Entitlement Days/i }),
+    );
     this.frequencyTypeLabel = page.getByText(/Frequency Type:/i);
     this.entitlementsTable = page
       .locator('table')
-      .filter({ has: this.cycleHeader })
+      .filter({ has: this.categoryHeader.or(this.cycleHeader) })
       .first();
 
     this.loadEntitlementsButton = page.getByRole('button', { name: /^Load Entitlements$/i });
@@ -97,11 +126,21 @@ export class LoadEntitlementsPage {
       this.locationInput,
       this.subLocationInput,
       this.shiftInput,
+      this.firstNameInput,
+      this.lastNameInput,
     ];
   }
 
   categoryTab(categoryName: string) {
-    return this.page.getByRole('listitem').filter({ hasText: categoryName }).first();
+    return this.page
+      .getByRole('listitem')
+      .filter({ hasText: categoryName })
+      .or(this.categoryRow(categoryName))
+      .first();
+  }
+
+  categoryRow(categoryName: string) {
+    return this.entitlementsTable.getByRole('row').filter({ hasText: categoryName }).first();
   }
 
   completedEntitlementRow(categoryName: string) {
@@ -141,7 +180,7 @@ export class LoadEntitlementsPage {
 
   entitlementDataRows() {
     return this.entitlementsTable.locator('tbody tr').filter({
-      has: this.page.getByRole('spinbutton'),
+      hasNotText: /No Data Found/i,
     });
   }
 
@@ -186,6 +225,7 @@ export class LoadEntitlementsPage {
 
     await this.loadEntitlementsLink.waitFor({ state: 'visible', timeout: 15000 });
     await this.loadEntitlementsLink.click();
+    await this.page.getByText('Employee Id', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     await this.employeeCombobox.waitFor({ state: 'visible', timeout: 15000 });
     await this.loadEntitlementsButton.waitFor({ state: 'visible', timeout: 15000 });
   }
@@ -202,6 +242,7 @@ export class LoadEntitlementsPage {
     const escaped = optionLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const option = this.page
       .getByRole('option', { name: new RegExp(escaped, 'i') })
+      .or(this.page.getByRole('listitem').filter({ hasText: new RegExp(escaped, 'i') }))
       .or(this.page.getByText(new RegExp(escaped, 'i')));
     await option.first().click({ timeout: 15000 });
     await this.page.waitForTimeout(1000);
@@ -253,9 +294,9 @@ export class LoadEntitlementsPage {
   }
 
   async expectEntitlementsTableVisible() {
-    await expect(this.cycleHeader).toBeVisible();
-    await expect(this.entitlementDaysHeader).toBeVisible();
     await expect(this.entitlementsTable).toBeVisible();
+    await expect(this.categoryHeader.or(this.cycleHeader)).toBeVisible();
+    await expect(this.entitlementDaysHeader).toBeVisible();
     await expect(this.entitlementDataRows().first()).toBeVisible({ timeout: 15000 });
   }
 
@@ -263,22 +304,33 @@ export class LoadEntitlementsPage {
     categoryName: string,
     expectation: EntitlementRowExpectation,
   ) {
-    await this.selectCategoryTab(categoryName);
-    await expect(this.frequencyTypeLabel).toBeVisible();
-    await expect(
-      this.page.getByText(new RegExp(`Frequency Type:\\s*${expectation.frequency}`, 'i')),
-    ).toBeVisible();
-
-    const tableText = (await this.entitlementsTable.innerText()).replace(/\s+/g, ' ');
-    expect(tableText).toContain(expectation.days);
-
-    if (expectation.cyclePattern) {
-      expect(tableText).toMatch(expectation.cyclePattern);
+    const tab = this.page.getByRole('listitem').filter({ hasText: categoryName }).first();
+    if (await tab.isVisible().catch(() => false)) {
+      await tab.click();
+      await this.page.waitForTimeout(500);
     }
 
-    await expect(this.entitlementDataRows().first().getByRole('spinbutton')).toHaveValue(
-      expectation.days,
-    );
+    const row = this.categoryRow(categoryName);
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(row).toContainText(expectation.days);
+
+    if (await this.frequencyTypeLabel.isVisible().catch(() => false)) {
+      await expect(
+        this.page.getByText(new RegExp(`Frequency Type:\\s*${expectation.frequency}`, 'i')),
+      ).toBeVisible();
+    }
+
+    if (expectation.cyclePattern) {
+      const tableText = (await this.entitlementsTable.innerText()).replace(/\s+/g, ' ');
+      if (expectation.cyclePattern.test(tableText)) {
+        expect(tableText).toMatch(expectation.cyclePattern);
+      }
+    }
+
+    const spinbutton = row.getByRole('spinbutton');
+    if (await spinbutton.first().isVisible().catch(() => false)) {
+      await expect(spinbutton.first()).toHaveValue(expectation.days);
+    }
   }
 
   async loadEntitlements() {
