@@ -64,15 +64,16 @@ test.describe('Prospective Trainees', () => {
   });
 
   test('Test-01: Duplicate Employee email trainee creation', async ({ page }) => {
+    test.setTimeout(120000);
     const trainees = new ProspectiveTraineePage(page);
     await trainees.openTraineesList();
     await expect(page).toHaveURL(/\/employee-management\/prospective\/interns/);
 
+    await trainees.ensureTraineeExistsForDuplicateCheck(DUPLICATE_TRAINEE);
+
     await trainees.openAddForm();
     await trainees.fillAndSubmit(DUPLICATE_TRAINEE);
-
-    await expect(trainees.duplicateEmailMessage).toBeVisible({ timeout: 15000 });
-    await expect(trainees.addButton).toBeVisible();
+    await trainees.expectDuplicateEmailError();
   });
 
   test('Test-02: New trainee creation', async ({ page }) => {

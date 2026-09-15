@@ -46,11 +46,11 @@ export class ProspectiveTraineePage {
     this.designationCombobox = page.getByRole('combobox', { name: 'Please select designation' });
     this.employmentTypeCombobox = page.getByRole('combobox', { name: 'Please select employment type' });
     this.locationCombobox = page.getByRole('combobox', { name: 'Please select location' });
-    this.sublocationCombobox = page.getByRole('combobox', { name: 'Please select sublocation' });
+    this.sublocationCombobox = page.getByRole('combobox', { name: /Please select sub\s?location/i });
     this.addButton = page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true });
     this.traineeSearch = page.getByRole('searchbox');
     this.duplicateEmailMessage = page.getByText(
-      /already exist|already registered|duplicate|email.*(exist|taken|in use)/i,
+      /already exist|already exists|already registered|duplicate|email.*(exist|exists|taken|in use)|personal email.*already/i,
     );
   }
 
@@ -149,6 +149,30 @@ export class ProspectiveTraineePage {
   async openAddForm() {
     await this.addProspectiveTraineeButton.click();
     await this.firstNameInput.waitFor({ state: 'visible' });
+  }
+
+  async ensureTraineeExistsForDuplicateCheck(details: TraineeDetails) {
+    await this.searchTrainee(details.email);
+    if (await this.traineeRow(details.email).isVisible().catch(() => false)) {
+      await this.clearTraineeSearch();
+      return;
+    }
+
+    await this.openAddForm();
+    await this.fillAndSubmit(details);
+    await this.expectTraineeVisibleInList(details);
+    await this.clearTraineeSearch();
+  }
+
+  async expectDuplicateEmailError() {
+    const dialog = this.page.getByRole('dialog');
+    const message = this.duplicateEmailMessage
+      .or(dialog.getByText(/already exist|already exists|already registered|duplicate|personal email/i))
+      .or(this.page.locator('.p-toast-message, .p-message, .invalid-feedback, .text-danger')
+        .filter({ hasText: /already|duplicate|exist/i }));
+
+    await expect(message.first()).toBeVisible({ timeout: 15000 });
+    await expect(dialog.getByRole('button', { name: 'Add', exact: true })).toBeVisible();
   }
 
   async fillAndSubmit(details: TraineeDetails) {
@@ -359,14 +383,44 @@ export class ProspectiveTraineePage {
     await this.optionList().getByText(label, { exact: true }).click();
   }
 
+  private sublocationField() {
+    return this.page.getByRole('dialog').locator('#sublocation');
+  }
+
+  private sublocationComboboxInDialog() {
+    const field = this.sublocationField();
+    return field.getByRole('combobox').first().or(this.sublocationCombobox);
+  }
+
   private async selectLocation(label: string) {
-    await this.locationCombobox.click();
+    const dialog = this.page.getByRole('dialog');
+    const locationCombo = dialog.getByRole('combobox', { name: 'Please select location' })
+      .or(dialog.getByRole('combobox', { name: label }));
+    await locationCombo.first().click();
     await this.page.getByRole('option', { name: label }).click();
+    await this.sublocationComboboxInDialog().first().waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.waitForTimeout(400);
   }
 
   private async selectSublocation(label: string) {
-    await this.sublocationCombobox.click();
-    await this.optionList().getByText(label).click();
+    const field = this.sublocationField();
+    const combo = this.sublocationComboboxInDialog().first();
+    const trigger = field.getByRole('button', { name: 'dropdown trigger' });
+
+    await combo.waitFor({ state: 'visible', timeout: 10000 });
+
+    const current = ((await combo.innerText().catch(() => '')) || '').trim();
+    if (current === label) {
+      return;
+    }
+
+    if (await trigger.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await trigger.click();
+    } else {
+      await combo.click();
+    }
+
+    await this.page.getByRole('option', { name: label }).click();
   }
 
   private optionList() {

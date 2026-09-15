@@ -157,21 +157,31 @@ export class JobInfoWfhPage {
     });
   }
 
+  private allocateFieldTrigger(dialog: Locator, label: string) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return dialog
+      .getByText(new RegExp(`^${escaped}\\s*\\*$`))
+      .locator('..')
+      .getByRole('button', { name: 'dropdown trigger' });
+  }
+
+  private async selectAllocateOption(dialog: Locator, label: string, optionName: string) {
+    const trigger = this.allocateFieldTrigger(dialog, label);
+    await trigger.waitFor({ state: 'visible' });
+    await trigger.click();
+    await this.page.getByRole('option', { name: optionName, exact: true }).click();
+  }
+
   async fillAllocateForm(effectiveFrom: string, managerLabel: string) {
     await this.allocateButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible' });
 
-    await dialog.getByText('Allow Work From Home *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
-    await this.page.getByRole('option', { name: 'Yes', exact: true }).click();
+    await this.selectAllocateOption(dialog, 'Allow Work From Home', 'Yes');
+    await this.selectAllocateOption(dialog, 'Allow Remote Login', 'No');
 
-    await dialog.getByText('Allow Remote Login *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
-    await this.page.getByRole('option', { name: 'No', exact: true }).click();
-
-    const workLocationTrigger = dialog
-      .getByText('Work From Home Work Location *', { exact: true })
-      .locator('..')
-      .getByRole('button', { name: 'dropdown trigger' });
+    const workLocationTrigger = this.allocateFieldTrigger(dialog, 'Work From Home Work Location')
+      .or(dialog.getByText(/Work Location\s*\*/).locator('..').getByRole('button', { name: 'dropdown trigger' }).first());
     await workLocationTrigger.waitFor({ state: 'visible' });
     await workLocationTrigger.click();
     try {
@@ -180,10 +190,7 @@ export class JobInfoWfhPage {
       await this.page.getByRole('option', { name: 'Work From Home' }).click();
     }
 
-    const managerTrigger = dialog
-      .getByText('Work From Home Manager *', { exact: true })
-      .locator('..')
-      .getByRole('button', { name: 'dropdown trigger' });
+    const managerTrigger = this.allocateFieldTrigger(dialog, 'Work From Home Manager');
     await managerTrigger.click();
     try {
       await this.page.getByRole('option').filter({ hasText: managerLabel }).click({ timeout: 5000 });
@@ -225,17 +232,11 @@ export class JobInfoWfhPage {
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible' });
 
-    await dialog.getByText('Allow Work From Home *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
-    await this.page.getByRole('option', { name: 'No', exact: true }).click();
+    await this.selectAllocateOption(dialog, 'Allow Work From Home', 'No');
+    await this.selectAllocateOption(dialog, 'Allow Remote Login', 'Yes');
 
-    await dialog.getByText('Allow Remote Login *', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }).click();
-    await this.page.getByRole('option', { name: 'Yes', exact: true }).click();
-
-    const locationTrigger = dialog
-      .getByText(/Work Location \*/)
-      .locator('..')
-      .getByRole('button', { name: 'dropdown trigger' })
-      .first();
+    const locationTrigger = this.allocateFieldTrigger(dialog, 'Work Location')
+      .or(dialog.getByText(/Work Location\s*\*/).locator('..').getByRole('button', { name: 'dropdown trigger' }).first());
     await locationTrigger.waitFor({ state: 'visible' });
     await locationTrigger.click();
     try {
@@ -248,11 +249,7 @@ export class JobInfoWfhPage {
     if (await managerCombo.isVisible().catch(() => false)) {
       await managerCombo.click();
     } else {
-      await dialog
-        .getByText(/Remote Login Manager \*/)
-        .locator('..')
-        .getByRole('button', { name: 'dropdown trigger' })
-        .click();
+      await this.allocateFieldTrigger(dialog, 'Remote Login Manager').click();
     }
     try {
       await this.page.getByRole('option').filter({ hasText: managerLabel }).click({ timeout: 5000 });
@@ -385,6 +382,9 @@ export class JobInfoWfhPage {
       return;
     }
     await this.inactivateActiveRow('Remote Login');
+    if (await this.activateInactiveRow('WFH')) {
+      return;
+    }
     await this.allocateWfh(this.todayEffectiveFrom(), managerLabel, { inactivateOther: false });
   }
 

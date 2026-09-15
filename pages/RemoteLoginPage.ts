@@ -86,10 +86,10 @@ export class RemoteLoginPage {
     this.secondHalfRadio = page.getByRole('dialog').getByRole('radio', { name: /Second Half/i });
     this.reasonInput = page.getByRole('textbox', { name: /Reason\s*\*/ });
     this.requestButton = page.getByRole('dialog').getByRole('button', { name: 'Request', exact: true });
-    this.waitingForApprovalTab = page.getByText(/Waiting For Approval \(\d+\)/).first();
-    this.rejectedTab = page.getByText(/Rejected \(\d+\)/).first();
-    this.approvedTab = page.getByText(/Approved \(\d+\)/).first();
-    this.processedTab = page.getByText(/Processed \(\d+\)/).first();
+    this.waitingForApprovalTab = page.getByText(/^Waiting For Approval \(\d+\)$/).first();
+    this.rejectedTab = page.getByText(/^Rejected \(\d+\)$/).first();
+    this.approvedTab = page.getByText(/^Approved \(\d+\)$/).first();
+    this.processedTab = page.getByText(/^Processed \(\d+\)$/).first();
     this.pendingApprovalsNav = page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Pending Approvals' });
     this.pendingApprovalsToggle = this.pendingApprovalsNav.locator('[data-bs-toggle="dropdown"]');
     this.pendingTimeOffTab = page.locator('app-pending-approvals-tabs').locator('.grid-item').filter({ hasText: /Time-Off/ });
@@ -237,35 +237,33 @@ export class RemoteLoginPage {
   }
 
   async selectHalfDaySession(session: 'first' | 'second' = 'first') {
-    await this.halfDayRadio.check();
-    const radio = session === 'second' ? this.secondHalfRadio : this.firstHalfRadio;
-    await radio.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-    if (await radio.isVisible().catch(() => false)) {
-      await radio.check();
-      return;
+    const dialog = this.page.getByRole('dialog');
+    await dialog.getByRole('radio', { name: 'Half Day' }).check();
+    await this.page.waitForTimeout(300);
+
+    const radio = session === 'second'
+      ? dialog.getByRole('radio', { name: 'Second Half', exact: true })
+      : dialog.getByRole('radio', { name: 'First Half', exact: true });
+
+    await radio.waitFor({ state: 'visible', timeout: 5000 });
+    await radio.check();
+    if (!(await radio.isChecked().catch(() => false))) {
+      await radio.click({ force: true });
     }
+    await expect(radio).toBeChecked({ timeout: 3000 });
+
     if (session !== 'second') {
       return;
     }
-    const dialog = this.page.getByRole('dialog');
-    const option = dialog.getByRole('option', { name: /Second Half/i });
+
     const combo = dialog.getByRole('combobox').filter({ hasText: /First Half|Second Half|Session|Half/i }).first();
     if (await combo.isVisible().catch(() => false)) {
-      await combo.click();
-      await this.page.getByRole('option', { name: /Second Half/i }).click();
-      return;
+      const comboText = ((await combo.innerText().catch(() => '')) || '').trim();
+      if (!/Second Half/i.test(comboText)) {
+        await combo.click();
+        await this.page.getByRole('option', { name: /Second Half/i }).click();
+      }
     }
-    const trigger = dialog.getByRole('button', { name: 'dropdown trigger' }).last();
-    if (await trigger.isVisible().catch(() => false)) {
-      await trigger.click();
-      await this.page.getByRole('option', { name: /Second Half/i }).click();
-      return;
-    }
-    if (await option.isVisible().catch(() => false)) {
-      await option.click();
-      return;
-    }
-    throw new Error('Could not select Second Half on the Request Remote Login form');
   }
 
   async tryRequestRemoteLogin(
@@ -292,7 +290,8 @@ export class RemoteLoginPage {
       return false;
     }
 
-    if (!(await this.waitForRequestSubmitEnabled(2000))) {
+    const submitTimeout = session === 'second' ? 8000 : 2000;
+    if (!(await this.waitForRequestSubmitEnabled(submitTimeout))) {
       claimRemoteLoginDate(workedDate);
       await this.closeRequestDialogIfOpen();
       return false;
@@ -313,6 +312,17 @@ export class RemoteLoginPage {
         return false;
       }
       await dialog.waitFor({ state: 'hidden', timeout: 12000 });
+      await this.gotoWaitingForApproval();
+      if (session === 'second') {
+        const cell = datePartsFromInput(workedDate).cell;
+        const secondHalfVisible = await this.sessionRow(cell, 'Second Half')
+          .isVisible({ timeout: 5000 })
+          .catch(() => false);
+        if (!secondHalfVisible) {
+          await this.closeRequestDialogIfOpen();
+          return false;
+        }
+      }
       claimRemoteLoginDate(workedDate);
       return true;
     } catch {
@@ -346,80 +356,35 @@ export class RemoteLoginPage {
 
   async requestAvailableRemoteLoginDates(count: number, startAhead?: number) {
     const created: ReturnType<typeof weekdayDate>[] = [];
-    const booked = bookedDateInputs(await this.collectWorkedDates());
-    const start = startAhead ?? remoteLoginStartAhead();
-    let formOpen = false;
+    const tried = new Set<string>();
 
-    const ensureFormOpen = async () => {
-      const dialog = this.page.getByRole('dialog');
-      if (formOpen && (await this.workedDateInput.isVisible().catch(() => false))) {
-        return dialog;
-      }
-      for (let attempt = 0; attempt < 3; attempt++) {
-        await this.closeRequestDialogIfOpen();
+    const tryCandidates = async (candidates: ReturnType<typeof weekdayDate>[]) => {
+      for (const date of candidates) {
+        if (tried.has(date.input)) {
+          continue;
+        }
+        tried.add(date.input);
         if (!(await this.requestRemoteLoginButton.isVisible().catch(() => false))) {
           await this.gotoWaitingForApproval();
         }
-        await this.requestRemoteLoginButton.click();
-        try {
-          await this.workedDateInput.waitFor({ state: 'visible', timeout: 8000 });
-          formOpen = true;
-          return dialog;
-        } catch {
-          formOpen = false;
-          await this.page.keyboard.press('Escape');
+        if (await this.tryRequestRemoteLogin(date.input, `Request Remote Login ${date.input}`, 'first')) {
+          created.push(date);
+        }
+        if (created.length === count) {
+          return;
         }
       }
-      await this.workedDateInput.waitFor({ state: 'visible', timeout: 15000 });
-      formOpen = true;
-      return dialog;
     };
 
-    for (let ahead = start; created.length < count && ahead <= MAX_ADVANCE_DAYS; ahead++) {
-      const date = weekdayDate(ahead);
-      if (this.isDateUnavailable(date.input, booked)) {
-        continue;
-      }
-
-      const dialog = await ensureFormOpen();
-      await this.workedDateInput.fill('');
-      await this.workedDateInput.fill(date.input);
-      await this.workedDateInput.blur();
-      await this.duplicateRequestMessage.waitFor({ state: 'hidden', timeout: 1500 }).catch(() => {});
-      await this.selectHalfDaySession('first');
-      await this.reasonInput.fill(`Request Remote Login ${date.input}`);
-      await this.page.waitForTimeout(500);
-
-      if (await this.isAlreadyRequestedMessageVisible()) {
-        claimRemoteLoginDate(date.input);
-        booked.add(date.input);
-        continue;
-      }
-      if (!(await this.waitForRequestSubmitEnabled(3000))) {
-        continue;
-      }
-
-      await this.requestButton.click();
-      const outcome = await Promise.race([
-        this.duplicateRequestMessage.waitFor({ state: 'visible', timeout: 8000 }).then(() => 'duplicate' as const),
-        dialog.waitFor({ state: 'hidden', timeout: 8000 }).then(() => 'closed' as const),
-      ]).catch(() => 'unknown' as const);
-
-      if (outcome !== 'closed' || (await this.isAlreadyRequestedMessageVisible())) {
-        claimRemoteLoginDate(date.input);
-        booked.add(date.input);
-        formOpen = await dialog.isVisible().catch(() => false);
-        continue;
-      }
-
-      claimRemoteLoginDate(date.input);
-      booked.add(date.input);
-      created.push(date);
-      formOpen = false;
+    let candidates: ReturnType<typeof weekdayDate>[] = [];
+    try {
+      candidates = await this.findAvailableWeekdays(Math.max(count * 5, 10), startAhead);
+    } catch {
+      candidates = [];
     }
-
-    if (formOpen) {
-      await this.closeRequestDialogIfOpen();
+    await tryCandidates(candidates);
+    if (created.length < count) {
+      await tryCandidates(await this.reusableRejectedWeekdays());
     }
     if (created.length < count) {
       throw new Error(`Could only submit ${created.length} of ${count} unused Remote Login dates`);
@@ -440,7 +405,7 @@ export class RemoteLoginPage {
 
   async readTabCount(tab: Locator) {
     const text = (await tab.innerText()).replace(/\s+/g, ' ').trim();
-    const match = text.match(/\((\d+)\)\s*$/);
+    const match = text.match(/\((\d+)\)/);
     return match ? Number(match[1]) : 0;
   }
 
@@ -698,8 +663,17 @@ export class RemoteLoginPage {
 
   async completePendingToProcessed(workedDates: string[]) {
     const queue = await this.openQueueWithRequests(workedDates);
-    if (queue === 'forYou' && await this.approveButton.isVisible().catch(() => false) && !(await this.processButton.isVisible().catch(() => false))) {
-      await this.approveAtCurrentQueue(workedDates);
+    await this.waitForRequestRows(workedDates);
+    await this.selectRequests(workedDates);
+    await this.processButton.or(this.approveButton).waitFor({ state: 'visible', timeout: 15000 });
+    if (await this.processButton.isVisible().catch(() => false)) {
+      await this.processSelected();
+      await this.closeSuccessDialog();
+      return;
+    }
+    if (queue === 'forYou' && await this.approveButton.isVisible().catch(() => false)) {
+      await this.approveSelected();
+      await this.closeSuccessDialog();
       await this.openForYourRoleTab();
       await this.processAtCurrentQueue(workedDates);
       return;
@@ -749,6 +723,9 @@ export class RemoteLoginPage {
   }
 
   async processSelected() {
+    if (!(await this.processButton.isVisible().catch(() => false))) {
+      await this.processButton.waitFor({ state: 'visible', timeout: 15000 });
+    }
     await this.processButton.click();
     if (await this.processedOption.isVisible().catch(() => false)) {
       await this.processedOption.click();

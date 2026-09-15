@@ -47,12 +47,12 @@ export class OnboardingApplicationPage {
     this.firstNameInput = page.getByRole('textbox', { name: 'First Name*' });
     this.lastNameInput = page.getByRole('textbox', { name: 'Last Name*' });
     this.nameError = page.getByText(/only alphabets|should not contain|invalid|valid first name|valid last name|numbers|special|not allowed|alphabet/i);
-    this.mobileInput = page.getByRole('textbox', { name: 'Please enter your mobile number' });
+    this.mobileInput = page.getByRole('textbox', { name: /Please enter your mobile/i });
     this.mobileError = page.getByText(/invalid.*mobile|10 digit|mobile.*valid|enter a valid|valid mobile/i);
-    this.genderCombobox = page.getByRole('combobox', { name: 'Please select gender' });
-    this.salutationCombobox = page.getByRole('combobox', { name: 'Please select salutation' });
+    this.genderCombobox = page.locator('#gender');
+    this.salutationCombobox = page.locator('#salutation').or(page.locator('p-select[formcontrolname="salutation"]'));
     this.dobInput = page.getByRole('textbox', { name: 'Date Of Birth *' });
-    this.bloodGroupCombobox = page.getByRole('combobox', { name: 'Please select blood group' });
+    this.bloodGroupCombobox = page.locator('#bloodGroup');
     this.addressLine1 = page.getByRole('textbox', { name: 'Address Line 1*' }).first();
     this.cityInput = page.getByRole('textbox', { name: 'City*' }).first();
     this.stateInput = page.getByRole('textbox', { name: 'Please enter state' }).first();
@@ -79,11 +79,48 @@ export class OnboardingApplicationPage {
     await this.genderCombobox.waitFor({ state: 'visible', timeout: 20000 });
   }
 
+  private async openComboboxField(field: Locator) {
+    await this.page.locator('.p-select-overlay').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+    const combobox = field.getByRole('combobox');
+    const trigger = field.getByRole('button', { name: 'dropdown trigger' });
+    if (await trigger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await trigger.click();
+      return;
+    }
+    await combobox.click();
+  }
+
+  private async selectComboboxOption(field: Locator, optionName: string) {
+    const combobox = field.getByRole('combobox');
+    await this.openComboboxField(field);
+    const controlsId = await combobox.getAttribute('aria-controls');
+    const panel = controlsId
+      ? this.page.locator(`#${controlsId}`)
+      : this.page.locator('.p-select-overlay').last();
+    await expect(panel).toBeVisible({ timeout: 5000 });
+    await panel.getByRole('option', { name: optionName, exact: true }).first().click();
+    await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    await expect(field).toContainText(optionName, { timeout: 5000 });
+  }
+
+  private async selectMobileCountryCode() {
+    const countryCombo = this.page.getByRole('combobox', { name: /Select country|India|91/i }).first();
+    await countryCombo.click().catch(async () => {
+      await this.page.getByText('Select country').click();
+    });
+    const search = this.page.locator('lib-country-list').getByRole('textbox');
+    await search.waitFor({ state: 'visible', timeout: 5000 });
+    await search.fill('91');
+    await this.page.getByText('India (भारत)').click();
+    await this.page.locator('lib-country-list').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
+
   async isPersonalFormEditable() {
-    if (!(await this.genderCombobox.isVisible({ timeout: 5000 }).catch(() => false))) {
+    const genderInput = this.genderCombobox.getByRole('combobox');
+    if (!(await genderInput.isVisible({ timeout: 5000 }).catch(() => false))) {
       return false;
     }
-    return this.genderCombobox.isEnabled().catch(() => false);
+    return genderInput.isEnabled().catch(() => false);
   }
 
   async preparePersonalDetailsAndOpenDocuments(
@@ -147,6 +184,8 @@ export class OnboardingApplicationPage {
     if (letterError) {
       console.log(`Mobile validation: ${(await this.mobileError.first().innerText()).trim()}`);
     }
+    await this.mobileInput.fill('');
+    await this.mobileInput.blur();
   }
 
   static expectedPersonalDefaults(firstName: string) {
@@ -180,34 +219,42 @@ export class OnboardingApplicationPage {
       await this.lastNameInput.fill(lastName);
     }
 
-    await this.genderCombobox.click();
-    await this.page.getByRole('option', { name: female ? 'Female' : 'Male', exact: true }).click();
+    const salutation = female ? 'Miss.' : 'Mr.';
+    const gender = female ? 'Female' : 'Male';
 
-    await this.salutationCombobox.click();
-    await this.page.getByRole('option', { name: female ? 'Miss.' : 'Mr.', exact: true }).click();
+    await this.selectComboboxOption(this.genderCombobox, gender);
+    const salutationText = ((await this.salutationCombobox.innerText().catch(() => '')) || '').trim();
+    if (!salutationText.includes(salutation)) {
+      await this.selectComboboxOption(this.salutationCombobox, salutation);
+    }
 
-    await this.page.getByRole('combobox', { name: 'Select country' }).click().catch(async () => {
-      await this.page.getByText('Select country').click();
-    });
-    await this.page.locator('lib-country-list').getByRole('textbox').fill('91');
-    await this.page.getByText('India (भारत)').click();
+    await this.selectMobileCountryCode();
 
     await this.mobileInput.fill(mobile);
+    await this.mobileInput.blur();
     await this.dobInput.fill('1998-05-15');
+    await this.dobInput.blur();
 
-    await this.bloodGroupCombobox.click();
-    await this.page.getByRole('option', { name: 'B+', exact: true }).click();
+    await this.selectComboboxOption(this.bloodGroupCombobox, 'B+');
 
-    await this.addressLine1.fill(details.addressLine1);
-    await this.cityInput.fill(details.city);
-    await this.stateInput.fill(details.state);
-    await this.countryInput.fill(details.country);
-    await this.zipInput.fill(details.pincode);
+    const addressLine1 = this.page.locator('#currentAddressLine1').or(this.addressLine1);
+    const cityInput = this.page.locator('#currentCity').or(this.cityInput);
+    const stateInput = this.page.locator('#currentState').or(this.stateInput);
+    const zipInput = this.page.locator('#currentzipCode').or(this.zipInput);
+    const countryInput = this.page.getByRole('textbox', { name: 'Country*' }).first();
+
+    await addressLine1.fill(details.addressLine1);
+    await cityInput.fill(details.city);
+    await stateInput.fill(details.state);
+    await countryInput.fill(details.country);
+    await zipInput.fill(details.pincode);
+    await zipInput.blur();
     await this.sameAsCurrentAddress.check();
     return details;
   }
 
   async goToDocuments() {
+    await expect(this.nextButton).toBeEnabled({ timeout: 30000 });
     await this.nextButton.click();
     await this.page.getByRole('row', { name: /Resume/ }).waitFor({ state: 'visible', timeout: 20000 });
   }

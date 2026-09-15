@@ -1,17 +1,17 @@
 {
   "middleName": "",
   "designation": "Front End Developer",
-  "firstName": "Amit",
-  "lastName": "Verma",
-  "email": "amit.verma.qli@yopmail.com",
-  "gender": "Male",
+  "firstName": "Karthik",
+  "lastName": "Nair",
+  "email": "karthik.nair.ttl@yopmail.com",
+  "employeeId": "15936",
   "salutation": "Mr.",
-  "username": "amit.verma.qli@yopmail.com",
-  "password": "FPi45zmu",
-  "addressLine1": "Road no.10",
-  "city": "Chennai",
-  "state": "Tamil Nadu",
+  "gender": "Male",
+  "username": "karthik.nair.ttl@yopmail.com",
+  "password": "qlTuPthb",
+  "addressLine1": "Road no.84",
+  "city": "Bengaluru",
+  "state": "Karnataka",
   "country": "India",
-  "pincode": "600001",
-  "employeeId": "12982"
+  "pincode": "560001"
 }
