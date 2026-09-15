@@ -308,9 +308,12 @@ export class ProbationPage {
   }
 
   async openPendingOnboardingProbation() {
-    if (/\/pending-approvals\/onboarding\/probation/i.test(this.page.url())) {
-      await this.processButton.or(this.assessmentFormButton).or(this.page.getByRole('columnheader', { name: 'Employee ID' })).first()
-        .waitFor({ state: 'visible', timeout: 15000 });
+    if (await this.isProbationQueueReady({ timeout: 2000 })) {
+      return;
+    }
+
+    await this.page.goto('/pending-approvals/onboarding/probation', { waitUntil: 'domcontentloaded' });
+    if (await this.isProbationQueueReady({ timeout: 10000 })) {
       return;
     }
 
@@ -319,25 +322,76 @@ export class ProbationPage {
     await this.pendingApprovalsToggle.click();
 
     const onboardingTab = this.pendingOnboardingTab.first();
-    if (await onboardingTab.isVisible().catch(() => false)) {
+    if (await onboardingTab.isVisible({ timeout: 8000 }).catch(() => false)) {
       await onboardingTab.click();
-    } else {
-      const baseUrl = this.page.url().split('/pending-approvals')[0];
-      await this.page.goto(`${baseUrl}/pending-approvals/onboarding/probation`);
     }
 
-    await this.probationPendingTab.first().waitFor({ state: 'visible', timeout: 15000 });
-    await this.probationPendingTab.first().click();
-    await this.page.waitForURL(/\/pending-approvals\/onboarding\/probation/i, { timeout: 15000 }).catch(() => {});
-    await this.processButton.or(this.assessmentFormButton).or(this.page.getByRole('columnheader', { name: 'Employee ID' })).first()
-      .waitFor({ state: 'visible', timeout: 15000 });
+    if (await this.probationPendingTab.first().isVisible({ timeout: 8000 }).catch(() => false)) {
+      await this.probationPendingTab.first().click();
+    } else {
+      await this.page.goto('/pending-approvals/onboarding/probation', { waitUntil: 'domcontentloaded' });
+    }
+
+    await this.pendingQueueReady();
+  }
+
+  private probationQueueMarker() {
+    return this.page.getByRole('columnheader', { name: 'Employee ID' })
+      .or(this.page.getByRole('searchbox', { name: 'Username' }))
+      .or(this.page.getByRole('columnheader', { name: 'Action' }));
+  }
+
+  private async isProbationQueueReady(options?: { timeout?: number }) {
+    try {
+      await this.probationQueueMarker().first().waitFor({
+        state: 'visible',
+        timeout: options?.timeout ?? 15000,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async pendingQueueReady() {
+    await this.probationQueueMarker().first().waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  pendingRowKebab(row: Locator) {
+    return row.locator('.dropdown > a').last();
+  }
+
+  pendingActionOption(row: Locator, actionName: string) {
+    return row.locator('a.dropdown-item, .dropdown-item').filter({ hasText: new RegExp(actionName, 'i') });
+  }
+
+  async openPendingRowKebab(row: Locator) {
+    const kebab = this.pendingRowKebab(row);
+    await kebab.waitFor({ state: 'visible', timeout: 15000 });
+    await kebab.click();
+    await row.locator('.dropdown-menu.show, .dropdown.show, a.dropdown-item').first()
+      .waitFor({ state: 'attached', timeout: 10000 });
+  }
+
+  async clickPendingRowAction(employeeName: string, actionName: 'Assessment form' | 'Process') {
+    const row = this.pendingRow(employeeName).first();
+    await row.waitFor({ state: 'visible', timeout: 15000 });
+    await this.openPendingRowKebab(row);
+    const option = this.pendingActionOption(row, actionName).first();
+    await option.waitFor({ state: 'attached', timeout: 10000 });
+    await option.click({ force: true });
+  }
+
+  async assertPendingRowActionVisible(employeeName: string, actionName: 'Assessment form' | 'Process') {
+    const row = this.pendingRow(employeeName).first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await this.openPendingRowKebab(row);
+    await expect(this.pendingActionOption(row, actionName).first()).toBeAttached({ timeout: 10000 });
   }
 
   async openHrProcessDialog(employeeName: string) {
     await this.openPendingOnboardingProbation();
-    const row = this.pendingProcessRow(employeeName).first();
-    await row.waitFor({ state: 'visible', timeout: 15000 });
-    await row.getByRole('button', { name: 'Process' }).click();
+    await this.clickPendingRowAction(employeeName, 'Process');
     await this.hrProcessDialog.waitFor({ state: 'visible', timeout: 15000 });
   }
 
@@ -462,7 +516,7 @@ export class ProbationPage {
 
     if (employeeName) {
       await this.openPendingOnboardingProbation();
-      await expect(this.pendingProcessRow(employeeName)).toHaveCount(0, { timeout: 15000 });
+      await expect(this.pendingRow(employeeName)).toHaveCount(0, { timeout: 15000 });
     }
   }
 
@@ -509,7 +563,7 @@ export class ProbationPage {
     const toastVisible = await this.probationExtendedMessage.first().isVisible({ timeout: 8000 }).catch(() => false);
     if (!toastVisible && employeeName) {
       await this.openPendingOnboardingProbation();
-      await expect(this.pendingProcessRow(employeeName)).toHaveCount(0, { timeout: 15000 });
+      await expect(this.pendingRow(employeeName)).toHaveCount(0, { timeout: 15000 });
       return;
     }
     await this.probationExtendedMessage.first().waitFor({ state: 'visible', timeout: 15000 });
@@ -521,20 +575,23 @@ export class ProbationPage {
 
   pendingProcessRow(employeeName: string) {
     return this.pendingRow(employeeName).filter({
-      has: this.page.getByRole('button', { name: 'Process' }),
+      has: this.page.getByRole('button', { name: 'Process' }).or(
+        this.page.locator('.dropdown-item, a, li, button').filter({ hasText: /^Process$/i }),
+      ),
     });
   }
 
   pendingAssessmentRow(employeeName: string) {
     return this.pendingRow(employeeName).filter({
-      has: this.page.getByRole('button', { name: 'Assessment form' }),
+      has: this.page.getByRole('button', { name: 'Assessment form' }).or(
+        this.page.locator('.dropdown-item, a, li, button').filter({ hasText: /Assessment form/i }),
+      ),
     });
   }
 
   async openAssessmentForm(employeeName: string) {
-    const button = this.pendingAssessmentRow(employeeName).first().getByRole('button', { name: 'Assessment form' });
-    await button.waitFor({ state: 'visible', timeout: 15000 });
-    await button.click();
+    await this.clickPendingRowAction(employeeName, 'Assessment form');
+    await this.page.waitForURL(/assessmentform/i, { timeout: 15000 }).catch(() => {});
     await this.page.getByText(/ASSESSMENT FORM FOR PROBATION CONFIRMATION/i).waitFor({ state: 'visible', timeout: 15000 });
   }
 
@@ -584,7 +641,7 @@ export class ProbationPage {
 
   async openPostAssessmentDecision(employeeName: string) {
     await this.openPendingOnboardingProbation();
-    const row = this.pendingAssessmentRow(employeeName).first();
+    const row = this.pendingRow(employeeName).first();
     await row.waitFor({ state: 'visible', timeout: 15000 });
 
     if (await this.rejectRadio.isVisible().catch(() => false)) {

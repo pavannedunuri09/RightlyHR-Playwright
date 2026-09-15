@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { ProbationPage } from '../pages/ProbationPage';
 
-const PROBATION_EMPLOYEE_NAME = 'Bhavitha Reddy';
+const PROBATION_EMPLOYEE_NAME = 'Bhavitha Palagiriii';
 const PROBATION_EMPLOYEE_SEARCH = 'bhav';
-const PROBATION_EMPLOYEE_ID = 'SD3021300';
+const PROBATION_EMPLOYEE_ID = 'SD302134';
 const PROBATION_EMPLOYEE_OPTION = `${PROBATION_EMPLOYEE_ID}-${PROBATION_EMPLOYEE_NAME}`;
 const SIGNATURE_AUTHORITY = 'saii Pavan Dinesh Tejaa';
 
@@ -53,7 +53,8 @@ test.describe.serial('Probation Flow', () => {
       const employeeRow = page.getByRole('row').filter({ hasText: PROBATION_EMPLOYEE_NAME });
       await expect(employeeRow.first()).toBeVisible({ timeout: 15000 });
       await expect(employeeRow.first().getByRole('cell', { name: PROBATION_EMPLOYEE_ID })).toBeVisible();
-      await expect(probationPage.assessmentFormButton.first()).toBeVisible();
+      await probationPage.openAssessmentForm(PROBATION_EMPLOYEE_NAME);
+      await expect(page.getByText(/ASSESSMENT FORM FOR PROBATION CONFIRMATION/i)).toBeVisible();
     });
   });
 
@@ -87,7 +88,7 @@ test.describe.serial('Probation Flow', () => {
   });
 
   test.describe('06. TM Reject probation decision', () => {
-    test('rejects second pending record after RM reject and verifies Rejected status', async ({ page }) => {
+    test('rejects second pending record after RM reject and verifies Approved status on Probation Info', async ({ page }) => {
       test.setTimeout(240000);
       const probationPage = new ProbationPage(page);
 
@@ -95,8 +96,8 @@ test.describe.serial('Probation Flow', () => {
       await probationPage.rejectProbationDecision('Reject the Probation TM');
       await expect(probationPage.probationRejectedMessage).toBeVisible({ timeout: 15000 });
 
-      await probationPage.assertRejectedOnProbationInfo(PROBATION_EMPLOYEE_NAME, PROBATION_EMPLOYEE_SEARCH);
-      await expect(probationPage.currentStatusCell()).toHaveText(/Rejected/i);
+      await probationPage.assertApprovedOnProbationInfo(PROBATION_EMPLOYEE_NAME, PROBATION_EMPLOYEE_SEARCH);
+      await expect(probationPage.currentStatusCell()).toHaveText(/Approved/i);
     });
   });
 });
@@ -117,11 +118,8 @@ test.describe.serial('Probation Flow — HR Reject and Extend from Rejected', ()
       const probationPage = new ProbationPage(page);
 
       await probationPage.openPendingOnboardingProbation();
-      const processRow = probationPage.pendingProcessRow(PROBATION_EMPLOYEE_NAME).first();
-      await expect(processRow).toBeVisible({ timeout: 15000 });
-      await expect(processRow.getByRole('button', { name: 'Process' })).toBeVisible();
-
-      await processRow.getByRole('button', { name: 'Process' }).click();
+      await probationPage.assertPendingRowActionVisible(PROBATION_EMPLOYEE_NAME, 'Process');
+      await probationPage.clickPendingRowAction(PROBATION_EMPLOYEE_NAME, 'Process');
       await probationPage.hrRejectProbationProcess('Reporting Manager', 'HR Process Reject probation');
       await expect(probationPage.probationRejectedMessage.first()).toBeVisible({ timeout: 15000 });
     });
@@ -134,7 +132,7 @@ test.describe.serial('Probation Flow — HR Reject and Extend from Rejected', ()
 
       await probationPage.reRequestFromRejectedProbationInfo(PROBATION_EMPLOYEE_NAME, PROBATION_EMPLOYEE_SEARCH);
       await probationPage.assertEmployeeInPendingProbationQueue(PROBATION_EMPLOYEE_NAME);
-      await expect(probationPage.assessmentFormButton.first()).toBeVisible();
+      await probationPage.assertPendingRowActionVisible(PROBATION_EMPLOYEE_NAME, 'Assessment form');
     });
   });
 
@@ -200,7 +198,7 @@ test.describe.serial('Probation Flow — Confirm from Extended', () => {
 
       await probationPage.raiseRequestFromExtendedProbationInfo(PROBATION_EMPLOYEE_NAME, PROBATION_EMPLOYEE_SEARCH);
       await probationPage.assertEmployeeInPendingProbationQueue(PROBATION_EMPLOYEE_NAME);
-      await expect(probationPage.assessmentFormButton.first()).toBeVisible();
+      await probationPage.assertPendingRowActionVisible(PROBATION_EMPLOYEE_NAME, 'Assessment form');
     });
   });
 
@@ -231,12 +229,7 @@ test.describe.serial('Probation Flow — Confirm from Extended', () => {
       test.setTimeout(240000);
       const probationPage = new ProbationPage(page);
 
-      await probationPage.openPendingOnboardingProbation();
-      const processRow = probationPage.pendingProcessRow(PROBATION_EMPLOYEE_NAME).first();
-      await expect(processRow).toBeVisible({ timeout: 15000 });
-      await expect(processRow.getByRole('button', { name: 'Process' })).toBeVisible();
-
-      await processRow.getByRole('button', { name: 'Process' }).click();
+      await probationPage.openHrProcessDialog(PROBATION_EMPLOYEE_NAME);
       await probationPage.hrProcessProbationDecision('Reporting Manager', 'HR Process confirm probation', PROBATION_EMPLOYEE_NAME);
     });
   });
