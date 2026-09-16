@@ -202,7 +202,9 @@ export class Contract {
 
         await this.lastNameInput.fill(lastName);
 
-        this.createdEmployeeEmail = `${firstName}.${lastName}@yopmail.com`;
+        const uniqueSuffix = Date.now().toString().slice(-6);
+        this.createdEmployeeEmail =
+            `${firstName}.${lastName}.${uniqueSuffix}@yopmail.com`;
         await this.personalEmailInput.fill(this.createdEmployeeEmail);
 
         await this.designationDropdown.click();
@@ -236,7 +238,24 @@ export class Contract {
     async clickAdd() {
         await this.addButton.click();
 
-        await this.page.waitForTimeout(1500);
+        await expect(this.firstNameInput).toBeHidden({
+            timeout: 15000,
+        });
+    }
+
+    async searchCreatedEmployee() {
+        const search = this.page.getByRole('searchbox', {
+            name: 'Username',
+        });
+        await search.fill(this.createdEmployeeEmail);
+        await search.press('Enter');
+        await this.page.waitForTimeout(1000);
+    }
+
+    createdEmployeeRow() {
+        return this.page.getByRole('row', {
+            name: new RegExp(this.createdEmployeeEmail, 'i'),
+        });
     }
 
     // --------------------------------------------------
@@ -244,17 +263,11 @@ export class Contract {
     // --------------------------------------------------
 
     async clickCreatedEmployee() {
-        await this.page.getByText(
-            this.createdEmployeeName,
-            { exact: true }
-        ).waitFor({
-            state: 'visible',
-            timeout: 15000
-        });
+        await this.searchCreatedEmployee();
 
-        await this.page.getByText(
+        await this.createdEmployeeRow().getByText(
             this.createdEmployeeName,
-            { exact: true }
+            { exact: true },
         ).click();
 
         await this.page.waitForTimeout(1500);
@@ -403,10 +416,10 @@ export class Contract {
             { name: 'Please select salutation' }
         ).click();
 
-        await onboardingPage.getByText(
-            'Mr.',
-            { exact: true }
-        ).click();
+        await onboardingPage.getByRole('option', {
+            name: 'Mr.',
+            exact: true,
+        }).first().click();
 
         await onboardingPage.locator(
             '#gender'
@@ -482,121 +495,103 @@ export class Contract {
     // TC14
     // --------------------------------------------------
 
+    private documentRow(
+        onboardingPage: Page,
+        documentLabel: RegExp,
+    ) {
+        return onboardingPage.locator('tbody tr').filter({
+            has: onboardingPage.locator('td').first().filter({
+                hasText: documentLabel,
+            }),
+        }).first();
+    }
+
+    private async uploadOnboardingDocument(
+        onboardingPage: Page,
+        documentLabel: RegExp,
+        fileLabel: string,
+        documentNumber?: string,
+    ) {
+        await expect(onboardingPage.getByRole('button', {
+            name: 'Choose File',
+        })).toHaveCount(0, { timeout: 15000 });
+
+        const row = this.documentRow(onboardingPage, documentLabel);
+        await expect(row).toBeVisible({ timeout: 15000 });
+        await row.scrollIntoViewIfNeeded();
+        await row.getByRole('button', {
+            name: /Upload|Re-Upload/i,
+        }).click();
+
+        const chooseFileButton = onboardingPage.getByRole('button', {
+            name: 'Choose File',
+        });
+        await expect(chooseFileButton).toBeVisible({ timeout: 10000 });
+
+        if (documentNumber) {
+            const documentNumberInput = onboardingPage.getByRole('textbox', {
+                name: 'Document Number*',
+            });
+            await documentNumberInput.fill(documentNumber);
+            await documentNumberInput.blur();
+        }
+
+        const filePath = this.createRandomUploadFile(fileLabel);
+        await chooseFileButton.setInputFiles(filePath);
+
+        const uploadButton = onboardingPage
+            .getByRole('button', { name: 'Close' })
+            .locator('..')
+            .getByRole('button', { name: 'Upload', exact: true });
+        await expect(uploadButton).toBeEnabled({ timeout: 15000 });
+        await uploadButton.click();
+
+        await expect(chooseFileButton).toBeHidden({ timeout: 15000 });
+    }
+
     async uploadMandatoryDocuments(
         onboardingPage: Page
     ) {
-
-        // Bank letter
-        const bankLetter =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: 'Bank letter - - - Requested'
-                }
-            );
-
-        await bankLetter.getByRole(
-            'button'
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            this.createRandomUploadFile('bank-letter')
-        );
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        // Resume
-        const resume =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: 'Resume* - - - Requested'
-                }
-            );
-
-        await resume.getByRole(
-            'button'
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            this.createRandomUploadFile('resume')
-        );
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        // PAN
-        const pan =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: /PAN\*/
-                }
-            );
-
-        await pan.getByRole(
-            'button'
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            this.createRandomUploadFile('pan')
-        );
-
-        await onboardingPage.getByRole(
-            'textbox',
+        const mandatoryDocuments = [
+            { label: /Resume/i, file: 'resume' },
+            { label: /PAN/i, file: 'pan', number: '123SDS3212' },
             {
-                name: 'Document Number*'
+                label: /Driving License/i,
+                file: 'driving-license',
+                number: '1234567890',
+            },
+            { label: /Aadhar|Aadhaar/i, file: 'aadhar', number: '456464565464' },
+        ] as const;
+
+        for (const document of mandatoryDocuments) {
+            const row = this.documentRow(onboardingPage, document.label);
+            if (await row.count() === 0) {
+                continue;
             }
-        ).fill('123SDS3212');
 
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        // Aadhaar
-        const aadhaar =
-            onboardingPage.getByRole(
-                'row',
-                {
-                    name: /Aadhaar\*/
-                }
+            await this.uploadOnboardingDocument(
+                onboardingPage,
+                document.label,
+                document.file,
+                'number' in document ? document.number : undefined,
             );
+            await onboardingPage.waitForTimeout(500);
+        }
 
-        await aadhaar.getByRole(
-            'button'
-        ).click();
+        const submitButton = onboardingPage.getByRole('button', {
+            name: 'Submit',
+        });
+        await expect(submitButton).toBeEnabled({ timeout: 15000 });
+        await submitButton.click();
 
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Choose File' }
-        ).setInputFiles(
-            this.createRandomUploadFile('aadhaar')
-        );
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Upload' }
-        ).click();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Submit' }
-        ).click();
+        if (await onboardingPage.getByText(/Are you sure you want to/i)
+            .isVisible()
+            .catch(() => false)) {
+            await onboardingPage
+                .getByRole('button', { name: 'Submit' })
+                .and(onboardingPage.locator(':enabled'))
+                .click();
+        }
 
         await onboardingPage.waitForTimeout(2000);
     }
@@ -606,14 +601,14 @@ export class Contract {
     // --------------------------------------------------
 
     async clickEmployeeAfterSubmission() {
+        await this.clickEmployees();
+        await this.clickProspectiveEmployee();
+        await this.clickContractTab();
+        await this.searchCreatedEmployee();
 
-        await this.employees.click();
-
-        await this.page.waitForTimeout(1000);
-
-        await this.page.getByText(
+        await this.createdEmployeeRow().getByText(
             this.createdEmployeeName,
-            { exact: true }
+            { exact: true },
         ).click();
 
         await this.page.waitForTimeout(1000);

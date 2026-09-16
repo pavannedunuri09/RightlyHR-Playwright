@@ -141,12 +141,10 @@ test.describe.serial(
                 await contract.fillContractEmployeeDetails();
 
                 await contract.clickAdd();
+                await contract.searchCreatedEmployee();
 
                 await expect(
-                    hrPage.getByText(
-                        contract.createdEmployeeName,
-                        { exact: true }
-                    ).first()
+                    contract.createdEmployeeRow()
                 ).toBeVisible({
                     timeout: 15000
                 });
