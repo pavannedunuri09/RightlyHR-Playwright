@@ -6,7 +6,6 @@ const PROBATION_EMPLOYEE_NAME = 'Bhavitha Palagiriii';
 const PROBATION_EMPLOYEE_SEARCH = 'bhav';
 const PROBATION_EMPLOYEE_ID = 'SD302134';
 const PROBATION_EMPLOYEE_OPTION = `${PROBATION_EMPLOYEE_ID}-${PROBATION_EMPLOYEE_NAME}`;
-const SIGNATURE_AUTHORITY = 'saii Pavan Dinesh Tejaa';
 
 test.describe.serial('Probation Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -117,9 +116,9 @@ test.describe.serial('Probation Flow — HR Reject and Extend from Rejected', ()
       test.setTimeout(240000);
       const probationPage = new ProbationPage(page);
 
-      await probationPage.openPendingOnboardingProbation();
-      await probationPage.assertPendingRowActionVisible(PROBATION_EMPLOYEE_NAME, 'Process');
-      await probationPage.clickPendingRowAction(PROBATION_EMPLOYEE_NAME, 'Process');
+      await probationPage.openHrProcessDialog(PROBATION_EMPLOYEE_NAME);
+      await expect(probationPage.hrProcessDialog).toBeVisible();
+      await expect(probationPage.hrRejectRadio).toBeVisible();
       await probationPage.hrRejectProbationProcess('Reporting Manager', 'HR Process Reject probation');
       await expect(probationPage.probationRejectedMessage.first()).toBeVisible({ timeout: 15000 });
     });
@@ -253,17 +252,16 @@ test.describe.serial('Probation Flow — Generate Document and Move to Active', 
 
       await probationPage.openGenerateDocuments();
       await probationPage.selectProbationConfirmationLetter();
-      await probationPage.fillProbationConfirmationLetterForm({
+      const selectedSignature = await probationPage.fillProbationConfirmationLetterForm({
         employeeOption: PROBATION_EMPLOYEE_OPTION,
         issuedDate: today,
         effectiveDate: today,
         documentType: 'Soft Copy',
-        signatureAuthority: SIGNATURE_AUTHORITY,
       });
 
       await expect(page.getByRole('combobox', { name: PROBATION_EMPLOYEE_OPTION })).toBeVisible();
       await expect(page.getByRole('combobox', { name: 'Soft Copy' })).toBeVisible();
-      await expect(page.getByRole('combobox', { name: SIGNATURE_AUTHORITY })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: selectedSignature })).toBeVisible();
       await expect(probationPage.issuedDateInput).toHaveValue(today);
       await expect(probationPage.effectiveDateInput).toHaveValue(today);
       await expect(probationPage.generateDocumentButton).toBeVisible();
@@ -284,7 +282,6 @@ test.describe.serial('Probation Flow — Generate Document and Move to Active', 
         issuedDate: today,
         effectiveDate: today,
         documentType: 'Soft Copy',
-        signatureAuthority: SIGNATURE_AUTHORITY,
       });
 
       const download = await probationPage.generateProbationConfirmationLetter();

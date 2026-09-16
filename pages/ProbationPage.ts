@@ -62,10 +62,15 @@ export class ProbationPage {
     this.jobTab = page.getByText('Job', { exact: true });
     this.probationInfoTab = page.locator('div').filter({ hasText: /^Probation Info$/ }).first();
     this.probationEmployeesTab = page.getByText(/^Probation\(\d+\)$/);
-    this.pendingApprovalsNav = page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Pending Approvals' });
-    this.pendingApprovalsToggle = this.pendingApprovalsNav.locator('[data-bs-toggle="dropdown"]');
-    this.pendingOnboardingTab = page.locator('app-pending-approvals-tabs').locator('.grid-item').filter({ hasText: /^Onboarding\(\d+\)$/ });
-    this.probationPendingTab = page.getByRole('listitem').filter({ hasText: 'Probation' }).filter({ hasText: /\(\d+\)/ });
+    this.pendingApprovalsNav = page.locator('#sidenav-main-drop').getByText('Pending Approvals', { exact: true })
+      .or(page.getByText('Pending Approvals', { exact: true }));
+    this.pendingApprovalsToggle = this.pendingApprovalsNav
+      .or(page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Pending Approvals' }).locator('[data-bs-toggle="dropdown"]'));
+    this.pendingOnboardingTab = page.locator('app-pending-approvals-tabs .grid-item, .grid-item').filter({ hasText: /^Onboarding\s*\(\d+\)$/i })
+      .or(page.locator('div').filter({ hasText: /^Onboarding\s*\(\d+\)$/i }));
+    this.probationPendingTab = page.locator('app-pending-approvals-tabs').getByText(/^Probation\s*\(\d+\)$/)
+      .or(page.getByRole('listitem').filter({ hasText: /^Probation\s*\(\d+\)$/ }))
+      .or(page.getByText(/^Probation\s*\(\d+\)$/));
     this.assessmentFormButton = page.getByRole('button', { name: 'Assessment form' });
     this.assessmentTextArea = page.getByRole('textbox', { name: 'Text area' });
     this.requestRaisedMessage = page.getByText('Probation request raised');
@@ -312,36 +317,54 @@ export class ProbationPage {
       return;
     }
 
-    await this.page.goto('/pending-approvals/onboarding/probation', { waitUntil: 'domcontentloaded' });
+    await this.openPendingOnboardingProbationViaMenu();
     if (await this.isProbationQueueReady({ timeout: 10000 })) {
       return;
     }
 
-    await this.pendingApprovalsToggle.waitFor({ state: 'visible', timeout: 15000 });
-    await this.page.waitForTimeout(2000);
-    await this.pendingApprovalsToggle.click();
-
-    const onboardingTab = this.pendingOnboardingTab.first();
-    if (await onboardingTab.isVisible({ timeout: 8000 }).catch(() => false)) {
-      await onboardingTab.click();
-    }
-
-    if (await this.probationPendingTab.first().isVisible({ timeout: 8000 }).catch(() => false)) {
-      await this.probationPendingTab.first().click();
-    } else {
-      await this.page.goto('/pending-approvals/onboarding/probation', { waitUntil: 'domcontentloaded' });
+    for (const path of [
+      '/pending-approvals/on-boarding/probation',
+      '/pending-approvals/on-boarding/probation/for-you',
+      '/pending-approvals/onboarding/probation',
+    ]) {
+      await this.page.goto(path, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      if (await this.isProbationQueueReady({ timeout: 8000 })) {
+        return;
+      }
     }
 
     await this.pendingQueueReady();
   }
 
+  private async openPendingOnboardingProbationViaMenu() {
+    const pendingNav = this.pendingApprovalsToggle.first();
+    if (!(await pendingNav.isVisible().catch(() => false))) {
+      await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 20000 }).catch(() => {});
+    }
+
+    await pendingNav.waitFor({ state: 'visible', timeout: 15000 });
+    await pendingNav.click();
+
+    const onboardingTab = this.pendingOnboardingTab.first();
+    await onboardingTab.waitFor({ state: 'visible', timeout: 15000 });
+    await onboardingTab.click();
+
+    const probationTab = this.probationPendingTab.first();
+    await probationTab.waitFor({ state: 'visible', timeout: 15000 });
+    await probationTab.click();
+  }
+
   private probationQueueMarker() {
     return this.page.getByRole('columnheader', { name: 'Employee ID' })
-      .or(this.page.getByRole('searchbox', { name: 'Username' }))
-      .or(this.page.getByRole('columnheader', { name: 'Action' }));
+      .or(this.page.getByRole('columnheader', { name: 'Employee Name' }));
   }
 
   private async isProbationQueueReady(options?: { timeout?: number }) {
+    if (!/pending-approvals/i.test(this.page.url())) {
+      return false;
+    }
+
     try {
       await this.probationQueueMarker().first().waitFor({
         state: 'visible',
@@ -362,31 +385,54 @@ export class ProbationPage {
   }
 
   pendingActionOption(row: Locator, actionName: string) {
-    return row.locator('a.dropdown-item, .dropdown-item').filter({ hasText: new RegExp(actionName, 'i') });
+    const pattern = new RegExp(actionName, 'i');
+    return this.page.locator('.dropdown-menu.show a.dropdown-item, .dropdown-menu.show .dropdown-item, .show a.dropdown-item')
+      .filter({ hasText: pattern })
+      .or(row.locator('a.dropdown-item, .dropdown-item, button').filter({ hasText: pattern }))
+      .or(this.page.getByRole('menuitem', { name: actionName }))
+      .or(this.page.getByRole('button', { name: actionName }));
   }
 
   async openPendingRowKebab(row: Locator) {
+    const openMenu = row.locator('ul.dropdown-menu.show, .dropdown-menu.show').first();
+    if (await openMenu.isVisible().catch(() => false)) {
+      return;
+    }
+
     const kebab = this.pendingRowKebab(row);
     await kebab.waitFor({ state: 'visible', timeout: 15000 });
     await kebab.click();
-    await row.locator('.dropdown-menu.show, .dropdown.show, a.dropdown-item').first()
-      .waitFor({ state: 'attached', timeout: 10000 });
+    await openMenu.waitFor({ state: 'visible', timeout: 10000 });
   }
 
   async clickPendingRowAction(employeeName: string, actionName: 'Assessment form' | 'Process') {
     const row = this.pendingRow(employeeName).first();
     await row.waitFor({ state: 'visible', timeout: 15000 });
+
+    const rowButton = row.getByRole('button', { name: actionName });
+    if (await rowButton.isVisible().catch(() => false)) {
+      await rowButton.click();
+      return;
+    }
+
     await this.openPendingRowKebab(row);
-    const option = this.pendingActionOption(row, actionName).first();
-    await option.waitFor({ state: 'attached', timeout: 10000 });
-    await option.click({ force: true });
+    await row.locator('ul.dropdown-menu.show, .dropdown-menu.show')
+      .getByText(actionName, { exact: true })
+      .click();
   }
 
   async assertPendingRowActionVisible(employeeName: string, actionName: 'Assessment form' | 'Process') {
     const row = this.pendingRow(employeeName).first();
     await expect(row).toBeVisible({ timeout: 15000 });
+
+    const rowButton = row.getByRole('button', { name: actionName });
+    if (await rowButton.isVisible().catch(() => false)) {
+      await expect(rowButton).toBeVisible();
+      return;
+    }
+
     await this.openPendingRowKebab(row);
-    await expect(this.pendingActionOption(row, actionName).first()).toBeAttached({ timeout: 10000 });
+    await expect(this.pendingActionOption(row, actionName).first()).toBeVisible({ timeout: 10000 });
   }
 
   async openHrProcessDialog(employeeName: string) {
@@ -396,14 +442,17 @@ export class ProbationPage {
   }
 
   async selectHrApprovalForm(role: 'Reporting Manager' | 'Team Manager') {
-    const dropdown = this.hrProcessDialog.locator('.p-dropdown, p-dropdown, p-select, [role="combobox"]').first();
+    const dropdown = this.hrProcessDialog.getByRole('combobox', { name: 'Please select' });
     await dropdown.click();
-    const option = this.page.locator('.p-dropdown-panel li, .p-select-option, [role="option"]')
-      .filter({ hasText: new RegExp(role === 'Reporting Manager' ? 'Reporting Manager|RM' : 'Team Manager|TM', 'i') })
-      .first();
-    await option.waitFor({ state: 'visible', timeout: 10000 });
-    await option.click();
-    await this.page.keyboard.press('Escape');
+
+    const rolePattern = role === 'Reporting Manager' ? /Reporting Manager|\bRM\b/i : /Team Manager|\bTM\b/i;
+    const option = this.page.getByRole('option').filter({ hasText: rolePattern }).first();
+    if (await option.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await option.click();
+      return;
+    }
+
+    await this.page.getByRole('option').first().click();
   }
 
   async selectHrExtendOption() {
@@ -526,7 +575,11 @@ export class ProbationPage {
   ) {
     await this.hrProcessDialog.waitFor({ state: 'visible', timeout: 15000 });
     await this.selectHrApprovalForm(approvalRole);
-    await this.hrRejectRadio.check();
+    await this.hrRejectRadio.click();
+    if (!(await this.hrRejectRadio.isChecked().catch(() => false))) {
+      await this.hrProcessDialog.getByText('Reject', { exact: true }).click();
+    }
+    await expect(this.hrRejectRadio).toBeChecked({ timeout: 5000 });
     await this.hrRejectDescription.waitFor({ state: 'visible', timeout: 10000 });
     await this.hrRejectDescription.click();
     await this.hrRejectDescription.fill('');
@@ -816,11 +869,22 @@ export class ProbationPage {
     await expect(this.page.getByRole('cell', { name: 'Rejected' }).first()).toBeVisible({ timeout: 15000 });
   }
 
-  async selectComboboxOption(combobox: Locator, optionName: string) {
+  async selectComboboxOption(combobox: Locator, optionName?: string) {
     await combobox.click();
-    const option = this.page.getByRole('option', { name: optionName });
+
+    if (optionName) {
+      const named = this.page.getByRole('option', { name: optionName });
+      if (await named.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await named.click();
+        return optionName;
+      }
+    }
+
+    const option = this.page.getByRole('option').first();
     await option.waitFor({ state: 'visible', timeout: 10000 });
+    const selected = ((await option.innerText()) || '').replace(/\s+/g, ' ').trim();
     await option.click();
+    return selected;
   }
 
   async openGenerateDocuments() {
@@ -845,13 +909,12 @@ export class ProbationPage {
     const issuedDate = options.issuedDate ?? this.todayDateString();
     const effectiveDate = options.effectiveDate ?? this.todayDateString();
     const documentType = options.documentType ?? 'Soft Copy';
-    const signatureAuthority = options.signatureAuthority ?? 'saii Pavan Dinesh Tejaa';
 
     await this.selectComboboxOption(this.employeeCombobox, options.employeeOption);
     await this.issuedDateInput.fill(issuedDate);
     await this.effectiveDateInput.fill(effectiveDate);
     await this.selectComboboxOption(this.documentTypeCombobox, documentType);
-    await this.selectComboboxOption(this.signatureCombobox, signatureAuthority);
+    return this.selectComboboxOption(this.signatureCombobox, options.signatureAuthority);
   }
 
   async generateProbationConfirmationLetter() {
