@@ -3,8 +3,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config({
-    path: path.resolve(process.cwd(), '.env'),
-    override: true
+  path: path.resolve(process.cwd(), '.env'),
+  override: true
 });
 
 /**
@@ -12,7 +12,7 @@ dotenv.config({
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/codegen-wfh.ts', '**/codegent-wfh.ts', '**/codegen.addtrainee.ts','**/codegen-wfh-settings.ts', '**/codegen-remote-login.ts'],
+  testIgnore: ['**/codegen-wfh.ts', '**/codegent-wfh.ts', '**/codegen.addtrainee.ts', '**/codegen-wfh-settings.ts', '**/codegen-remote-login.ts'],
   // testIgnore: ['**/codegen-wfh.ts', '**/codegen-wfh-settings.ts', '**/codegent-wfh.ts', '**/codegen-remote-login.ts'],
   timeout: 120000,
   fullyParallel: false,
@@ -22,7 +22,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   outputDir: path.resolve(process.env.LOCALAPPDATA || process.cwd(), 'playwright-results'),
   use: {
-    baseURL: 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com',
+    baseURL: 'https://hrmsqasnad.onpremise.cluster.rightlyhr.com/',
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : 1000,
@@ -46,7 +46,8 @@ export default defineConfig({
       },
       dependencies: ['setup'],
     },
-     { name: '01-login',
+    {
+      name: '01-login',
       testMatch: /(?:^|[\\/])login\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
@@ -71,40 +72,53 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
-    name: '06-separation',
-   testMatch: '**/Separation.spec.ts',
-    use: { ...devices['Desktop Chrome'] },
-},
-   {
-    name: '07-helpdesk',
-    testMatch: /(?:^|[\/\\])HelpDesk\.spec\.ts$/,
-    use: { ...devices['Desktop Chrome'] },
-},
-{
-            name: '08-separation-rejected',
-            testMatch: /SeparationRejected\.spec\.ts$/,
-            use: {
-                ...devices['Desktop Chrome']
-            }
-        },
-       {
-    name: '09-recall',
-    testMatch: /recall\.spec\.ts$/,
-    use: {
-        ...devices['Desktop Chrome']
-    }
-},
-{
-    name: '10-extra-log-hours',
-    testMatch: '**/ExtraLogHours.spec.ts',
-    use: {
-        ...devices['Desktop Chrome'],
+      name: '06-separation',
+      testMatch: '**/Separation.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
     },
-},{
-    name: '11-contract',
-    testMatch: /Contract\.spec\.ts$/,
-    use: { ...devices['Desktop Chrome'] },
-}
+    {
+      name: '07-helpdesk',
+      testMatch: /(?:^|[\/\\])HelpDesk\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '08-separation-rejected',
+      testMatch: /SeparationRejected\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome']
+      }
+    },
+    {
+      name: '09-recall',
+      testMatch: /recall\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome']
+      }
+    },
+    {
+      name: '10-extra-log-hours',
+      testMatch: '**/ExtraLogHours.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    }, {
+      name: '11-contract',
+      testMatch: /Contract\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    {
+      name: '12-offboarding',
+      testMatch: /Offboarding\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    }
+
+
+
+
+
 
     // {
     //   name: 'firefox',

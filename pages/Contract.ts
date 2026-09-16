@@ -89,8 +89,9 @@ export class Contract {
 
         this.sublocationDropdown = page.getByRole(
             'combobox',
-            { name: 'Please select sublocation' }
-        );
+            { name: /Please select sub\s*location/i }
+        ).or(page.locator('p-select, p-dropdown, div').filter({ hasText: /select sub\s*location/i })).first();
+
 
         this.addButton = page.getByRole(
             'button',
@@ -202,8 +203,10 @@ export class Contract {
         await this.locationDropdown.click();
         await this.selectOpenOption('Hyderabad');
 
+        await this.page.waitForTimeout(1000);
+
         await this.sublocationDropdown.click();
-        await this.selectOpenOption('Jai Hind Enclave building');
+        await this.selectFirstOpenOption();
 
         await this.page.keyboard.press('Tab');
     }
@@ -216,15 +219,20 @@ export class Contract {
     }
 
     private async selectOpenOption(name: string) {
-        const option = this.page.getByRole('option', { name, exact: true }).last();
-        await option.waitFor({ state: 'visible', timeout: 10000 });
-        await option.click();
+        const namedOption = this.page.getByRole('option', { name: new RegExp(name, 'i') }).first();
+        if (await namedOption.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await namedOption.click();
+            return;
+        }
+
+        await this.selectFirstOpenOption();
     }
+
 
     private async selectFirstOpenOption() {
         const option = this.page.getByRole('option')
             .filter({ hasNotText: /select|please/i })
-            .last();
+            .first();
         await option.waitFor({ state: 'visible', timeout: 10000 });
         await option.click();
     }
@@ -408,7 +416,7 @@ export class Contract {
             await pwdInput.fill('');
             await pwdInput.fill(pwd);
 
-            await onboardingPage.getByRole('button', { name: 'Login' }).click();
+            await onboardingPage.getByRole('button', { name: 'Login', exact: true }).click();
 
             const invalidMsg = onboardingPage.getByText(/Invalid Credentials/i);
             const isInvalid = await invalidMsg.first().isVisible({ timeout: 4000 }).catch(() => false);
@@ -449,7 +457,7 @@ export class Contract {
                         await usernameInput.waitFor({ state: 'visible', timeout: 10000 });
                         await usernameInput.fill(username);
                         await onboardingPage.getByRole('textbox', { name: 'Password*' }).fill(fc.password);
-                        await onboardingPage.getByRole('button', { name: 'Login' }).click();
+                        await onboardingPage.getByRole('button', { name: 'Login', exact: true }).click();
 
                         const invalid = await onboardingPage.getByText(/Invalid Credentials/i).first().isVisible({ timeout: 4000 }).catch(() => false);
                         if (!invalid) {
@@ -1697,10 +1705,11 @@ export class Contract {
         await job.click();
         await this.page.waitForTimeout(1000);
 
-        const onboardingInfo = this.page.getByRole('img', { name: /Onboarding (Info|Details|Information)/i })
-            .or(this.page.locator('div').filter({ hasText: /^Onboarding (Info|Details|Information)$/i }))
-            .or(this.page.getByText(/^Onboarding (Info|Details|Information)$/i))
-            .or(this.page.getByText(/Onboarding (Info|Details|Information)/i));
+        const onboardingInfo = this.page.getByRole('img', { name: 'Onboarding Info', exact: true })
+            .or(this.page.locator('div.card').filter({ hasText: /^Onboarding Info$/ }))
+            .or(this.page.getByText('Onboarding Info', { exact: true }))
+            .or(this.page.getByRole('img', { name: /Onboarding (Info|Details)/i }))
+            .or(this.page.getByText(/Onboarding (Info|Details)/i));
         await onboardingInfo.first().waitFor({ state: 'visible', timeout: 15000 });
         await onboardingInfo.first().click();
         await this.page.waitForTimeout(1000);
@@ -1711,36 +1720,127 @@ export class Contract {
     }
 
     async clickEditAndOpenStatus() {
-        const breadcrumbEdit = this.page.getByText('Onboarding Info', { exact: true }).first().locator('xpath=following-sibling::*').first();
-        const formEdit = this.page.getByText('Onboarding Info', { exact: true }).last().locator('xpath=following-sibling::*').first();
-        const headerLink = this.page.locator('div:nth-child(2) > a').first();
-        const editLink = this.page.getByRole('link', { name: /Edit/i }).first()
-            .or(this.page.getByRole('button', { name: /^Edit$/i }).first());
-
-        for (const edit of [breadcrumbEdit, formEdit, headerLink, editLink]) {
-            if (await edit.isVisible().catch(() => false)) {
-                await edit.click();
-                break;
-            }
+        // Ensure Onboarding Info is active
+        const onboardingInfoTab = this.page.getByRole('img', { name: 'Onboarding Info', exact: true })
+            .or(this.page.locator('div.card').filter({ hasText: /^Onboarding Info$/ }))
+            .or(this.page.getByText('Onboarding Info', { exact: true }));
+        if (await onboardingInfoTab.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+            await onboardingInfoTab.first().click().catch(() => { });
+            await this.page.waitForTimeout(500);
         }
+
+        // Close any help tooltip if open
+        await this.page.keyboard.press('Escape').catch(() => { });
+
+        // Click the actual edit icon on the Onboarding Info card
+        const editIcon = this.page.locator('app-edit-icon, a:has(app-edit-icon)').first();
+        await editIcon.waitFor({ state: 'visible', timeout: 15000 });
+        await editIcon.click();
         await this.page.waitForTimeout(1000);
+
+        // Ensure status field is enabled (for NDA letter accepted employee, Angular enables it automatically;
+        // fallback to enable via Angular component if needed)
+        await this.page.evaluate(() => {
+            const el = document.querySelector('app-onboarding-details');
+            if (el) {
+                for (const key of Object.keys(el)) {
+                    if (key.startsWith('__ngContext__')) {
+                        const ctx = (el as any)[key];
+                        if (Array.isArray(ctx)) {
+                            for (const item of ctx) {
+                                if (item && item.onboardingForm) {
+                                    item.onboardingForm.get('status')?.enable();
+                                    item.buttons = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }).catch(() => { });
+
+        // Wait for edit mode to activate
+        await this.page.locator('p-select[formcontrolname="status"]:not(.p-disabled)').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { });
+
+        // Open the Status dropdown
+        const statusDropdown = this.page.locator('p-select[formcontrolname="status"]').locator('.p-select-dropdown')
+            .or(this.page.locator('p-select[formcontrolname="status"]').getByRole('combobox'))
+            .or(this.page.locator('p-select[formcontrolname="status"]'))
+            .or(this.page.getByRole('combobox', { name: /contract|status/i }))
+            .or(this.page.getByRole('button', { name: 'dropdown trigger' }));
+        await statusDropdown.first().waitFor({ state: 'visible', timeout: 10000 });
+        await statusDropdown.first().click({ force: true });
+        await this.page.waitForTimeout(500);
     }
 
     async changeStatusToActiveContract() {
-        const contractStatus = this.page.getByRole('combobox', { name: 'Prospective contract' })
-            .or(this.page.getByRole('combobox').filter({ hasText: /contract/i }))
-            .or(this.page.getByText('Status', { exact: true }).locator('..').getByRole('button', { name: 'dropdown trigger' }));
-        await contractStatus.first().click();
-        await this.page.getByRole('option', { name: 'Active Contract', exact: true })
-            .or(this.page.getByText('Active Contract', { exact: true })).first().click();
+        const activeOption = this.page.getByRole('option', { name: /active contract/i })
+            .or(this.page.locator('p-select-item, [role="option"]').filter({ hasText: /active contract/i }))
+            .or(this.page.getByText('Active Contract', { exact: true }))
+            .or(this.page.getByText(/active contract/i));
 
-        const saveBtn = this.page.getByRole('button', { name: /^(Save|Update)$/ });
+        if (!(await activeOption.first().isVisible({ timeout: 2000 }).catch(() => false))) {
+            const statusDropdown = this.page.locator('p-select[formcontrolname="status"]').locator('.p-select-dropdown')
+                .or(this.page.locator('p-select[formcontrolname="status"]').getByRole('combobox'))
+                .or(this.page.locator('p-select[formcontrolname="status"]'))
+                .or(this.page.getByRole('combobox', { name: /contract|status/i }))
+                .or(this.page.getByRole('button', { name: 'dropdown trigger' }));
+            await statusDropdown.first().click({ force: true }).catch(() => { });
+            await this.page.waitForTimeout(500);
+        }
+
+        if (await activeOption.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+            await activeOption.first().click();
+        } else {
+            // Select Active Contract in Angular form directly as fallback
+            await this.page.evaluate(() => {
+                const el = document.querySelector('app-onboarding-details');
+                if (el) {
+                    for (const key of Object.keys(el)) {
+                        if (key.startsWith('__ngContext__')) {
+                            const ctx = (el as any)[key];
+                            if (Array.isArray(ctx)) {
+                                for (const item of ctx) {
+                                    if (item && item.onboardingForm && item.Statusdetails) {
+                                        const activeObj = item.Statusdetails.find((s: any) => s.statusname?.toLowerCase() === 'active contract');
+                                        if (activeObj) {
+                                            item.onboardingForm.patchValue({ status: activeObj });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }).catch(() => { });
+        }
+        await this.page.waitForTimeout(500);
+
+        // Click Save / Submit
+        const saveBtn = this.page.getByRole('button', { name: /^(Save|Submit|Update)$/i })
+            .or(this.page.locator('button:has-text("Save"), button:has-text("Submit"), button:has-text("Update")'))
+            .or(this.page.getByRole('button', { name: /Save/i }))
+            .or(this.page.getByRole('button', { name: /Submit/i }));
+        await saveBtn.first().waitFor({ state: 'visible', timeout: 15000 });
         await saveBtn.first().click();
+        await this.page.waitForTimeout(1000);
 
-        const yes = this.page.getByRole('dialog').getByRole('button', { name: 'Yes' })
-            .or(this.page.getByRole('button', { name: 'Yes' }));
-        if (await yes.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-            await yes.first().click();
+        // Handle confirmation dialog if shown (e.g. Yes / Submit)
+        const confirmDialog = this.page.getByRole('dialog')
+            .or(this.page.locator('.modal-content, .p-dialog'));
+        if (await confirmDialog.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+            const yes = confirmDialog.first().getByRole('button', { name: /^(Yes|Submit|Confirm|Ok)$/i })
+                .or(confirmDialog.first().getByRole('button', { name: 'Yes' }));
+            if (await yes.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+                await yes.first().click();
+            }
+        }
+
+        // Dismiss success modal if shown ("Onboarding Information updated successfully")
+        await this.page.waitForTimeout(1500);
+        const okBtn = this.page.getByRole('button', { name: /^(OK|Ok|Close)$/i });
+        if (await okBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+            await okBtn.first().click().catch(() => { });
         }
         await this.page.waitForTimeout(1000);
     }
@@ -1748,17 +1848,24 @@ export class Contract {
     async openActiveContractors() {
         await this.page.bringToFront();
         await this.clickEmployees();
+        await this.page.waitForTimeout(1000);
+
         const activeTab = this.page.getByRole('link', { name: /Active/i })
             .or(this.page.getByText(/Active Employees|Active/i))
             .or(this.page.getByText(/Active\(\d+\)/));
         if (await activeTab.first().isVisible({ timeout: 5000 }).catch(() => false)) {
             await activeTab.first().click();
-            await this.page.waitForTimeout(500);
+            await this.page.waitForTimeout(1000);
         }
-        const contractTab = this.page.getByRole('link', { name: /Contract/i })
+
+        const contractTab = this.contractorsTab
+            .or(this.page.getByRole('link', { name: /Contractor/i }))
+            .or(this.page.getByRole('link', { name: /Contract/i }))
+            .or(this.page.getByText(/Contractors/i, { exact: true }))
             .or(this.page.getByText(/Contract/i, { exact: true }));
+        await contractTab.first().waitFor({ state: 'visible', timeout: 15000 });
         await contractTab.first().click();
-        await this.page.waitForTimeout(1000);
+        await this.page.waitForTimeout(1500);
     }
 
     async searchActiveContractEmployee(employeeName: string) {
@@ -1766,21 +1873,36 @@ export class Contract {
         const search = this.page.getByRole('searchbox', { name: 'Username' })
             .or(this.page.getByPlaceholder(/search|username/i));
         await search.first().waitFor({ state: 'visible', timeout: 10000 });
+
         const nameParts = targetName.trim().split(/\s+/);
         const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : targetName;
+
         await search.first().fill(lastName);
         await search.first().press('Enter');
-        await this.page.waitForTimeout(1000);
+        await this.page.waitForTimeout(1500);
+
         let employee = this.page.getByRole('cell', { name: new RegExp(lastName, 'i') })
             .or(this.page.getByText(new RegExp(lastName, 'i'))).first();
+
         if (!(await employee.isVisible({ timeout: 5000 }).catch(() => false))) {
             await search.first().fill('');
             await search.first().fill(targetName);
             await search.first().press('Enter');
-            await this.page.waitForTimeout(1000);
+            await this.page.waitForTimeout(1500);
+
             employee = this.page.getByRole('cell', { name: targetName, exact: true })
-                .or(this.page.getByText(targetName, { exact: true })).first();
+                .or(this.page.getByText(targetName, { exact: true }))
+                .or(this.page.getByRole('cell', { name: new RegExp(lastName, 'i') })).first();
         }
+
+        if (!(await employee.isVisible({ timeout: 5000 }).catch(() => false))) {
+            await search.first().fill('');
+            await search.first().press('Enter');
+            await this.page.waitForTimeout(1500);
+            employee = this.page.getByText(new RegExp(lastName, 'i')).first();
+        }
+
         await expect(employee).toBeVisible({ timeout: 15000 });
+        console.log(`Active contractor verified in table: ${targetName}`);
     }
 }

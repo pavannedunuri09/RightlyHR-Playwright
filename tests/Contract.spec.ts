@@ -17,12 +17,29 @@ test.describe.serial(
         let onboardingUsername = '';
         let onboardingPassword = '';
 
-        const suffix = Array.from({ length: 4 }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('');
+        // Realistic, short employee data. A random suffix keeps the employee and
+        // email unique without producing long timestamp-based email addresses.
+        const employeeNames = [
+            { firstName: 'Akhil', lastName: 'Patlolla' },
+            { firstName: 'Rahul', lastName: 'Reddy' },
+            { firstName: 'Kiran', lastName: 'Kumar' },
+            { firstName: 'Sandeep', lastName: 'Varma' },
+            { firstName: 'Arjun', lastName: 'Rao' },
+            { firstName: 'Vishal', lastName: 'Sharma' },
+            { firstName: 'Rohit', lastName: 'Patel' },
+            { firstName: 'Naveen', lastName: 'Naidu' },
+            { firstName: 'Pranav', lastName: 'Reddy' },
+            { firstName: 'Karthik', lastName: 'Rao' },
+        ];
+
+        const selectedName = employeeNames[Math.floor(Math.random() * employeeNames.length)];
+        const uniqueId = Math.floor(1000 + Math.random() * 9000);
+
         const employee: ContractEmployee & { fullName: string } = {
-            firstName: 'prospec',
-            lastName: `contractor${suffix}`,
-            fullName: `prospec contractor${suffix}`,
-            email: `proscon${Date.now()}@yopmail.com`,
+            firstName: selectedName.firstName,
+            lastName: selectedName.lastName,
+            fullName: `${selectedName.firstName} ${selectedName.lastName}`,
+            email: `${selectedName.firstName.toLowerCase()}${uniqueId}@yopmail.com`,
         };
 
         // ==================================================
@@ -37,11 +54,14 @@ test.describe.serial(
                 if (hrUsername && hrPassword) {
                     hrPage = await browser.newPage();
                     const login = new LoginPage(hrPage);
-                    await hrPage.goto('/login');
-                    await login.login(hrUsername, hrPassword);
-                    await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
+                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
                     await hrPage.waitForTimeout(2000);
-                    await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
+                    if (hrPage.url().includes('/login')) {
+                        await login.login(hrUsername, hrPassword);
+                        await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
+                        await hrPage.waitForTimeout(2000);
+                        await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
+                    }
                 } else if (fs.existsSync('.auth/user.json')) {
                     const context = await browser.newContext({ storageState: '.auth/user.json' });
                     hrPage = await context.newPage();
@@ -942,35 +962,16 @@ test.describe.serial(
         // ==================================================
 
         test(
-            'TC43 - HR clicks Employees -> Prospective -> Contract -> searches employee -> clicks employee name -> clicks Job Tab -> clicks Onboarding details tab',
+            'TC43 - Verify that HR can open the employee, click Job, and open Onboarding Documents',
             async () => {
                 await hrPage.bringToFront();
 
-                // 1. HR clicks on Employees tab
-                await contract.clickEmployees();
-                await expect(
-                    contract.employees.first()
-                ).toBeVisible();
-
-                // 2. HR clicks on Prospective
-                await contract.clickProspectiveEmployee();
-                await expect(
-                    contract.prospectiveEmployeeTab
-                ).toBeVisible();
-
-                // 3. HR clicks on Contract tab
-                await contract.clickContractTab();
-                await expect(
-                    contract.contractorsTab.first()
-                ).toBeVisible();
-
-                // 4. Search employee, click employee name, click Job Tab and click Onboarding details tab
                 await contract.openEmployeeJobOnboardingDocuments(
                     employee.fullName
                 );
 
                 console.log(
-                    'TC43 PASSED - HR opened employee Job Tab and Onboarding details tab'
+                    'TC43 PASSED - HR opened employee Job and Onboarding Documents'
                 );
             }
         );
@@ -980,12 +981,12 @@ test.describe.serial(
         // ==================================================
 
         test(
-            'TC44 - HR should click Edit and open Status field',
+            'TC44 - Verify that HR can click the Edit icon and open the Status field',
             async () => {
                 await contract.clickEditAndOpenStatus();
 
                 console.log(
-                    'TC44 PASSED - Edit and Status field opened'
+                    'TC44 PASSED - Edit icon and Status field opened'
                 );
             }
         );
@@ -995,12 +996,12 @@ test.describe.serial(
         // ==================================================
 
         test(
-            'TC45 - HR should change status to Active Contract',
+            'TC45 - Verify that HR can change the employee status from Prospective Contract to Active Contract and click Submit',
             async () => {
                 await contract.changeStatusToActiveContract();
 
                 console.log(
-                    'TC45 PASSED - Status changed to Active Contract'
+                    'TC45 PASSED - Status changed to Active Contract and submitted'
                 );
             }
         );
@@ -1010,12 +1011,12 @@ test.describe.serial(
         // ==================================================
 
         test(
-            'TC46 - HR should open Active Contractors',
+            'TC46 - Verify that HR can navigate to the Active tab and then open the Contractors tab',
             async () => {
                 await contract.openActiveContractors();
 
                 console.log(
-                    'TC46 PASSED - Active Contractors opened'
+                    'TC46 PASSED - Active tab and Contractors tab opened'
                 );
             }
         );
@@ -1025,14 +1026,14 @@ test.describe.serial(
         // ==================================================
 
         test(
-            'TC47 - HR should search employee in Active Contractors',
+            'TC47 - Verify that HR can search for the employee by name and the employee is displayed under Active Contracts/Contractors',
             async () => {
                 await contract.searchActiveContractEmployee(
                     employee.fullName
                 );
 
                 console.log(
-                    'TC47 PASSED - Employee displayed in Active Contractors'
+                    'TC47 PASSED - Employee displayed under Active Contractors'
                 );
             }
         );

@@ -13,7 +13,7 @@ export class PreOnboardingPage {
     this.page = page;
     this.usernameInput = page.getByRole('textbox', { name: 'Username*' });
     this.passwordInput = page.getByRole('textbox', { name: 'Password*' });
-    this.loginButton = page.getByRole('button', { name: 'Login' });
+    this.loginButton = page.getByRole('button', { name: 'Login', exact: true });
     this.invalidCredentialsMessage = page.getByText(
       /invalid|incorrect|wrong (email|mail|password|username|credentials)|unable to login|login failed/i,
     );
