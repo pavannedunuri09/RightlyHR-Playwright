@@ -1,4 +1,4 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -96,7 +96,7 @@ export class Contract {
 
         this.sublocationDropdown = page.getByRole(
             'combobox',
-            { name: 'Please select sublocation' }
+            { name: /Please select sub\s*location/i }
         );
 
         this.addButton = page.getByRole(
@@ -223,12 +223,14 @@ export class Contract {
             name: 'Hyderabad'
         }).click();
 
+        await expect(this.sublocationDropdown).toBeEnabled({
+            timeout: 15000
+        });
         await this.sublocationDropdown.click();
 
         await this.page.getByRole('option', {
-            name: 'Jai Hind Enclave building',
-            exact: true
-        }).click();
+            name: /Jai Hind Enclave Building/i,
+        }).first().click();
     }
 
     async clickAdd() {
