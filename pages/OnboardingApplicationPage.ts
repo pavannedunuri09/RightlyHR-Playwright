@@ -381,12 +381,9 @@ export class OnboardingApplicationPage {
       );
     }
 
-    for (const name of documentNames) {
-      const status = await this.getDocumentRowStatus(name);
-      if (!status || !this.isDocumentComplete(status)) {
-        throw new Error(`${name} is still incomplete after upload attempt. Status: ${status ?? 'row not found'}`);
-      }
-    }
+    await this.closeUploadDialog();
+    await this.page.waitForTimeout(500);
+    await this.assertDocumentsComplete();
   }
 
   async submitAndExpectLogout(loginUsername: Locator) {
@@ -419,7 +416,7 @@ export class OnboardingApplicationPage {
   }
 
   private documentRow(documentName: string) {
-    return this.page.getByRole('row', { name: this.documentNamePattern(documentName) }).first();
+    return this.documentTableRows().filter({ hasText: this.documentNamePattern(documentName) }).first();
   }
 
   private documentNamePattern(documentName: string): RegExp {
@@ -473,10 +470,8 @@ export class OnboardingApplicationPage {
     if (/aadha?r/i.test(documentName)) {
       return randomAadhaar();
     }
-    if (/driving\s*l/i.test(documentName)) {
-      return randomNumericId(10);
-    }
-    return randomNumericId(10);
+    // Resume and Driving License require a 12-character numeric document number.
+    return randomNumericId(12);
   }
 
   private alternateFilePathForDocument(documentName: string, imagePath: string) {
@@ -508,10 +503,40 @@ export class OnboardingApplicationPage {
   private async getDocumentRowStatus(documentName: string) {
     const row = this.documentRow(documentName);
     await row.scrollIntoViewIfNeeded().catch(() => {});
-    if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
-      return null;
+    if (await row.isVisible({ timeout: 5000 }).catch(() => false)) {
+      return (await row.innerText()).replace(/\s+/g, ' ').trim();
     }
-    return (await row.innerText()).replace(/\s+/g, ' ').trim();
+
+    const pattern = this.documentNamePattern(documentName);
+    const rows = this.documentTableRows();
+    const count = await rows.count();
+    for (let i = 0; i < count; i++) {
+      const candidate = rows.nth(i);
+      await candidate.scrollIntoViewIfNeeded().catch(() => {});
+      const text = (await candidate.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (pattern.test(text)) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  private async assertDocumentsComplete() {
+    const rows = this.documentTableRows();
+    const count = await rows.count();
+    if (!count) {
+      throw new Error('No onboarding document rows found after upload');
+    }
+
+    for (let i = 0; i < count; i++) {
+      const row = rows.nth(i);
+      await row.scrollIntoViewIfNeeded().catch(() => {});
+      const text = (await row.innerText()).replace(/\s+/g, ' ').trim();
+      const name = this.extractDocumentName(text) ?? `row ${i + 1}`;
+      if (!this.isDocumentComplete(text)) {
+        throw new Error(`${name} is still incomplete after upload attempt. Status: ${text}`);
+      }
+    }
   }
 
   private async logDocumentStatuses() {
@@ -669,5 +694,7 @@ function randomAadhaar() {
 }
 
 function randomNumericId(length: number) {
-  return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
+  const first = String(Math.floor(1 + Math.random() * 9));
+  const rest = Array.from({ length: length - 1 }, () => Math.floor(Math.random() * 10)).join('');
+  return `${first}${rest}`;
 }

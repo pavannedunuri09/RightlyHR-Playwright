@@ -29,14 +29,14 @@ export class OfferLetterPage {
     this.page = page;
     this.generateDocumentsButton = page.getByRole('button', { name: 'Generate Documents' });
     this.offerLetterCard = page.locator('div').filter({ hasText: /^Offer Letter$/ }).first();
-    this.employeeCombobox = page.getByRole('combobox', { name: 'Please select employee' });
-    this.employeeSearch = page.getByRole('searchbox', { name: 'Search employee' });
+    this.employeeCombobox = page.getByRole('combobox', { name: /Please select employee/i });
+    this.employeeSearch = page.getByRole('searchbox', { name: /Search employee|Select employee/i });
     this.personalEmailInput = page.getByRole('textbox', { name: 'Personal email ID' });
     this.firstNameInput = page.getByRole('textbox', { name: 'First name' });
     this.lastNameInput = page.getByRole('textbox', { name: 'Last name' });
     this.addressCombobox = page.getByRole('combobox', { name: 'Please select address' });
     this.salaryInput = page.getByRole('spinbutton', { name: 'Please enter salary' });
-    this.variablePayCombobox = page.getByRole('combobox', { name: /Please select variable pay|^Yes$|^No$/ });
+    this.variablePayCombobox = page.getByRole('combobox', { name: /Please select variable pay|Variable Pay/i });
     this.variableAmountInput = page.getByRole('textbox', { name: 'Please enter variable amount' });
     this.offerIssuedDate = page.getByPlaceholder('Please enter offer issued date');
     this.expectedStartDate = page.getByPlaceholder(/Please enter expected start date/i);
@@ -67,8 +67,12 @@ export class OfferLetterPage {
     const nameRe = new RegExp(`${escapeRegExp(firstName)}[\\s\\S]*${escapeRegExp(lastName)}`, 'i');
 
     for (const query of queries) {
-      await this.employeeSearch.fill('');
-      await this.employeeSearch.fill(query);
+      const search = this.employeeSearch
+        .or(this.page.locator('.p-select-overlay input, .p-dropdown-panel input, [role="searchbox"]').last())
+        .first();
+      await search.waitFor({ state: 'visible', timeout: 10000 });
+      await search.fill('');
+      await search.fill(query);
       await this.page.waitForTimeout(1500);
       if (await this.page.getByRole('option', { name: 'No results found' }).isVisible().catch(() => false)) {
         continue;
@@ -114,6 +118,7 @@ export class OfferLetterPage {
     if (await this.variableAmountNeeded()) {
       await this.variableAmountInput.fill('0');
     }
+    await this.ensureComboSelected('Shift*', /[A-Za-z]/);
 
     const issued = isoDate(0);
     await this.fillDateField(this.offerIssuedDate, issued);
@@ -123,19 +128,21 @@ export class OfferLetterPage {
       await this.fillDateField(this.offerExpiryDate, isoDate(21));
     }
 
-    if (await this.fieldAfterLabel('Reporting Manager *').getByRole('combobox').isVisible().catch(() => false)) {
-      await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
-    }
+    await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
     await this.ensureComboSelected('Document Type *', 'Soft Copy');
     if (await this.noteInput.isVisible().catch(() => false)) {
       await this.noteInput.fill('Employee Offer letter');
     }
-    await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
+    await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii/i, 'pavan');
 
+    console.log(`Shift: ${((await this.comboForLabel('Shift*').innerText().catch(() => '')) || '').trim()}`);
+    console.log(`Manager: ${((await this.comboForLabel('Reporting Manager *').innerText().catch(() => '')) || '').trim()}`);
+    console.log(`Document type: ${((await this.comboForLabel('Document Type *').innerText().catch(() => '')) || '').trim()}`);
+    console.log(`Signature: ${((await this.comboForLabel('Signature Authority Name*').innerText().catch(() => '')) || '').trim()}`);
+
+    await this.fillEmptyRequiredCombos();
     if (!(await this.generateButton.isEnabled().catch(() => false))) {
-      await this.ensureComboSelected('Variable Pay*', 'No');
-      await this.ensureComboSelected('Document Type *', 'Soft Copy');
-      await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
+      await this.fillEmptyRequiredCombos();
       await this.fillDateField(this.offerIssuedDate, issued);
       await this.fillDateField(this.expectedStartDate, issued);
       await this.fillDateField(this.offerExpiryDate, isoDate(21));
@@ -176,8 +183,15 @@ export class OfferLetterPage {
   }
 
   private async openEmployeePicker() {
-    await this.page.keyboard.press('Escape').catch(() => {});
-    await this.employeeCombobox.click();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.closeOpenOverlays();
+      await this.employeeCombobox.click();
+      const search = this.employeeSearch.or(this.page.locator('.p-select-overlay input, .p-dropdown-panel input, [role="searchbox"]').last());
+      if (await search.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+        await search.first().click();
+        return;
+      }
+    }
     await this.employeeSearch.waitFor({ state: 'visible', timeout: 10000 });
   }
 
@@ -243,28 +257,52 @@ export class OfferLetterPage {
     const compact = label.replace(/\s+\*/g, '*');
     const labelNode = this.page.getByText(label, { exact: true })
       .or(this.page.getByText(compact, { exact: true }));
-    return labelNode.first().locator('xpath=following-sibling::*[1]');
+    const selectSibling = labelNode.first().locator(
+      'xpath=following-sibling::*[self::p-select or .//p-select or .//*[@role="combobox"] or contains(@class,"p-select") or contains(@class,"p-dropdown")][1]',
+    );
+    return selectSibling.or(labelNode.first().locator('xpath=..')).first();
+  }
+
+  private comboForLabel(label: string) {
+    const fieldCombo = this.fieldAfterLabel(label).getByRole('combobox');
+    if (label.includes('Reporting Manager')) {
+      return fieldCombo.or(this.page.getByRole('combobox', { name: /Please select reporting manager/i })).first();
+    }
+    if (label.includes('Document Type')) {
+      return fieldCombo.or(this.documentTypeCombobox).first();
+    }
+    if (label.includes('Signature Authority')) {
+      return fieldCombo.or(this.signatureAuthorityCombobox).first();
+    }
+    if (label.includes('Variable Pay')) {
+      return fieldCombo.or(this.variablePayCombobox).first();
+    }
+    if (/^Shift/i.test(label)) {
+      return fieldCombo.or(this.page.getByRole('combobox', { name: /Please select Shift/i })).first();
+    }
+    return fieldCombo.first();
   }
 
   private async chooseAfterLabel(label: string, optionName: string | RegExp, search?: string) {
     const field = this.fieldAfterLabel(label);
-    if (!(await field.getByRole('combobox').isVisible().catch(() => false))) {
+    const combo = this.comboForLabel(label);
+    if (!(await combo.isVisible().catch(() => false))) {
       return;
     }
 
     for (let attempt = 0; attempt < 3; attempt++) {
       await this.closeOpenOverlays();
-      await field.scrollIntoViewIfNeeded();
-      const trigger = field.getByRole('button', { name: 'dropdown trigger' });
-      if (await trigger.isVisible().catch(() => false)) {
-        await trigger.click();
+      await combo.scrollIntoViewIfNeeded();
+      const trigger = field.getByRole('button', { name: 'dropdown trigger' }).or(combo.locator('xpath=..').getByRole('button', { name: 'dropdown trigger' }));
+      if (await trigger.first().isVisible().catch(() => false)) {
+        await trigger.first().click();
       } else {
-        await field.getByRole('combobox').click();
+        await combo.click();
       }
 
       const opened = await this.selectPanelVisible().catch(() => false);
       if (!opened) {
-        await field.getByRole('combobox').click({ force: true }).catch(() => {});
+        await combo.click({ force: true }).catch(() => {});
       }
 
       const listbox = this.page.getByRole('listbox').last();
@@ -343,13 +381,81 @@ export class OfferLetterPage {
   }
 
   private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {
-    const combo = this.fieldAfterLabel(label).getByRole('combobox');
+    const combo = this.comboForLabel(label);
     if (!(await combo.isVisible().catch(() => false))) {
       return;
     }
     const text = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-    if (/please select/i.test(text) || !text) {
-      await this.chooseAfterLabel(label, optionName, search);
+    const matches = typeof optionName === 'string'
+      ? text.toLowerCase().includes(optionName.toLowerCase())
+      : optionName.test(text);
+    if (matches && text && !/please select/i.test(text)) {
+      return;
+    }
+    await this.chooseAfterLabel(label, optionName, search);
+  }
+
+  private async fillEmptyRequiredCombos() {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await this.closeOpenOverlays();
+      const combo = this.page.getByRole('combobox')
+        .filter({ hasText: /please select/i })
+        .filter({ hasNotText: /employee/i })
+        .first();
+      if (!(await combo.isVisible().catch(() => false))) {
+        return;
+      }
+
+      const current = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      console.log(`Empty combo: ${current}`);
+      await combo.scrollIntoViewIfNeeded();
+      await combo.click();
+
+      let search: string | undefined;
+      let option: RegExp = /^(?!Please select).+/i;
+      if (/reporting manager/i.test(current)) {
+        search = 'bhav';
+        option = /Bhavitha Reddy|SD302130/;
+      } else if (/document type/i.test(current)) {
+        option = /Soft Copy|Hard Copy/;
+      } else if (/signature/i.test(current)) {
+        search = 'pavan';
+        option = /Pavan|Tejaa|saii/i;
+      } else if (/shift/i.test(current)) {
+        option = /General Shift/;
+      } else if (/variable pay/i.test(current)) {
+        option = /^No$/;
+      } else if (/\bpf\b/i.test(current)) {
+        option = /^Yes$/;
+      } else if (/address/i.test(current)) {
+        option = /Current Address|Permanent Address/;
+      }
+
+      if (search) {
+        const filter = this.page.getByRole('searchbox').last();
+        if (await filter.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await filter.fill(search);
+          await this.page.waitForTimeout(800);
+        }
+      }
+
+      const choice = this.page.getByRole('option').filter({ hasText: option })
+        .filter({ hasNotText: /please select/i }).first();
+      if (await choice.isVisible({ timeout: 4000 }).catch(() => false)) {
+        console.log(`Selecting ${current} -> ${(await choice.innerText()).replace(/\s+/g, ' ').trim()}`);
+        await choice.click();
+      } else {
+        const fallback = this.page.getByRole('option').filter({ hasNotText: /please select/i }).first();
+        if (await fallback.isVisible({ timeout: 2000 }).catch(() => false)) {
+          console.log(`Fallback ${current} -> ${(await fallback.innerText()).replace(/\s+/g, ' ').trim()}`);
+          await fallback.click();
+        } else {
+          console.log(`No option found for ${current}`);
+          await this.page.keyboard.press('Escape').catch(() => {});
+          return;
+        }
+      }
+      await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 4000 }).catch(() => {});
     }
   }
 }

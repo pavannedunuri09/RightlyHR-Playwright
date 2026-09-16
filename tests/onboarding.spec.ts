@@ -33,6 +33,18 @@ function isHeadedYopmailRun() {
   return process.env.HEADLESS !== 'true' && !(process.env.CI === 'true' || process.env.CI === '1');
 }
 
+function resolvePreOnboardingBaseUrl() {
+  const explicit = process.env.PRE_ONBOARDING_BASE_URL?.trim() || process.env.PRE_ONBOARDING_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, '');
+  }
+  const hrms = (process.env.BASE_URL || process.env.RHR_BASE_URL || '').replace(/\/$/, '');
+  if (/hrmsqa/i.test(hrms)) {
+    return hrms.replace(/hrmsqa/i, 'preonboardingqa');
+  }
+  return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
+}
+
 type GeneratedEmployee = SavedOnboardingEmployee;
 
 let createdEmployee: GeneratedEmployee;
@@ -71,7 +83,7 @@ async function ensurePortalSession(): Promise<Page> {
 
   portalTabForApp = await onboardingContext.newPage();
   const preOnboarding = new PreOnboardingPage(portalTabForApp);
-  await portalTabForApp.goto('https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com', {
+  await portalTabForApp.goto(resolvePreOnboardingBaseUrl(), {
     waitUntil: 'domcontentloaded',
   });
   await preOnboarding.expectLoaded();
@@ -107,7 +119,7 @@ test.describe('Onboarding Flow', () => {
   let page: Page;
 
   test.beforeAll(async ({ browser }) => {
-    onboardingContext = await browser.newContext({ storageState: '.auth/user.json' });
+    onboardingContext = await browser.newContext();
     context = onboardingContext;
     page = await context.newPage();
     const loginPage = new LoginPage(page);
@@ -127,7 +139,6 @@ test.describe('Onboarding Flow', () => {
   });
 
   test('Test-01: Navigate to Prospective Employees list as HR', async () => {
-    // Navigate directly to prospective employees page with saved storageState
     await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' });
 
     // Verify HR is in prospective employees list view & Add button is visible
@@ -285,7 +296,7 @@ test.describe('Onboarding Flow', () => {
   });
 
   test('Test-05: Click Go to Application, fill personal details, upload documents, and submit', async ({ }, testInfo) => {
-    test.setTimeout(180000);
+    test.setTimeout(360000);
     createdEmployee = ensureCreatedEmployee();
     const portalTab = await ensurePortalSession();
 

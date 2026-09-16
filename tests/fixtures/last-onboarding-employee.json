@@ -1,12 +1,14 @@
 {
-  "firstName": "Varun",
-  "lastName": "Gupta",
-  "fullName": "Varun Gupta",
-  "email": "varun.gupta8738@yopmail.com",
+  "firstName": "Manish",
+  "lastName": "Patel",
+  "fullName": "Manish Patel",
+  "email": "manish.patel2318@yopmail.com",
   "designation": "Front End Developer",
   "employmentType": "Fresher",
   "location": "Hyderabad",
   "sublocation": "Jai Hind Enclave building",
-  "employeeId": "RHR381657",
-  "workEmail": "varun1657@yopmail.com"
+  "username": "manish.patel2318@yopmail.com",
+  "password": "jPmqxMsY",
+  "employeeId": "RHR216138",
+  "workEmail": "manish6138@yopmail.com"
 }
