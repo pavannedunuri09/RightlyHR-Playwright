@@ -31,8 +31,8 @@ export class PendingTraineeOfferApprovalPage {
     this.traineeOfferLetterTab = page.getByText('Trainee Offer Letter', { exact: true });
     this.forYouTab = page.getByRole('link', { name: /For You \(\d+\)/ });
     this.forYourRoleTab = page.getByRole('link', { name: /For Your Role \(\d+\)/ });
-    this.rejectReasonInput = page.getByRole('textbox', { name: 'Please provide reject reason' });
-    this.rejectButton = page.getByRole('dialog').getByRole('button', { name: 'Reject', exact: true });
+    this.rejectReasonInput = page.getByRole('textbox', { name: /Please provide reason for rejection|Please provide reject reason/i });
+    this.rejectButton = page.getByRole('dialog').getByRole('button', { name: /^(Submit|Reject)$/ });
     this.rejectedToast = page.getByText(/Trainee offer letter rejected/i);
     this.approvedToast = page.getByText(/Trainee Offer approved/i);
     this.releasedToast = page.getByText(/Intern offer letter released|offer letter released/i);

@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures/test';
 import { RegularizationPage } from '../pages/RegularizationPage';
 
 const EMPLOYEE_NAME = 'Indu Priya';

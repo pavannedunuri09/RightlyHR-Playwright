@@ -1,4 +1,4 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from './fixtures/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as XLSX from 'xlsx';

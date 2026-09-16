@@ -41,7 +41,7 @@ export class TraineeOfferLetterPage {
     this.traineeOfferLetterCard = page.locator('div').filter({ hasText: /^Trainee Offer Letter$/ }).first();
     this.employeeOfferLetterCard = page.locator('div').filter({ hasText: /^Offer Letter$/ }).first();
     this.employeeCombobox = page.getByRole('combobox', { name: 'Please select employee' });
-    this.employeeSearch = page.getByRole('searchbox', { name: 'Search employee' });
+    this.employeeSearch = page.getByRole('searchbox', { name: /Select employee|Search employee/i });
     this.personalEmailInput = page.getByRole('textbox', { name: 'Personal email ID' });
     this.firstNameInput = page.getByRole('textbox', { name: 'First name' });
     this.middleNameInput = page.getByRole('textbox', { name: 'Middle name' });
@@ -54,7 +54,8 @@ export class TraineeOfferLetterPage {
     this.countryInput = page.getByRole('textbox', { name: 'Country' });
     this.pincodeInput = page.getByRole('textbox', { name: 'Pincode' });
     this.addressCombobox = page.getByRole('combobox', { name: 'Please select address' });
-    this.salaryInput = page.getByRole('spinbutton', { name: 'Please enter salary' });
+    this.salaryInput = page.getByRole('textbox', { name: /Please enter monthly stipend salary|Please enter salary/i })
+      .or(page.getByRole('spinbutton', { name: /Please enter monthly stipend salary|Please enter salary/i }));
     this.offerIssuedDate = page.getByPlaceholder('Please enter offer issued date');
     this.expectedStartDate = page.getByPlaceholder(/Please enter expected start date/i);
     this.offerExpiryDate = page.getByPlaceholder('Please enter offer expiry date');
@@ -292,36 +293,97 @@ export class TraineeOfferLetterPage {
   }
 
   private fieldAfterLabel(label: string) {
-    return this.page.getByText(label, { exact: true }).locator('xpath=following-sibling::*[1]');
+    const labelNode = this.page.getByText(label, { exact: true }).first();
+    const selectSibling = labelNode.locator(
+      'xpath=following-sibling::*[self::p-select or .//p-select or .//*[@role="combobox"] or contains(@class,"p-select") or contains(@class,"p-dropdown")][1]',
+    );
+    return selectSibling.or(labelNode.locator('xpath=..'));
+  }
+
+  private labeledCombo(label: string) {
+    const fieldCombo = this.fieldAfterLabel(label).getByRole('combobox');
+    if (label.includes('Training Period')) {
+      return fieldCombo.or(this.trainingPeriodCombobox).first();
+    }
+    if (label.includes('Reporting Manager')) {
+      return fieldCombo.or(this.reportingManagerCombobox).first();
+    }
+    if (label.includes('Document Type')) {
+      return fieldCombo.or(this.documentTypeCombobox).first();
+    }
+    if (label.includes('Signature Authority')) {
+      return fieldCombo.or(this.signatureAuthorityCombobox).first();
+    }
+    return fieldCombo.first();
+  }
+
+  private async hasLabel(label: string) {
+    return this.page.getByText(label, { exact: true }).isVisible({ timeout: 2000 }).catch(() => false);
+  }
+
+  private async closeOpenOverlays() {
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.page.locator(
+      '.p-datepicker:visible, .p-datepicker-panel:visible, .p-select-overlay:visible, .p-dropdown-panel:visible, [role="listbox"]:visible',
+    ).last().waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
   }
 
   private async chooseAfterLabel(label: string, optionName: string | RegExp, search?: string) {
-    await this.page.keyboard.press('Escape').catch(() => {});
-    await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
-
     const field = this.fieldAfterLabel(label);
-    await field.getByRole('combobox').click();
-    if (!(await this.selectPanelVisible())) {
-      await field.getByRole('button', { name: 'dropdown trigger' }).click();
-    }
-    await expect.poll(async () => this.selectPanelVisible(), { timeout: 8000 }).toBeTruthy();
+    const combo = this.labeledCombo(label);
+    const chevron = field.locator('.p-select-dropdown, .p-dropdown-trigger').first()
+      .or(field.getByRole('button', { name: 'dropdown trigger' }));
 
-    const listbox = this.page.getByRole('listbox').last();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await this.closeOpenOverlays();
+      await field.scrollIntoViewIfNeeded().catch(() => {});
+
+      if (attempt === 0) {
+        await this.page.getByText(label, { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
+        if (await chevron.isVisible().catch(() => false)) {
+          await chevron.click({ timeout: 5000 });
+        } else {
+          await combo.click({ timeout: 5000 });
+        }
+      } else if (attempt === 1) {
+        await combo.click({ timeout: 5000 }).catch(() => {});
+      } else if (attempt === 2) {
+        await chevron.click({ force: true, timeout: 5000 }).catch(() => combo.click({ force: true, timeout: 5000 }));
+      } else {
+        await combo.focus().catch(() => {});
+        await this.page.keyboard.press('Alt+ArrowDown').catch(() => {});
+        await this.page.keyboard.press('ArrowDown').catch(() => {});
+      }
+
+      const opened =
+        (await this.page.getByRole('option').first().isVisible({ timeout: 2000 }).catch(() => false)) ||
+        (await this.page.locator('.p-select-overlay:visible, .p-dropdown-panel:visible').last().isVisible({ timeout: 500 }).catch(() => false));
+      if (opened || await this.selectPanelVisible()) {
+        break;
+      }
+      await this.page.waitForTimeout(400);
+    }
+
+    if (!(await this.selectPanelVisible())) {
+      throw new Error(`Could not open dropdown for ${label}`);
+    }
+
     if (search) {
-      const filter = this.page.getByRole('searchbox').last();
-      if (await filter.isVisible({ timeout: 5000 }).catch(() => false)) {
+      const filter = this.page.locator('.p-select-overlay input, .p-dropdown-panel input, [role="searchbox"]').last();
+      if (await filter.isVisible({ timeout: 2000 }).catch(() => false)) {
         await filter.fill(search);
         await this.page.waitForTimeout(1000);
       }
     }
 
     const option = typeof optionName === 'string'
-      ? listbox.getByRole('option', { name: optionName, exact: true })
-      : listbox.getByRole('option').filter({ hasText: optionName }).first();
-    if (await option.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await option.click();
+      ? this.page.getByRole('option', { name: optionName, exact: true })
+      : this.page.getByRole('option').filter({ hasText: optionName });
+    const choice = option.first();
+    if (await choice.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await choice.click();
     } else {
-      const fallback = listbox.getByRole('option').first();
+      const fallback = this.page.getByRole('option').filter({ hasNotText: /please select/i }).first();
       if (await fallback.isVisible({ timeout: 5000 }).catch(() => false)) {
         const labelText = ((await fallback.innerText().catch(() => '')) || '').trim();
         console.log(`Using first available option for ${label}: ${labelText}`);
@@ -330,15 +392,15 @@ export class TraineeOfferLetterPage {
         throw new Error(`No option matching ${String(optionName)} found for ${label}`);
       }
     }
-    await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    await this.closeOpenOverlays();
   }
 
   private async selectPanelVisible() {
     return (
-      (await this.page.getByRole('listbox').last().isVisible().catch(() => false)) ||
-      (await this.page.locator('.p-select-overlay, .p-dropdown-panel').last().isVisible().catch(() => false)) ||
       (await this.page.getByRole('option').first().isVisible().catch(() => false)) ||
-      (await this.page.getByRole('searchbox').last().isVisible().catch(() => false))
+      (await this.page.getByRole('listbox').last().isVisible().catch(() => false)) ||
+      (await this.page.locator('.p-select-overlay:visible, .p-dropdown-panel:visible').last().isVisible().catch(() => false)) ||
+      (await this.page.locator('.p-select-overlay input, .p-dropdown-panel input, [role="searchbox"]').last().isVisible().catch(() => false))
     );
   }
 
@@ -352,8 +414,11 @@ export class TraineeOfferLetterPage {
   }) {
     await this.selectAddress();
     await this.expectAddressAutofill(address);
+    await this.ensureComboSelected('Stipend/Salary Applicable *', /Yes/i);
+    await this.salaryInput.waitFor({ state: 'visible', timeout: 10000 });
     await this.salaryInput.fill('200000');
     await this.salaryInput.blur();
+    await this.ensureComboSelected('Shift*', /[A-Za-z]/);
 
     const issued = isoDate(0);
     await this.fillDateField(this.offerIssuedDate, issued);
@@ -362,20 +427,27 @@ export class TraineeOfferLetterPage {
     if (await this.expiryError.isVisible().catch(() => false)) {
       await this.fillDateField(this.offerExpiryDate, isoDate(14));
     }
+    await this.closeOpenOverlays();
 
     await this.ensureComboSelected('Training Period(Months)*', '1');
     await this.ensureComboSelected('Reporting Manager *', /Bhavitha Reddy|SD302130/, 'bhav');
-    await this.ensureComboSelected('Document Type *', 'Soft Copy');
+    if (await this.hasLabel('Document Type *')) {
+      await this.ensureComboSelected('Document Type *', 'Soft Copy');
+    }
     await this.noteInput.fill('Trainee Offer letter');
     await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
 
-    console.log(`Training: ${(await this.fieldAfterLabel('Training Period(Months)*').getByRole('combobox').innerText()).trim()}`);
-    console.log(`Manager: ${(await this.fieldAfterLabel('Reporting Manager *').getByRole('combobox').innerText()).trim()}`);
-    console.log(`Document type: ${(await this.fieldAfterLabel('Document Type *').getByRole('combobox').innerText()).trim()}`);
+    console.log(`Training: ${((await this.labeledCombo('Training Period(Months)*').innerText().catch(() => '')) || '').trim()}`);
+    console.log(`Manager: ${((await this.labeledCombo('Reporting Manager *').innerText().catch(() => '')) || '').trim()}`);
+    if (await this.hasLabel('Document Type *')) {
+      console.log(`Document type: ${((await this.labeledCombo('Document Type *').innerText().catch(() => '')) || '').trim()}`);
+    }
     console.log(`Note: ${await this.noteInput.inputValue()}`);
 
     if (!(await this.generateButton.isEnabled().catch(() => false))) {
-      await this.ensureComboSelected('Document Type *', 'Hard Copy');
+      if (await this.hasLabel('Document Type *')) {
+        await this.ensureComboSelected('Document Type *', 'Hard Copy');
+      }
       await this.ensureComboSelected('Signature Authority Name*', /Pavan|Tejaa|saii|[A-Za-z]/);
       await this.fillDateField(this.offerIssuedDate, issued);
       await this.fillDateField(this.offerExpiryDate, isoDate(14));
@@ -385,22 +457,25 @@ export class TraineeOfferLetterPage {
   }
 
   private async fillDateField(field: Locator, value: string) {
+    await this.closeOpenOverlays();
     await field.scrollIntoViewIfNeeded();
     await field.waitFor({ state: 'visible', timeout: 10000 });
-    await field.click();
+    await field.click({ force: true });
     await field.fill(value);
-    await field.blur();
+    await field.press('Tab').catch(() => field.blur());
+    await this.closeOpenOverlays();
   }
 
   private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {
-    const combo = this.fieldAfterLabel(label).getByRole('combobox');
+    if (!(await this.hasLabel(label))) {
+      return;
+    }
+    const combo = this.labeledCombo(label);
     const text = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
     const needsSelection =
+      !text ||
       /please select/i.test(text) ||
-      (label.includes('Training Period') && !/^\d+$/.test(text)) ||
-      (label.includes('Reporting Manager') && /please select/i.test(text)) ||
-      (label.includes('Document Type') && /please select/i.test(text)) ||
-      (label.includes('Signature Authority') && /please select/i.test(text));
+      (label.includes('Training Period') && !/^\d+$/.test(text));
 
     if (needsSelection) {
       await this.chooseAfterLabel(label, optionName, search);

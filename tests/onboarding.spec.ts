@@ -1,4 +1,4 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { YopmailPage } from '../pages/YopmailPage';
 import { PreOnboardingPage } from '../pages/PreOnboardingPage';

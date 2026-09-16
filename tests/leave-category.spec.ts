@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from './fixtures/test';
 import {
   GENERAL_LEAVE_CATEGORY,
   LEAVE_CATEGORY_REQUIRED_VALIDATIONS,

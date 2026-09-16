@@ -59,12 +59,12 @@ export class PreOnboardingPostOfferPage {
     if (await this.isReviewPage()) {
       return;
     }
-    const name = this.page.getByRole('textbox', { name: 'Please enter name' }).first();
+    const name = this.contactName(0);
     const onEmergency = await name.isVisible({ timeout: 8000 }).catch(() => false);
     if (!onEmergency) {
       return;
     }
-    const secondName = this.page.getByRole('textbox', { name: 'Please enter name' }).nth(1);
+    const secondName = this.contactName(1);
     const countryPending = await this.page.getByText('Select country', { exact: true }).first().isVisible().catch(() => false);
     const relationPending = await this.page.getByRole('combobox', { name: 'Please select relation' }).first().isVisible().catch(() => false);
     if (
@@ -161,10 +161,7 @@ export class PreOnboardingPostOfferPage {
   }
 
   async fillEmergencyContacts() {
-    await this.page.getByRole('textbox', { name: 'Please enter name' }).first().waitFor({
-      state: 'visible',
-      timeout: 15000,
-    });
+    await this.contactName(0).waitFor({ state: 'visible', timeout: 15000 });
 
     await this.fillEmergencyContact(0, {
       name: 'Ravi',
@@ -179,7 +176,10 @@ export class PreOnboardingPostOfferPage {
       relation: 'Mother',
     });
 
+    await expect(this.contactName(0)).toHaveValue(/Ravi/i);
+    await expect(this.contactName(1)).toHaveValue(/Sindhu/i);
     console.log('Emergency contacts: Ravi (Brother), Sindhu (Mother)');
+    await expect(this.nextButton).toBeEnabled({ timeout: 15000 });
     await this.nextButton.click();
   }
 
@@ -276,19 +276,42 @@ export class PreOnboardingPostOfferPage {
     await this.page.locator('input[type="file"]').last().setInputFiles(filePath);
   }
 
+  private contactName(index: number) {
+    return this.page.getByPlaceholder(/Please enter name/i).nth(index);
+  }
+
+  private contactEmail(index: number) {
+    return this.page.getByPlaceholder(/Please enter (personal )?email ID/i).nth(index);
+  }
+
   private async fillEmergencyContact(
     index: number,
     contact: { name: string; email: string; mobile: string; relation: string },
   ) {
-    await this.page.getByRole('textbox', { name: 'Please enter name' }).nth(index).fill(contact.name);
-    await this.page.getByRole('textbox', { name: 'Please enter personal email ID' }).nth(index).fill(contact.email);
+    const name = this.contactName(index);
+    await name.waitFor({ state: 'visible', timeout: 15000 });
+    await name.scrollIntoViewIfNeeded();
+    await name.click();
+    await name.fill(contact.name);
+
+    const email = this.contactEmail(index);
+    await email.click();
+    await email.fill(contact.email);
+
     await this.selectIndiaCountryCode();
-    await this.page.getByRole('spinbutton', { name: 'Please enter mobile number' }).nth(index).fill(contact.mobile);
-    const relation = this.page.getByRole('combobox', { name: 'Please select relation' }).first();
-    if (await relation.isVisible().catch(() => false)) {
-      await relation.click();
-      await this.page.getByRole('option', { name: contact.relation, exact: true }).click();
-    }
+
+    const mobileByPlaceholder = this.page.getByPlaceholder(/Please enter mobile number/i).nth(index);
+    const mobile = (await mobileByPlaceholder.isVisible().catch(() => false))
+      ? mobileByPlaceholder
+      : this.page.getByRole('spinbutton', { name: /Please enter mobile number/i }).nth(index);
+    await mobile.click();
+    await mobile.fill(contact.mobile);
+    await mobile.press('Tab').catch(() => {});
+
+    const relation = this.page.getByRole('combobox', { name: /Please select relation/i }).first();
+    await relation.waitFor({ state: 'visible', timeout: 10000 });
+    await relation.click();
+    await this.page.getByRole('option', { name: contact.relation, exact: true }).click();
   }
 
   private async selectIndiaCountryCode() {
@@ -302,7 +325,8 @@ export class PreOnboardingPostOfferPage {
     await input.waitFor({ state: 'visible', timeout: 10000 });
     await input.fill('91');
     await this.page.waitForTimeout(500);
-    const india = this.page.locator('lib-country-list').getByText('India (भारत)').filter({ visible: true });
+    const india = this.page.getByRole('listbox').getByText('India (भारत)')
+      .or(this.page.locator('lib-country-list').getByText('India (भारत)').filter({ visible: true }));
     await india.first().click();
   }
 }

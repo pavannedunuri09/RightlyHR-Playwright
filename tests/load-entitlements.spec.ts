@@ -2,7 +2,7 @@
  * Prerequisites: run `npm run test:leave-category` then `npm run test:leave-allocation` first.
  * This suite assumes published leave categories are allocated for the same location/shift base.
  */
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from './fixtures/test';
 import {
   DEFAULT_ALLOCATION_DAYS,
   GENERAL_LEAVE_ALLOCATION_BASE,

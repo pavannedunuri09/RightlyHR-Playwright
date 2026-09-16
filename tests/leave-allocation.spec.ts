@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from './fixtures/test';
 import {
   DEFAULT_ALLOCATION_DAYS,
   GENERAL_LEAVE_ALLOCATION_BASE,

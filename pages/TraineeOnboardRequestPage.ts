@@ -12,8 +12,8 @@ export class TraineeOnboardRequestPage {
     this.jobTab = page.getByText('Job', { exact: true });
     this.onboardRequestTab = page.getByRole('img', { name: 'Trainee Onboard Request', exact: true })
       .or(page.locator('div').filter({ hasText: /^Trainee Onboard Request$/ }));
-    this.requestButton = page.locator('.custom-add-btn').filter({ hasText: 'Request For Onboard' })
-      .or(page.getByText('Request For Onboard', { exact: true }));
+    this.requestButton = page.getByText('Request For Onboard', { exact: true })
+      .or(page.locator('.custom-add-btn').filter({ hasText: 'Request For Onboard' }));
     this.submittedToast = page.getByText(/Onboarding request submitted|request submitted/i);
   }
 
@@ -43,23 +43,15 @@ export class TraineeOnboardRequestPage {
   }
 
   async submitRequest() {
-    const addBtn = this.page.locator('.custom-add-btn').filter({ hasText: 'Request For Onboard' });
-    await addBtn.waitFor({ state: 'visible', timeout: 15000 });
-    await addBtn.click();
+    const requestBtn = this.page.getByText('Request For Onboard', { exact: true }).last();
+    await requestBtn.waitFor({ state: 'visible', timeout: 15000 });
+    await requestBtn.scrollIntoViewIfNeeded();
+    await requestBtn.click();
 
-    const confirm = this.page.getByRole('dialog').getByRole('button', { name: /Yes|Submit|Confirm/i })
+    const confirm = this.page.getByRole('dialog').getByRole('button', { name: /Yes|Submit|Confirm|Ok/i })
       .or(this.page.getByRole('button', { name: 'Yes' }));
-    if (await confirm.first().isVisible({ timeout: 4000 }).catch(() => false)) {
+    if (await confirm.first().isVisible({ timeout: 5000 }).catch(() => false)) {
       await confirm.first().click();
-    }
-
-    const toast = this.submittedToast
-      .or(this.page.locator('.p-toast-message, .p-toast, [role="alert"], .toast-body').filter({ hasText: /.+/ }));
-    const waiting = this.page.getByText(/Waiting for Approval/i);
-    const appeared = await toast.first().isVisible({ timeout: 15000 }).catch(() => false)
-      || await waiting.first().isVisible({ timeout: 5000 }).catch(() => false);
-    if (!appeared) {
-      await addBtn.locator('i').click({ force: true }).catch(() => {});
     }
 
     const failure = await this.readSubmitFailure();
@@ -68,8 +60,27 @@ export class TraineeOnboardRequestPage {
       throw new Error(`Onboard request blocked: ${failure}`);
     }
 
-    await expect(waiting.or(toast).first()).toBeVisible({ timeout: 20000 });
-    const text = ((await toast.first().innerText().catch(() => '')) || 'Onboarding request submitted').trim();
+    const waiting = this.page.getByRole('cell', { name: /Waiting for Approval/i });
+    const toast = this.submittedToast
+      .or(this.page.locator('.p-toast-message, .p-toast, [role="alert"], .toast-body').filter({ hasText: /.+/ }));
+    const submitted = await toast.first().isVisible({ timeout: 15000 }).catch(() => false)
+      || await waiting.first().isVisible({ timeout: 3000 }).catch(() => false);
+
+    if (!submitted) {
+      await requestBtn.click({ force: true }).catch(() => {});
+      if (await confirm.first().isVisible({ timeout: 4000 }).catch(() => false)) {
+        await confirm.first().click();
+      }
+    }
+
+    const retryFailure = await this.readSubmitFailure();
+    if (retryFailure) {
+      await this.dismissFailureDialog();
+      throw new Error(`Onboard request blocked: ${retryFailure}`);
+    }
+
+    await expect(waiting.or(this.submittedToast).first()).toBeVisible({ timeout: 20000 });
+    const text = ((await this.submittedToast.first().innerText().catch(() => '')) || 'Onboarding request submitted').trim();
     console.log(`Onboard request: ${text}`);
     await expect(waiting.first()).toBeVisible({ timeout: 15000 });
     return text;
@@ -77,8 +88,10 @@ export class TraineeOnboardRequestPage {
 
   private async readSubmitFailure() {
     const dialog = this.page.getByRole('dialog').filter({
-      hasText: /Unable to proceed|job details|employee id|work mail|mandatory|required|not updated|please update|basic info|contact info|job info/i,
-    });
+      hasText: /Unable to proceed|job details|employee id|work mail|mandatory|required|not updated|please update|basic info|contact info|job info|team manager|reporting manager/i,
+    }).or(this.page.locator('ngb-modal-window.show, .modal.show').filter({
+      hasText: /Unable to proceed|please update|required|mandatory|work mail|employee id|job/i,
+    }));
     if (await dialog.first().isVisible({ timeout: 2000 }).catch(() => false)) {
       return (await dialog.first().innerText()).trim();
     }

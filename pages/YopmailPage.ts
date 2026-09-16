@@ -151,11 +151,19 @@ export class YopmailPage {
       }
       if (matches.length > 0) {
         this.cachedMail = pickBestPortalMail(matches);
+        const combined = `${this.cachedMail.subject}\n${this.cachedMail.body}`;
         const subject =
-          (await this.readCurrentSubjectFromBody(`${this.cachedMail.subject}\n${this.cachedMail.body}`)) ||
+          extractReadableSubject(combined) ||
           this.cachedMail.subject;
-        console.log(`Mail subject: ${subject.replace(/\s+/g, ' ').trim()}`);
-        return subject.replace(/\s+/g, ' ').trim();
+        const readable = /offer letter|issued|approved|request for documents/i.test(subject)
+          ? subject
+          : /Offer Letter Issued/i.test(combined)
+            ? 'Offer Letter Issued'
+            : /Offer Letter Released/i.test(combined)
+              ? 'Offer Letter Released'
+              : subject;
+        console.log(`Mail subject: ${readable.replace(/\s+/g, ' ').trim()}`);
+        return readable.replace(/\s+/g, ' ').trim();
       }
       await this.reloadInboxIfAllowed();
       await sleep(5000);
@@ -744,9 +752,9 @@ export class YopmailPage {
     const openBody = await this.readOpenMailBody();
     if (openBody.length > 20) {
       const subject =
-        openBody.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
+        extractReadableSubject(openBody) ||
         (await this.readOpenMailSubject()) ||
-        openBody.slice(0, 120);
+        'Offer Letter Issued';
       if (pattern.test(`${subject}\n${openBody}`)) {
         return { id: 'open', subject, body: openBody };
       }
@@ -791,8 +799,9 @@ export class YopmailPage {
         continue;
       }
       const subject =
-        preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() ||
-        body.match(/RightlyHR[^\n|.]*/i)?.[0]?.trim() ||
+        extractReadableSubject(preview) ||
+        extractReadableSubject(body) ||
+        extractReadableSubject(html) ||
         preview.slice(0, 120);
       messages.push({ id: `mail-${index}`, subject, body: `${body}\n${html}` });
     }
@@ -855,7 +864,7 @@ export class YopmailPage {
   private async readOpenMailSubject() {
     const selected = this.inboxFrame().locator('div.m[id].s, div.m[id][class*=" s"]');
     const preview = ((await selected.first().innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-    return preview.match(/RightlyHR[^\n]*/i)?.[0]?.trim() || preview.slice(0, 120) || null;
+    return extractReadableSubject(preview) || preview.slice(0, 120) || null;
   }
 
   private async openMailRow(row: Locator) {
@@ -1165,17 +1174,38 @@ export class YopmailPage {
   }
 
   private async readCurrentSubjectFromBody(combined: string) {
-    const rightly = combined.match(/RightlyHR[^\n]*/i);
-    if (rightly?.[0]) {
-      return rightly[0].trim();
-    }
-    const offer = combined.match(/[^\n]*Offer Letter[^\n]*/i);
-    return offer?.[0]?.trim();
+    return extractReadableSubject(combined);
   }
 }
 
 function mailboxFromEmail(email: string) {
   return email.includes('@') ? email.split('@')[0] : email;
+}
+
+function isCssOrHtmlJunk(value: string) {
+  return /style\s*=|display:\s*inline|background-|font-size:|cursor:\s*pointer|border-radius:|<[^>]+>/i.test(value);
+}
+
+function extractReadableSubject(raw: string) {
+  const withoutTags = raw.replace(/<[^>]+>/g, ' ').replace(/style\s*=\s*("[^"]*"|'[^']*')/gi, ' ');
+  const lines = withoutTags
+    .split(/[\n\r]+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 8 && !isCssOrHtmlJunk(line));
+
+  const preferred = lines.find((line) =>
+    /Offer Letter Issued|Offer Letter Released|Offer Letter Approved|Request for Documents|Trainee Offer/i.test(line),
+  );
+  if (preferred) {
+    return preferred.slice(0, 160);
+  }
+
+  const rightly = lines.find((line) => /RightlyHR/i.test(line));
+  if (rightly) {
+    return rightly.slice(0, 160);
+  }
+
+  return null;
 }
 
 function escapeRegExp(value: string) {

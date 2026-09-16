@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures/test';
 import { PermissionsPage, PermissionRequestData } from '../pages/PermissionsPage';
 
 const FIRST_PERMISSION: PermissionRequestData = {

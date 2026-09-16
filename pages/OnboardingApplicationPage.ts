@@ -25,6 +25,7 @@ export class OnboardingApplicationPage {
   readonly dobInput: Locator;
   readonly bloodGroupCombobox: Locator;
   readonly addressLine1: Locator;
+  readonly addressLine2: Locator;
   readonly cityInput: Locator;
   readonly stateInput: Locator;
   readonly countryInput: Locator;
@@ -54,6 +55,7 @@ export class OnboardingApplicationPage {
     this.dobInput = page.getByRole('textbox', { name: 'Date Of Birth *' });
     this.bloodGroupCombobox = page.locator('#bloodGroup');
     this.addressLine1 = page.getByRole('textbox', { name: 'Address Line 1*' }).first();
+    this.addressLine2 = page.getByRole('textbox', { name: 'Address Line 2*' }).first();
     this.cityInput = page.getByRole('textbox', { name: 'City*' }).first();
     this.stateInput = page.getByRole('textbox', { name: 'Please enter state' }).first();
     this.countryInput = page.getByRole('textbox', { name: 'Country*' });
@@ -208,6 +210,7 @@ export class OnboardingApplicationPage {
       firstName,
       lastName,
       addressLine1: `Road no.${plot}`,
+      addressLine2: `Sector ${plot}`,
       city: place.city,
       state: place.state,
       country: 'India',
@@ -238,12 +241,14 @@ export class OnboardingApplicationPage {
     await this.selectComboboxOption(this.bloodGroupCombobox, 'B+');
 
     const addressLine1 = this.page.locator('#currentAddressLine1').or(this.addressLine1);
+    const addressLine2 = this.page.locator('#currentAddressLine2').or(this.addressLine2);
     const cityInput = this.page.locator('#currentCity').or(this.cityInput);
     const stateInput = this.page.locator('#currentState').or(this.stateInput);
     const zipInput = this.page.locator('#currentzipCode').or(this.zipInput);
     const countryInput = this.page.getByRole('textbox', { name: 'Country*' }).first();
 
     await addressLine1.fill(details.addressLine1);
+    await addressLine2.fill(details.addressLine2);
     await cityInput.fill(details.city);
     await stateInput.fill(details.state);
     await countryInput.fill(details.country);
@@ -303,13 +308,22 @@ export class OnboardingApplicationPage {
     return this.page.getByRole('row', { name: /Resume/ }).isVisible({ timeout: 8000 }).catch(() => false);
   }
 
-  async needsUpload(documentName: string) {
-    const row = this.documentRow(documentName);
-    if (!(await row.isVisible().catch(() => false))) {
-      return false;
+  async firstDocumentNeedingUpload() {
+    await this.goToDocumentsIfNeeded();
+    for (const name of await this.listDocumentNames()) {
+      if (await this.needsUpload(name)) {
+        return name;
+      }
     }
-    const text = await row.innerText();
-    return /Requested/i.test(text) && !/Waiting for submission/i.test(text);
+    return null;
+  }
+
+  async needsUpload(documentName: string) {
+    const status = await this.getDocumentRowStatus(documentName);
+    if (!status) {
+      return true;
+    }
+    return !this.isDocumentComplete(status);
   }
 
   async needsReUpload(documentName: string) {
@@ -327,16 +341,16 @@ export class OnboardingApplicationPage {
   async reUploadRejectedDocuments(pdfPath: string, imagePath: string) {
     await this.goToDocumentsIfNeeded();
     let uploaded = 0;
-    if (await this.needsReUpload('Resume') || await this.needsUpload('Resume')) {
-      await this.uploadDocument('Resume', pdfPath, undefined, imagePath);
-      uploaded += 1;
-    }
-    if (await this.needsReUpload('PAN') || await this.needsUpload('PAN')) {
-      await this.uploadDocument('PAN', imagePath, randomPan());
-      uploaded += 1;
-    }
-    if (await this.needsReUpload('Aadhaar') || await this.needsUpload('Aadhaar')) {
-      await this.uploadDocument('Aadhaar', pdfPath, randomAadhaar());
+    for (const name of await this.listDocumentNames()) {
+      if (!(await this.needsReUpload(name)) && !(await this.needsUpload(name))) {
+        continue;
+      }
+      await this.uploadDocument(
+        name,
+        this.filePathForDocument(name, pdfPath, imagePath),
+        this.documentNumberForDocument(name),
+        this.alternateFilePathForDocument(name, imagePath),
+      );
       uploaded += 1;
     }
     if (!uploaded) {
@@ -345,25 +359,43 @@ export class OnboardingApplicationPage {
   }
 
   async uploadMissingDocuments(pdfPath: string, imagePath: string) {
-    if (await this.needsUpload('Resume')) {
-      await this.uploadDocument('Resume', pdfPath);
-    } else {
-      console.log('Resume already uploaded, reusing it');
+    await this.goToDocumentsIfNeeded();
+    const documentNames = await this.listDocumentNames();
+    console.log(`Documents on page: ${documentNames.join(', ') || '(none found)'}`);
+    if (!documentNames.length) {
+      throw new Error('No onboarding document rows found on the documents page');
     }
-    if (await this.needsUpload('PAN')) {
-      await this.uploadDocument('PAN', imagePath, randomPan());
-    } else {
-      console.log('PAN already uploaded, reusing it');
+
+    for (const name of documentNames) {
+      const status = await this.getDocumentRowStatus(name);
+      console.log(`${name} status before upload: ${status ?? '(row not found)'}`);
+      if (status && this.isDocumentComplete(status)) {
+        console.log(`${name} already uploaded, reusing it`);
+        continue;
+      }
+      await this.uploadDocument(
+        name,
+        this.filePathForDocument(name, pdfPath, imagePath),
+        this.documentNumberForDocument(name),
+        this.alternateFilePathForDocument(name, imagePath),
+      );
     }
-    if (await this.needsUpload('Aadhaar')) {
-      await this.uploadDocument('Aadhaar', pdfPath, randomAadhaar());
-    } else {
-      console.log('Aadhaar already uploaded, reusing it');
+
+    for (const name of documentNames) {
+      const status = await this.getDocumentRowStatus(name);
+      if (!status || !this.isDocumentComplete(status)) {
+        throw new Error(`${name} is still incomplete after upload attempt. Status: ${status ?? 'row not found'}`);
+      }
     }
   }
 
   async submitAndExpectLogout(loginUsername: Locator) {
-    await expect(this.submitButton).toBeEnabled({ timeout: 30000 });
+    try {
+      await expect(this.submitButton).toBeEnabled({ timeout: 30000 });
+    } catch (error) {
+      await this.logDocumentStatuses();
+      throw error;
+    }
     await this.submitButton.click();
     await expect(this.confirmMessage).toBeVisible({ timeout: 10000 });
     await this.page.getByRole('dialog').getByRole('button', { name: 'Submit' }).click();
@@ -387,7 +419,106 @@ export class OnboardingApplicationPage {
   }
 
   private documentRow(documentName: string) {
-    return this.page.getByRole('row', { name: new RegExp(documentName, 'i') }).first();
+    return this.page.getByRole('row', { name: this.documentNamePattern(documentName) }).first();
+  }
+
+  private documentNamePattern(documentName: string): RegExp {
+    const normalized = documentName.trim().toLowerCase();
+    if (/aadha?r/.test(normalized)) {
+      return /Aadhaar|Aadhar/i;
+    }
+    if (/driving\s*l/.test(normalized)) {
+      return /Driving\s*L[Ii]cense/i;
+    }
+    const escaped = documentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(escaped, 'i');
+  }
+
+  private documentTableRows() {
+    return this.page.getByRole('row').filter({
+      has: this.page.getByRole('button', { name: /Upload|Re-Upload|Download|View/i }),
+    });
+  }
+
+  private extractDocumentName(rowText: string) {
+    const match = rowText.match(/^([A-Za-z][A-Za-z\s]*?)\*/);
+    return match?.[1]?.trim() ?? null;
+  }
+
+  private async listDocumentNames() {
+    await this.goToDocumentsIfNeeded();
+    const rows = this.documentTableRows();
+    const count = await rows.count();
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const row = rows.nth(i);
+      await row.scrollIntoViewIfNeeded().catch(() => {});
+      const text = (await row.innerText()).replace(/\s+/g, ' ').trim();
+      const name = this.extractDocumentName(text);
+      if (name) {
+        names.push(name);
+      }
+    }
+    return names;
+  }
+
+  private filePathForDocument(documentName: string, pdfPath: string, imagePath: string) {
+    return /pan/i.test(documentName) ? imagePath : pdfPath;
+  }
+
+  private documentNumberForDocument(documentName: string) {
+    if (/pan/i.test(documentName)) {
+      return randomPan();
+    }
+    if (/aadha?r/i.test(documentName)) {
+      return randomAadhaar();
+    }
+    if (/driving\s*l/i.test(documentName)) {
+      return randomNumericId(10);
+    }
+    return randomNumericId(10);
+  }
+
+  private alternateFilePathForDocument(documentName: string, imagePath: string) {
+    return /resume|driving\s*l/i.test(documentName) ? imagePath : undefined;
+  }
+
+  private async fillDocumentNumberIfRequired(
+    scope: Locator,
+    documentName: string,
+    documentNumber?: string,
+  ) {
+    const numberInput = scope.getByRole('textbox', { name: /Document Number/i }).first();
+    if (!(await numberInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+      return;
+    }
+
+    const value = documentNumber ?? this.documentNumberForDocument(documentName);
+    await numberInput.click();
+    await numberInput.fill('');
+    await numberInput.fill(value);
+    await numberInput.blur();
+    console.log(`${documentName} document number: ${value}`);
+  }
+
+  private isDocumentComplete(status: string) {
+    return /Waiting for submission|Verified/i.test(status) && !/Rejected/i.test(status);
+  }
+
+  private async getDocumentRowStatus(documentName: string) {
+    const row = this.documentRow(documentName);
+    await row.scrollIntoViewIfNeeded().catch(() => {});
+    if (!(await row.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return null;
+    }
+    return (await row.innerText()).replace(/\s+/g, ' ').trim();
+  }
+
+  private async logDocumentStatuses() {
+    for (const name of await this.listDocumentNames()) {
+      const status = await this.getDocumentRowStatus(name);
+      console.log(`Document status - ${name}: ${status ?? '(row not found)'}`);
+    }
   }
 
   private async hasOpenUploadUi() {
@@ -399,9 +530,11 @@ export class OnboardingApplicationPage {
   }
 
   private async activeUploadScope() {
-    const dialog = this.page.getByRole('dialog').last();
-    if (await dialog.isVisible().catch(() => false)) {
-      return dialog;
+    const uploadDialog = this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('button', { name: 'Choose File' }).or(this.page.locator('input[type="file"]')),
+    }).last();
+    if (await uploadDialog.isVisible().catch(() => false)) {
+      return uploadDialog;
     }
     return this.page.locator('body');
   }
@@ -428,8 +561,18 @@ export class OnboardingApplicationPage {
       await row.getByRole('button').last().click();
     }
 
-    const chooseFile = this.page.getByRole('button', { name: 'Choose File' });
-    await chooseFile.first().waitFor({ state: 'visible', timeout: 15000 });
+    const chooseFile = this.page.getByRole('button', { name: 'Choose File' })
+      .or(this.page.locator('input[type="file"]'));
+    await chooseFile.first().waitFor({ state: 'attached', timeout: 15000 });
+  }
+
+  private async attachUploadFile(scope: Locator, filePath: string) {
+    const fileInput = scope.locator('input[type="file"]').first();
+    if (await fileInput.count()) {
+      await fileInput.setInputFiles(filePath);
+      return;
+    }
+    await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
   }
 
   private async uploadDocument(
@@ -439,8 +582,9 @@ export class OnboardingApplicationPage {
     alternateFilePath?: string,
   ) {
     const row = this.documentRow(documentName);
-    const current = await row.innerText();
-    if (/Waiting for submission/i.test(current) && !/Rejected/i.test(current)) {
+    await row.scrollIntoViewIfNeeded().catch(() => {});
+    const current = await this.getDocumentRowStatus(documentName);
+    if (current && this.isDocumentComplete(current)) {
       console.log(`${documentName} already uploaded, reusing it`);
       return;
     }
@@ -455,14 +599,9 @@ export class OnboardingApplicationPage {
         }
         await this.openDocumentUpload(documentName);
         const scope = await this.activeUploadScope();
-        if (documentNumber) {
-          const numberInput = scope.getByRole('textbox', { name: /Document Number/i }).first();
-          if (await numberInput.isVisible().catch(() => false)) {
-            await numberInput.fill(documentNumber);
-          }
-        }
-
-        await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(candidate);
+        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
+        await this.attachUploadFile(scope, candidate);
+        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
         await this.page.waitForTimeout(1000);
         const note = scope.getByText(/Only Pdf and image are allowed/i);
         if (await note.isVisible().catch(() => false)) {
@@ -470,7 +609,7 @@ export class OnboardingApplicationPage {
         }
 
         const upload = scope.getByRole('button', { name: 'Upload', exact: true });
-        await expect(upload).toBeEnabled({ timeout: 10000 });
+        await expect(upload).toBeEnabled({ timeout: 15000 });
         await upload.click();
 
         if (await this.waitForUploadSuccess(scope, row)) {
@@ -503,12 +642,9 @@ export class OnboardingApplicationPage {
       if (await this.uploadedMessage.isVisible().catch(() => false)) {
         return true;
       }
+      await row.scrollIntoViewIfNeeded().catch(() => {});
       const rowText = await row.innerText().catch(() => '');
       if (/Waiting for submission/i.test(rowText) && !/Rejected/i.test(rowText)) {
-        return true;
-      }
-      const dialog = this.page.getByRole('dialog');
-      if (!(await dialog.isVisible().catch(() => false))) {
         return true;
       }
       await this.page.waitForTimeout(400);
@@ -530,4 +666,8 @@ function randomPan() {
 
 function randomAadhaar() {
   return `8${Array.from({ length: 11 }, () => Math.floor(Math.random() * 10)).join('')}`;
+}
+
+function randomNumericId(length: number) {
+  return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
 }

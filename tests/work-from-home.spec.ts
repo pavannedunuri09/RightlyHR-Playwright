@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { JobInfoWfhPage } from '../pages/JobInfoWfhPage';
 import { WorkFromHomePage, workedDateToInput, upcomingWeekendDate, weekdayDate, octoberSearchRange } from '../pages/WorkFromHomePage';

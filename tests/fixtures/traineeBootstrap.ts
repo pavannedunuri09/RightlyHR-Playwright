@@ -501,6 +501,8 @@ export async function prepareActiveTraineeForOnboard(page: Page, employee: Saved
 }
 
 export async function submitFreshOnboardRequest(page: Page, employee: SavedTrainee) {
+  await prepareActiveTraineeForOnboard(page, employee);
+
   const onboard = new TraineeOnboardRequestPage(page);
   await onboard.openFromProfile();
   await onboard.expectRequestButtonVisible();
@@ -965,7 +967,10 @@ export async function approveAndReleaseOffer(
   const employeeYopmail = new YopmailPage(employeeMailTab);
   await employeeYopmail.openInbox(employee.email);
   const issuedSubject = await employeeYopmail.waitForMailMatching(
-    new RegExp(`${employee.firstName}[\\s\\S]*${employee.lastName}[\\s\\S]*(Offer Letter|issued)|Offer Letter issued|issued`, 'i'),
+    new RegExp(
+      `Offer Letter Issued|Offer Letter Released|${employee.firstName}[\\s\\S]*${employee.lastName}[\\s\\S]*Offer Letter`,
+      'i',
+    ),
   );
   expect(issuedSubject).toMatch(/offer letter|issued/i);
   const issuedShot = testInfo.outputPath('yopmail-offer-issued.png');

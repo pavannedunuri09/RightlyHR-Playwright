@@ -95,63 +95,130 @@ export class TraineeJobPrepPage {
     await this.page.locator('div').filter({ hasText: /^Job Info$/ }).nth(1).click();
     await this.page.getByRole('columnheader', { name: /Job Role|Department|Effective Date/i })
       .first()
-      .waitFor({ state: 'visible', timeout: 10000 })
-      .catch(() => {});
+      .waitFor({ state: 'visible', timeout: 10000 });
     await this.page.locator('#pn_id_3').click().catch(() => {});
-
     for (let step = 0; step < 24; step++) {
       await this.page.keyboard.press('ArrowRight');
     }
 
+    const dialog = this.jobInfoDialog();
+    if (!(await dialog.isVisible().catch(() => false))) {
+      await this.openJobInfoUpdateDialog();
+    }
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    await this.selectDialogOption('Department', 'SDA');
+    await this.selectDialogOption('Team', 'Test Department');
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.waitForTeamManagerAutofill(dialog);
+    await this.selectDialogOption('Reporting Manager', /saii Pavan Dinesh Tejaa/i);
+    await this.selectJobType(dialog, 'Full Time');
+
+    const save = dialog.getByRole('button', { name: 'Update' });
+    await expect(save).toBeEnabled({ timeout: 15000 });
+    await save.click();
+    await expect(this.page.getByText(/Job details updated|updated successfully|success/i).first())
+      .toBeVisible({ timeout: 15000 });
+    console.log('Job Info updated: Department SDA, Team Test Department, RM saii Pavan Dinesh Tejaa, Job Type Full Time');
+  }
+
+  private jobInfoDialog() {
+    return this.page.getByRole('dialog').filter({ hasText: /Update Job Info/i })
+      .or(this.page.locator('ngb-modal-window.show, .modal.show').filter({ hasText: /Update Job Info/i }))
+      .first();
+  }
+
+  private async openJobInfoUpdateDialog() {
     const updateMenu = this.page.getByText('Update', { exact: true });
-    if (!(await this.page.getByRole('combobox', { name: 'Please select department' }).isVisible().catch(() => false))) {
-      const kebabCandidates = [
-        this.page.locator('table i.bi').last(),
-        this.page.locator('table .dropdown > span > .bi').last(),
-        this.page.locator('i').nth(2),
-      ];
-      let opened = false;
-      for (const kebab of kebabCandidates) {
-        if (!(await kebab.isVisible().catch(() => false))) {
-          continue;
-        }
-        await kebab.click();
-        if (await updateMenu.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-          await updateMenu.first().click();
-          opened = true;
-          break;
-        }
+    const kebabCandidates = [
+      this.page.locator('table .dropdown > span > .bi').last(),
+      this.page.locator('table i.bi').last(),
+      this.page.locator('i').nth(2),
+    ];
+    for (const kebab of kebabCandidates) {
+      if (!(await kebab.isVisible().catch(() => false))) {
+        continue;
       }
-      if (!opened) {
-        console.log('Job Info kebab menu was not available; continuing');
-        await this.dismissBlockingModals();
+      await kebab.click();
+      if (await updateMenu.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+        await updateMenu.first().click();
         return;
       }
     }
+    throw new Error('Job Info kebab Update menu was not available');
+  }
 
-    const department = this.page.getByRole('combobox', { name: 'Please select department' });
-    if (!(await department.isVisible({ timeout: 8000 }).catch(() => false))) {
-      console.log('Job Info update form was not available; continuing');
-      await this.dismissBlockingModals();
+  private comboAfterLabel(dialog: Locator, label: string) {
+    const labelNode = dialog.getByText(new RegExp(`^${label}\\s*\\*?$`)).first();
+    return labelNode.locator('xpath=following::*[@role="combobox"][1]')
+      .or(labelNode.locator('xpath=..').getByRole('combobox'))
+      .first();
+  }
+
+  private async selectDialogOption(label: string, option: string | RegExp) {
+    const dialog = this.jobInfoDialog();
+    const combo = this.comboAfterLabel(dialog, label);
+    const current = ((await combo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    const alreadySelected = typeof option === 'string'
+      ? current.toLowerCase() === option.toLowerCase()
+      : option.test(current);
+    if (alreadySelected) {
       return;
     }
 
-    await this.selectIfNeeded(this.page.getByRole('combobox', { name: /department/i }).first(), 'SDF');
-    await this.selectIfNeeded(this.page.getByRole('combobox', { name: /team/i }).first(), /My team/i);
-    await this.selectIfNeeded(this.page.getByRole('combobox', { name: /shift/i }).first(), /General Shift/i);
-    await this.selectIfNeeded(this.page.getByRole('combobox', { name: /job type/i }), /Intern/);
-
-    const save = this.page.getByRole('button', { name: 'Update' });
-    if (await save.isEnabled({ timeout: 8000 }).catch(() => false)) {
-      await save.click();
-      await expect(this.page.getByText(/updated|success/i).first()).toBeVisible({ timeout: 15000 }).catch(() => {});
-      console.log('Job Info updated for onboard request');
+    await this.page.keyboard.press('Escape').catch(() => {});
+    const trigger = combo.locator('xpath=..').getByRole('button', { name: 'dropdown trigger' });
+    if (await trigger.isVisible().catch(() => false)) {
+      await trigger.click();
     } else {
-      console.log('Job Info Update stayed disabled; continuing to onboard request');
-      await this.page.keyboard.press('Escape').catch(() => {});
-      await this.page.getByRole('button', { name: /Close|Cancel/i }).first().click().catch(() => {});
-      await this.dismissBlockingModals();
+      await combo.click();
     }
+
+    const named = typeof option === 'string'
+      ? this.page.getByRole('option', { name: option, exact: true })
+      : this.page.getByRole('option').filter({ hasText: option });
+    await named.first().waitFor({ state: 'visible', timeout: 10000 });
+    await named.first().click();
+    await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
+
+  private async selectJobType(dialog: Locator, jobType: string) {
+    const combo = dialog.getByRole('combobox', { name: new RegExp(`Please select job type|^${jobType}$`, 'i') });
+    const current = ((await combo.innerText().catch(() => '')) || '').trim();
+    if (new RegExp(`^${jobType}$`, 'i').test(current)) {
+      return;
+    }
+
+    await this.page.keyboard.press('Escape').catch(() => {});
+    const trigger = combo.locator('xpath=..').getByRole('button', { name: 'dropdown trigger' });
+    if (await trigger.isVisible().catch(() => false)) {
+      await trigger.click();
+    } else {
+      await combo.click();
+    }
+    const option = this.page.getByRole('option', { name: jobType, exact: true });
+    await option.waitFor({ state: 'visible', timeout: 10000 });
+    await option.click();
+    await expect(dialog.getByRole('combobox', { name: new RegExp(jobType, 'i') })).toBeVisible({ timeout: 8000 });
+  }
+
+  private async waitForTeamManagerAutofill(dialog: Locator) {
+    const tm = dialog.getByRole('textbox', { name: /Team Manager/i });
+    await expect(tm).toBeVisible({ timeout: 10000 });
+    await expect.poll(async () => {
+      const text = (
+        (await tm.innerText().catch(() => ''))
+        || (await tm.inputValue().catch(() => ''))
+        || ''
+      ).replace(/\s+/g, ' ').trim();
+      return this.isAssignedValue(text) ? text : '';
+    }, { timeout: 15000 }).not.toEqual('');
+    const filled = (
+      (await tm.innerText().catch(() => ''))
+      || (await tm.inputValue().catch(() => ''))
+      || ''
+    ).replace(/\s+/g, ' ').trim();
+    console.log(`Team Manager autofilled: ${filled}`);
   }
 
   private async dismissBlockingModals() {
@@ -181,17 +248,5 @@ export class TraineeJobPrepPage {
       .innerText()
       .catch(() => '')).trim();
     return value || null;
-  }
-
-  private async selectIfNeeded(combobox: Locator, option: string | RegExp) {
-    await combobox.click();
-    const named = typeof option === 'string'
-      ? this.page.getByRole('option', { name: option })
-      : this.page.getByRole('option').filter({ hasText: option });
-    if (await named.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-      await named.first().click();
-    } else {
-      await this.page.keyboard.press('Escape').catch(() => {});
-    }
   }
 }

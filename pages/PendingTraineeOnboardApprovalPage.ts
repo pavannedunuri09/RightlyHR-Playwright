@@ -608,22 +608,16 @@ export class PendingTraineeOnboardApprovalPage {
   private async fillExtendDate(input: Locator, extendDate: string) {
     await input.click();
     const inputType = (await input.getAttribute('type')) ?? 'text';
+    let isoDate = isIsoDate(extendDate) ? extendDate : addMonthsIso(2);
     if (inputType === 'date') {
       const min = await input.getAttribute('min');
-      let isoDate = extendDate;
-      if (min && isoDate <= min) {
-        const adjusted = new Date(min);
-        adjusted.setMonth(adjusted.getMonth() + 2);
-        isoDate = [
-          adjusted.getFullYear(),
-          String(adjusted.getMonth() + 1).padStart(2, '0'),
-          String(adjusted.getDate()).padStart(2, '0'),
-        ].join('-');
+      if (isIsoDate(min) && isoDate <= min) {
+        isoDate = addMonthsToIso(min, 2);
         console.log(`Adjusted extend date to ${isoDate} (picker min was ${min})`);
       }
       await input.fill(isoDate);
     } else {
-      const [year, month, day] = extendDate.split('-');
+      const [year, month, day] = isoDate.split('-');
       await input.fill(`${month}/${day}/${year}`);
     }
     await input.blur();
@@ -742,4 +736,28 @@ export class PendingTraineeOnboardApprovalPage {
     }
     throw new Error('Could not open onboard action kebab');
   }
+}
+
+function isIsoDate(value: string | null | undefined): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function addMonthsIso(months: number) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + months);
+  return toIsoDate(date);
+}
+
+function addMonthsToIso(isoDate: string, months: number) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setMonth(date.getMonth() + months);
+  return toIsoDate(date);
+}
+
+function toIsoDate(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 }

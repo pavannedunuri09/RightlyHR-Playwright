@@ -2,7 +2,7 @@
  * Prerequisites: run `npm run test:leave-category` then `npm run test:leave-allocation`
  * then `npm run test:load-entitlements` first.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { DEFAULT_ALLOCATION_DAYS } from '../pages/LeaveAllocationPage';
 import { GENERAL_LEAVE_CATEGORY, SICK_LEAVE_CATEGORY } from '../pages/LeaveCategoryPage';
