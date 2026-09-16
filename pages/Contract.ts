@@ -1,7 +1,24 @@
-    import { Page, Locator } from '@playwright/test';
+import { Page, Locator } from '@playwright/test';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { YopmailPage } from './YopmailPage';
 
 export class Contract {
     readonly page: Page;
+    createdEmployeeName = '';
+    createdEmployeeEmail = '';
+
+    private createRandomUploadFile(documentName: string): string {
+        const fileName = `${documentName}-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`;
+        const filePath = path.join(os.tmpdir(), fileName);
+        const onePixelPng = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            'base64',
+        );
+        fs.writeFileSync(filePath, onePixelPng);
+        return filePath;
+    }
 
     // Employee / Contract navigation
     readonly employees: Locator;
@@ -168,14 +185,25 @@ export class Contract {
     // --------------------------------------------------
 
     async fillContractEmployeeDetails() {
+        const firstNames = [
+            'Ramesh', 'Suresh', 'Arjun', 'Kiran', 'Vikram',
+            'Mahesh', 'Naveen', 'Prakash', 'Anil', 'Ravi',
+        ];
+        const lastNames = [
+            'Chandra', 'Kumar', 'Sharma', 'Reddy', 'Rao',
+            'Patel', 'Verma', 'Gupta', 'Iyer', 'Naidu',
+        ];
+        const seed = Date.now() + Math.floor(Math.random() * 1000);
+        const firstName = firstNames[seed % firstNames.length];
+        const lastName = lastNames[Math.floor(seed / firstNames.length) % lastNames.length];
+        this.createdEmployeeName = `${firstName} ${lastName}`;
 
-        await this.firstNameInput.fill('prospec');
+        await this.firstNameInput.fill(firstName);
 
-        await this.lastNameInput.fill('contractor');
+        await this.lastNameInput.fill(lastName);
 
-        await this.personalEmailInput.fill(
-            'proscon@yopmail.com'
-        );
+        this.createdEmployeeEmail = `${firstName}.${lastName}@yopmail.com`;
+        await this.personalEmailInput.fill(this.createdEmployeeEmail);
 
         await this.designationDropdown.click();
 
@@ -197,9 +225,10 @@ export class Contract {
 
         await this.sublocationDropdown.click();
 
-        await this.page.getByText(
-            'Jai Hind Enclave building'
-        ).click();
+        await this.page.getByRole('option', {
+            name: 'Jai Hind Enclave building',
+            exact: true
+        }).click();
     }
 
     async clickAdd() {
@@ -214,7 +243,7 @@ export class Contract {
 
     async clickCreatedEmployee() {
         await this.page.getByText(
-            'prospec contractor',
+            this.createdEmployeeName,
             { exact: true }
         ).waitFor({
             state: 'visible',
@@ -222,7 +251,7 @@ export class Contract {
         });
 
         await this.page.getByText(
-            'prospec contractor',
+            this.createdEmployeeName,
             { exact: true }
         ).click();
 
@@ -250,7 +279,12 @@ export class Contract {
 
     async openYopmail() {
 
-        const yopmailPage = await this.page.context().newPage();
+        const browser = this.page.context().browser();
+        if (!browser) {
+            throw new Error('Unable to create a separate browser context for Yopmail');
+        }
+        const yopmailContext = await browser.newContext();
+        const yopmailPage = await yopmailContext.newPage();
 
         await yopmailPage.goto(
             'https://yopmail.com/en/'
@@ -271,24 +305,16 @@ export class Contract {
         yopmailPage: Page,
         emailName: string
     ) {
-
-        const loginField = yopmailPage.getByRole(
-            'textbox',
-            { name: 'Login' }
+        const yopmail = new YopmailPage(yopmailPage);
+        await yopmail.openInbox(emailName);
+        await yopmail.waitForMailSubject(
+            this.createdEmployeeName,
+            120000,
+            emailName
         );
-
-        await loginField.waitFor({
-            state: 'visible',
-            timeout: 15000
-        });
-
-        await loginField.fill(emailName);
-
-        await yopmailPage.getByTitle(
-            'Check Inbox @yopmail.com'
-        ).click();
-
-        await yopmailPage.waitForTimeout(3000);
+        await yopmail.openMatchingMailInViewer(
+            /Request for Documents Upload|Request for Documents/i
+        );
     }
 
     // --------------------------------------------------
@@ -298,49 +324,10 @@ export class Contract {
     async getCredentialsFromEmail(
         yopmailPage: Page
     ) {
-
-        const mailFrame = yopmailPage.locator(
-            'iframe[name="ifmail"]'
-        ).contentFrame();
-
-        await mailFrame.getByRole(
-            'cell'
-        ).first().waitFor({
-            state: 'visible',
-            timeout: 15000
+        const yopmail = new YopmailPage(yopmailPage);
+        return await yopmail.readCredentials({
+            preferPattern: /Request for Documents Upload|Request for Documents/i,
         });
-
-        const emailBody =
-            await mailFrame.getByRole(
-                'cell'
-            ).first().innerText();
-
-        const usernameMatch =
-            emailBody.match(
-                /Username\s*:\s*([^\s]+)/i
-            );
-
-        const passwordMatch =
-            emailBody.match(
-                /Password\s*:\s*([^\s]+)/i
-            );
-
-        if (!usernameMatch) {
-            throw new Error(
-                'Username not found in onboarding email'
-            );
-        }
-
-        if (!passwordMatch) {
-            throw new Error(
-                'Password not found in onboarding email'
-            );
-        }
-
-        return {
-            username: usernameMatch[1],
-            password: passwordMatch[1]
-        };
     }
 
     // --------------------------------------------------
@@ -510,12 +497,11 @@ export class Contract {
             'button'
         ).click();
 
-        // Use your actual file path here
         await onboardingPage.getByRole(
             'button',
             { name: 'Choose File' }
         ).setInputFiles(
-            'Screenshot 2026-06-23 161210.png'
+            this.createRandomUploadFile('bank-letter')
         );
 
         await onboardingPage.getByRole(
@@ -540,7 +526,7 @@ export class Contract {
             'button',
             { name: 'Choose File' }
         ).setInputFiles(
-            'Screenshot 2026-06-24 161649.png'
+            this.createRandomUploadFile('resume')
         );
 
         await onboardingPage.getByRole(
@@ -565,7 +551,7 @@ export class Contract {
             'button',
             { name: 'Choose File' }
         ).setInputFiles(
-            'Screenshot 2026-06-24 172317.png'
+            this.createRandomUploadFile('pan')
         );
 
         await onboardingPage.getByRole(
@@ -574,6 +560,31 @@ export class Contract {
                 name: 'Document Number*'
             }
         ).fill('123SDS3212');
+
+        await onboardingPage.getByRole(
+            'button',
+            { name: 'Upload' }
+        ).click();
+
+        // Aadhaar
+        const aadhaar =
+            onboardingPage.getByRole(
+                'row',
+                {
+                    name: /Aadhaar\*/
+                }
+            );
+
+        await aadhaar.getByRole(
+            'button'
+        ).click();
+
+        await onboardingPage.getByRole(
+            'button',
+            { name: 'Choose File' }
+        ).setInputFiles(
+            this.createRandomUploadFile('aadhaar')
+        );
 
         await onboardingPage.getByRole(
             'button',
@@ -599,7 +610,7 @@ export class Contract {
         await this.page.waitForTimeout(1000);
 
         await this.page.getByText(
-            'prospec contractor',
+            this.createdEmployeeName,
             { exact: true }
         ).click();
 

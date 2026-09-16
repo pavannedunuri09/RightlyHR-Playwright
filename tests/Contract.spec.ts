@@ -29,10 +29,18 @@ test.describe.serial(
 
                 await hrPage.goto('/login');
 
-                await login.login(
-                    process.env.HR_USERNAME!,
-                    process.env.HR_PASSWORD!
-                );
+                const hrUsername =
+                    process.env.HR_USERNAME ?? process.env.LOGIN_EMAIL;
+                const hrPassword =
+                    process.env.HR_PASSWORD ?? process.env.LOGIN_PASSWORD;
+
+                if (!hrUsername || !hrPassword) {
+                    throw new Error(
+                        'Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD in .env',
+                    );
+                }
+
+                await login.login(hrUsername, hrPassword);
 
                 await hrPage.waitForTimeout(3000);
 
@@ -136,9 +144,9 @@ test.describe.serial(
 
                 await expect(
                     hrPage.getByText(
-                        'prospec contractor',
+                        contract.createdEmployeeName,
                         { exact: true }
-                    )
+                    ).first()
                 ).toBeVisible({
                     timeout: 15000
                 });
@@ -214,7 +222,7 @@ test.describe.serial(
 
                 await contract.openYopmailInbox(
                     yopmailPage,
-                    'proscon'
+                    contract.createdEmployeeEmail
                 );
 
                 console.log(
@@ -311,6 +319,7 @@ test.describe.serial(
         test(
             'TC13 - Submit mandatory fields and click Next button',
             async () => {
+                await onboardingPage.getByRole('button', { name: 'Go to Application' }).click();
 
                 await contract.fillPersonalDetails(
                     onboardingPage
@@ -351,7 +360,7 @@ test.describe.serial(
                 await contract.clickEmployeeAfterSubmission();
 
                 console.log(
-                    'TC15 PASSED - HR clicked employee name'
+                    'TC15 PASSED - HR clicked'+contract.createdEmployeeName
                 );
             }
         );
