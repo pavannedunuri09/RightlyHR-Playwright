@@ -167,14 +167,7 @@ test.describe.serial(
                 await contract.fillContractEmployeeDetails(employee);
 
                 await contract.clickAdd();
-                await contract.searchCreatedEmployee();
-
-                const employeeRow = hrPage.getByRole('row').filter({ hasText: employee.email });
-                await expect(
-                    employeeRow
-                ).toBeVisible({
-                    timeout: 20000
-                });
+                await contract.expectCreatedEmployeeVisible();
 
                 console.log(
                     'TC05 PASSED - Contract employee created successfully'
