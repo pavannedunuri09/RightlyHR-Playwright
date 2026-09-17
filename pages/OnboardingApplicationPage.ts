@@ -4,7 +4,6 @@ import {
   genderSalutationForFirstName,
   randomDocumentNumber,
   randomMobile,
-  randomNumericId,
 } from '../tests/fixtures/randomTestData';
 
 const CITIES = [
@@ -95,22 +94,30 @@ export class OnboardingApplicationPage {
 
   private async selectComboboxOption(field: Locator, optionName: string) {
     const combobox = field.getByRole('combobox');
-    await this.openComboboxField(field);
-    const controlsId = await combobox.getAttribute('aria-controls');
-    const panel = controlsId
-      ? this.page.locator(`#${controlsId}`)
-      : this.page.locator('.p-select-overlay').last();
-    await expect(panel).toBeVisible({ timeout: 5000 });
+    const escaped = optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const option = panel.getByRole('option', { name: optionName, exact: true })
-      .or(panel.locator('[role="option"]').filter({ hasText: new RegExp(`^\\s*${optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) }));
-    await option.first().click();
-    await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.openComboboxField(field);
+      const controlsId = await combobox.getAttribute('aria-controls');
+      const panel = controlsId
+        ? this.page.locator(`#${controlsId}`)
+        : this.page.locator('.p-select-overlay').last();
+      await expect(panel).toBeVisible({ timeout: 5000 });
 
-    const selectedText = ((await field.innerText().catch(() => '')) || '').trim();
-    if (!selectedText.includes(optionName)) {
-      await expect(field).toContainText(optionName, { timeout: 5000 });
+      const option = panel.getByRole('option', { name: optionName, exact: true })
+        .or(panel.locator('[role="option"]').filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }))
+        .or(panel.getByText(optionName, { exact: true }));
+      await option.first().click();
+      await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(300);
+
+      const selectedText = ((await field.innerText().catch(() => '')) || '').trim();
+      if (selectedText.includes(optionName) || !/please select/i.test(selectedText)) {
+        return;
+      }
     }
+
+    await expect(field).toContainText(optionName, { timeout: 5000 });
   }
 
   private async selectMobileCountryCode() {
@@ -364,7 +371,11 @@ export class OnboardingApplicationPage {
     }
   }
 
-  async uploadMissingDocuments(pdfPath: string, imagePath: string) {
+  async uploadMissingDocuments(
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
     await this.goToDocumentsIfNeeded();
     const documentNames = await this.listDocumentNames();
     console.log(`Documents on page: ${documentNames.join(', ') || '(none found)'}`);
@@ -381,7 +392,7 @@ export class OnboardingApplicationPage {
       }
       await this.uploadDocument(
         name,
-        this.filePathForDocument(name, pdfPath, imagePath),
+        this.resolveFilePathForDocument(name, pdfPath, imagePath, perDocFiles),
         this.documentNumberForDocument(name),
         this.alternateFilePathForDocument(name, imagePath),
       );
@@ -469,11 +480,35 @@ export class OnboardingApplicationPage {
   }
 
   private filePathForDocument(documentName: string, pdfPath: string, imagePath: string) {
-    return /pan/i.test(documentName) ? imagePath : pdfPath;
+    if (/resume/i.test(documentName)) {
+      return pdfPath;
+    }
+    return imagePath;
+  }
+
+  private resolveFilePathForDocument(
+    documentName: string,
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
+    if (perDocFiles) {
+      const direct = perDocFiles[documentName];
+      if (direct) {
+        return direct;
+      }
+      const matchedKey = Object.keys(perDocFiles).find((key) =>
+        new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(documentName),
+      );
+      if (matchedKey && perDocFiles[matchedKey]) {
+        return perDocFiles[matchedKey];
+      }
+    }
+    return this.filePathForDocument(documentName, pdfPath, imagePath);
   }
 
   private documentNumberForDocument(documentName: string) {
-    return randomDocumentNumber(documentName) ?? randomNumericId(12);
+    return randomDocumentNumber(documentName);
   }
 
   private alternateFilePathForDocument(documentName: string, imagePath: string) {
@@ -491,6 +526,9 @@ export class OnboardingApplicationPage {
     }
 
     const value = documentNumber ?? this.documentNumberForDocument(documentName);
+    if (!value) {
+      return;
+    }
     await numberInput.click();
     await numberInput.fill('');
     await numberInput.fill(value);
@@ -596,10 +634,18 @@ export class OnboardingApplicationPage {
         }
         await this.openDocumentUpload(documentName);
         const scope = await this.activeUploadScope();
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
+        const docNum = documentNumber ?? this.documentNumberForDocument(documentName);
+
+        // Portal expects document number first, then file, then Upload.
+        await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        await this.page.waitForTimeout(500);
         await this.attachUploadFile(scope, candidate);
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
         await this.page.waitForTimeout(1000);
+
+        if (!/resume/i.test(documentName)) {
+          await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        }
+
         const note = scope.getByText(/Only Pdf and image are allowed/i);
         if (await note.isVisible().catch(() => false)) {
           await note.click().catch(() => {});

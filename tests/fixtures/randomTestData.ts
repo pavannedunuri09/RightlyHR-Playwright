@@ -55,7 +55,7 @@ export function randomDocumentNumber(documentName: string): string | undefined {
     return randomNumericId(12);
   }
   if (/resume/i.test(documentName)) {
-    return undefined;
+    return randomNumericId(12);
   }
   return randomNumericId(12);
 }

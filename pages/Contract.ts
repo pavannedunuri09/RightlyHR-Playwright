@@ -232,24 +232,46 @@ export class Contract {
         await expect(this.addButton).toBeEnabled({ timeout: 10000 });
         await this.addButton.click();
 
-        await expect(this.firstNameInput).toBeHidden({
-            timeout: 15000,
-        });
+        const duplicateEmail = this.page.getByText(
+            /already exist|already exists|duplicate|email.*(exist|exists|taken|in use)/i,
+        );
+        await this.firstNameInput.waitFor({ state: 'hidden', timeout: 20000 }).catch(() => { });
+
+        if (await duplicateEmail.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+            throw new Error(`Contract employee was not created — duplicate email: ${this.createdEmployeeEmail}`);
+        }
+
+        await expect(this.firstNameInput).toBeHidden({ timeout: 5000 });
+        await this.page.waitForTimeout(1500);
     }
 
     async searchCreatedEmployee() {
-        const search = this.page.getByRole('searchbox', {
-            name: 'Username',
-        });
-        await search.fill(this.createdEmployeeEmail);
-        await search.press('Enter');
-        await this.page.waitForTimeout(1000);
+        const search = this.page.getByRole('searchbox', { name: 'Username' })
+            .or(this.page.getByRole('searchbox'));
+        const firstName = this.createdEmployeeName.split(' ')[0] ?? '';
+        const queries = [firstName, this.createdEmployeeEmail].filter(Boolean);
+
+        for (const query of queries) {
+            await search.first().click();
+            await search.first().fill('');
+            await search.first().fill(query);
+            await search.first().press('Enter');
+            await this.page.waitForTimeout(2000);
+
+            if (await this.createdEmployeeRow().isVisible({ timeout: 5000 }).catch(() => false)) {
+                console.log(`Found created employee using search: ${query}`);
+                return;
+            }
+        }
     }
 
     createdEmployeeRow() {
-        return this.page.getByRole('row', {
-            name: new RegExp(this.createdEmployeeEmail, 'i'),
-        });
+        return this.page.getByRole('row').filter({ hasText: this.createdEmployeeEmail }).first();
+    }
+
+    async expectCreatedEmployeeVisible(timeout = 20000) {
+        await this.searchCreatedEmployee();
+        await expect(this.createdEmployeeRow()).toBeVisible({ timeout });
     }
 
     private async selectDesignation(searchTerm: string, label: string) {
@@ -323,13 +345,13 @@ export class Contract {
     // --------------------------------------------------
 
     async clickCreatedEmployee(email: string, fullName: string) {
-        const searchbox = this.page.getByRole('searchbox', { name: 'Username' }).or(this.page.getByRole('searchbox'));
-        await searchbox.first().fill(email);
-        await searchbox.first().press('Enter');
+        this.createdEmployeeEmail = email;
+        this.createdEmployeeName = fullName;
+        await this.searchCreatedEmployee();
 
         const row = this.page.getByRole('row').filter({ hasText: email }).first();
         await row.waitFor({ state: 'visible', timeout: 15000 });
-        await row.getByRole('cell', { name: fullName, exact: true }).click();
+        await row.getByText(fullName, { exact: true }).click();
         await expect(this.requestDocumentsButton).toBeVisible({ timeout: 15000 });
     }
 
@@ -600,9 +622,16 @@ export class Contract {
     async uploadMandatoryDocuments(onboardingPage: Page, _pdfPath?: string, _imagePath?: string) {
         const pdfPath = this.createRandomUploadFile('Resume', 'pdf');
         const imagePath = this.createRandomUploadFile('Document', 'png');
+        // Per-document random files so each upload uses a unique file name/content.
+        const perDocFiles: Record<string, string> = {
+            Aadhar: this.createRandomUploadFile('Aadhar', 'png'),
+            'Driving LIcense': this.createRandomUploadFile('DrivingLicense', 'png'),
+            Resume: pdfPath,
+            PAN: this.createRandomUploadFile('PAN', 'png'),
+        };
 
         const application = new OnboardingApplicationPage(onboardingPage);
-        await application.uploadMissingDocuments(pdfPath, imagePath);
+        await application.uploadMissingDocuments(pdfPath, imagePath, perDocFiles);
 
         const submitButton = onboardingPage.getByRole('button', {
             name: 'Submit',
