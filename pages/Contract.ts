@@ -225,6 +225,8 @@ export class Contract {
             timeout: 15000
         });
         await this.sublocationDropdown.click();
+        await this.selectFirstOpenOption();
+
         await this.page.getByRole('option', {
             name: /Jai Hind Enclave Building/i,
         }).first().click();
@@ -590,16 +592,10 @@ export class Contract {
     // --------------------------------------------------
 
     async uploadMandatoryDocuments(onboardingPage: Page, pdfPath: string, imagePath: string) {
-        // 1. Aadhaar
         await this.uploadDocInPortal(onboardingPage, 'Aadhaar', imagePath, '987654321098');
-
-        // 2. PAN
         await this.uploadDocInPortal(onboardingPage, 'PAN', imagePath, 'ABCDE1234F');
-
-        // 3. Resume
         await this.uploadDocInPortal(onboardingPage, 'Resume', pdfPath, undefined, imagePath);
 
-        // 4. Submit
         const submitButton = onboardingPage.getByRole('button', {
             name: 'Submit',
             exact: true
@@ -612,7 +608,6 @@ export class Contract {
         await expect(submitButton.first()).toBeEnabled({ timeout: 15000 });
         await submitButton.first().click();
 
-        // 5. Confirm submission if dialog appears
         await onboardingPage.waitForTimeout(1000);
         const confirmDialog = onboardingPage.getByRole('dialog')
             .or(onboardingPage.locator('.modal-content, .p-dialog'));
@@ -626,7 +621,6 @@ export class Contract {
             }
         }
 
-        // 6. Verify submission success
         await expect(
             onboardingPage.getByText(
                 /Submitted successfully|Documents submitted|We’ll notify you/i
