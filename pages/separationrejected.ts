@@ -30,6 +30,7 @@ export class SeparationRejected {
     readonly pendingApprovals: Locator;
     readonly offboardingTab!: Locator;
     readonly managerKebabMenu: Locator;
+    readonly pendingSearch: Locator;
     readonly rejectOption: Locator;
     readonly rejectedButton: Locator;
     readonly rejectConfirmButton: Locator;
@@ -55,6 +56,8 @@ export class SeparationRejected {
 
     readonly forYourRole: Locator;
     readonly hrKebabMenu: Locator;
+
+    private lastEmployeeQuery = '';
 
     // ============================================================
     // CONSTRUCTOR
@@ -143,13 +146,20 @@ export class SeparationRejected {
                 .locator('.dropdown > a')
                 .first();
 
+        this.pendingSearch =
+            page.getByRole('searchbox')
+                .or(page.getByPlaceholder(/Search by employee/i))
+                .first();
+
         this.rejectOption =
-            page.getByText(
-                'Reject',
-                {
-                    exact: true
-                }
-            ).last();
+            page.locator('a.dropdown-item')
+                .filter({
+                    hasText: /^Reject$/
+                })
+                .filter({
+                    visible: true
+                })
+                .first();
 
         this.rejectedButton =
             page.getByRole('button', {
@@ -176,12 +186,14 @@ export class SeparationRejected {
         // ========================================================
 
         this.approveOption =
-            page.getByText(
-                'Approve',
-                {
-                    exact: true
-                }
-            ).last();
+            page.locator('a.dropdown-item')
+                .filter({
+                    hasText: /^Approve$/
+                })
+                .filter({
+                    visible: true
+                })
+                .first();
 
         this.regularRadio =
             page.getByRole('radio', {
@@ -278,6 +290,103 @@ export class SeparationRejected {
         await this.submitButton.click();
     }
 
+    async getLoggedInEmployeeName(): Promise<string> {
+        const fromEnv =
+            process.env.EMPLOYEE_NAME?.trim() ||
+            process.env.EMP_NAME?.trim();
+
+        if (fromEnv) {
+            return fromEnv;
+        }
+
+        const nameNearProfile = this.page
+            .getByRole('img', {
+                name: 'Profile Image'
+            })
+            .locator('xpath=ancestor::*[.//p][1]//p[1]');
+
+        await nameNearProfile.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        const name = (await nameNearProfile.innerText()).trim();
+
+        if (!name) {
+            throw new Error(
+                'Could not read the logged-in employee name. Set EMPLOYEE_NAME or EMPLOYEE_ID in .env'
+            );
+        }
+
+        return name;
+    }
+
+    async resolveEmployeeQuery(employeeQuery?: string): Promise<string> {
+        const query =
+            employeeQuery?.trim() ||
+            process.env.EMPLOYEE_ID?.trim() ||
+            process.env.EMPLOYEE_NAME?.trim() ||
+            process.env.EMP_NAME?.trim();
+
+        if (query) {
+            return query;
+        }
+
+        return this.getLoggedInEmployeeName();
+    }
+
+    employeeRow(employeeQuery: string): Locator {
+        const pattern = new RegExp(
+            employeeQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+            'i'
+        );
+
+        return this.page
+            .locator('table tbody tr, .custom-table-content tbody tr')
+            .filter({
+                hasText: pattern
+            })
+            .first();
+    }
+
+    async searchPendingRecord(employeeQuery?: string) {
+        const query = await this.resolveEmployeeQuery(employeeQuery);
+
+        await this.pendingSearch.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await this.pendingSearch.click();
+        await this.pendingSearch.fill('');
+        await this.pendingSearch.fill(query);
+        await this.pendingSearch.press('Enter').catch(() => {});
+
+        await this.employeeRow(query).waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+    }
+
+    async openKebabForEmployee(employeeQuery?: string) {
+        const query = await this.resolveEmployeeQuery(employeeQuery);
+        this.lastEmployeeQuery = query;
+
+        await this.searchPendingRecord(query);
+
+        const row = this.employeeRow(query);
+        const table = this.page.locator('.custom-table-content');
+
+        await table.evaluate((element) => {
+            element.scrollLeft = element.scrollWidth;
+        });
+
+        const kebabMenu = row.locator('.dropdown > a').first();
+
+        await kebabMenu.scrollIntoViewIfNeeded();
+        await kebabMenu.click();
+    }
+
     // ============================================================
     // MANAGER - NAVIGATION
     // ============================================================
@@ -308,28 +417,8 @@ export class SeparationRejected {
     // MANAGER - KEBAB
     // ============================================================
 
-    async clickManagerKebabMenu() {
-
-        const table =
-            this.page.locator(
-                '.custom-table-content'
-            );
-
-        await table.evaluate((element) => {
-            element.scrollLeft =
-                element.scrollWidth;
-        });
-
-        await this.page.waitForTimeout(1000);
-
-        const kebab =
-            table
-                .locator('.dropdown > a')
-                .first();
-
-        await kebab.scrollIntoViewIfNeeded();
-
-        await kebab.click();
+    async clickManagerKebabMenu(employeeQuery?: string) {
+        await this.openKebabForEmployee(employeeQuery);
     }
 
     // ============================================================
@@ -337,12 +426,27 @@ export class SeparationRejected {
     // ============================================================
 
     async clickRejectOption() {
+        const row = this.lastEmployeeQuery
+            ? this.employeeRow(this.lastEmployeeQuery)
+            : this.page.locator('table tbody tr').first();
 
-        await this.rejectOption.waitFor({
-            state: 'visible'
+        const rejectOption = row
+            .getByRole('listitem')
+            .filter({ hasText: /Reject/i })
+            .or(
+                row.getByText('Reject', { exact: true })
+            )
+            .or(
+                this.page.getByRole('listitem').filter({ hasText: /Reject/i })
+            )
+            .last();
+
+        await rejectOption.waitFor({
+            state: 'visible',
+            timeout: 15000
         });
 
-        await this.rejectOption.click();
+        await rejectOption.click();
     }
 
     async clickRejectedButton() {
@@ -380,11 +484,22 @@ export class SeparationRejected {
 
     async clickApproveOption() {
 
-        await this.approveOption.waitFor({
+        const approveOption =
+            this.page
+                .locator('a.dropdown-item')
+                .filter({
+                    hasText: /^Approve$/
+                })
+                .filter({
+                    visible: true
+                })
+                .first();
+
+        await approveOption.waitFor({
             state: 'visible'
         });
 
-        await this.approveOption.click();
+        await approveOption.click();
     }
 
     async selectRegular() {
@@ -425,27 +540,7 @@ export class SeparationRejected {
         await this.page.waitForTimeout(1000);
     }
 
-    async clickHRKebabMenu() {
-
-        const table =
-            this.page.locator(
-                '.custom-table-content'
-            );
-
-        await table.evaluate((element) => {
-            element.scrollLeft =
-                element.scrollWidth;
-        });
-
-        await this.page.waitForTimeout(1000);
-
-        const kebab =
-            table
-                .locator('.dropdown > a')
-                .first();
-
-        await kebab.scrollIntoViewIfNeeded();
-
-        await kebab.click();
+    async clickHRKebabMenu(employeeQuery?: string) {
+        await this.openKebabForEmployee(employeeQuery);
     }
 }

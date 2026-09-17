@@ -2,11 +2,14 @@ import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { Separation } from '../pages/Separation';
 
+let raisedByEmployee = '';
+
 
 // ============================================================
 // EMPLOYEE SEPARATION FLOW
 // TC01 - TC05
 // ============================================================
+
 
 test.describe.serial('Employee Separation Flow', () => {
 
@@ -48,6 +51,9 @@ test.describe.serial('Employee Separation Flow', () => {
 
         separation =
             new Separation(employeePage);
+
+        raisedByEmployee =
+            await separation.getLoggedInEmployeeName();
     });
 
 
@@ -62,6 +68,8 @@ test.describe.serial('Employee Separation Flow', () => {
             await expect(employeePage).not.toHaveURL(
                 /\/login$/
             );
+
+            expect(raisedByEmployee).toBeTruthy();
         }
     );
 
@@ -273,7 +281,9 @@ test.describe.serial('Manager Separation Flow', () => {
         'TC09 - Manager should be able to click Kebab menu',
         async () => {
 
-            await separation.clickManagerKebabMenu();
+            await separation.clickManagerKebabMenu(
+                raisedByEmployee
+            );
 
             await expect(
                 managerPage
@@ -281,7 +291,10 @@ test.describe.serial('Manager Separation Flow', () => {
                     .filter({
                         hasText: /^Approve$/
                     })
-                    .last()
+                    .filter({
+                        visible: true
+                    })
+                    .first()
             ).toBeVisible();
         }
     );
@@ -454,8 +467,10 @@ test(
         // For Your Role
         await separation.navigateHRToSeparation();
 
-        // Click Kebab menu from Action column
-        await separation.clickHRKebabMenu();
+        // Click Kebab menu on the employee who raised the request
+        await separation.clickHRKebabMenu(
+            raisedByEmployee
+        );
 
         // Verify Kebab menu opened
        

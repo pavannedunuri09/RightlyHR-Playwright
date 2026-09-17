@@ -23,6 +23,7 @@ export class Separation {
     readonly offboardingTab: Locator;
     readonly managerSeparationTab: Locator;
     readonly managerKebabMenu: Locator;
+    readonly pendingSearch: Locator;
     readonly approveOption: Locator;
     readonly regularRadio: Locator;
     readonly comments: Locator;
@@ -133,6 +134,11 @@ export class Separation {
                 .locator('.dropdown > a')
                 .first();
 
+        this.pendingSearch =
+            page.getByRole('searchbox')
+                .or(page.getByPlaceholder(/Search by employee/i))
+                .first();
+
 
         // =====================================================
         // MANAGER - APPROVAL
@@ -143,7 +149,10 @@ export class Separation {
                 .filter({
                     hasText: /^Approve$/
                 })
-                .last();
+                .filter({
+                    visible: true
+                })
+                .first();
 
         this.regularRadio =
             page.getByRole('radio', {
@@ -268,10 +277,116 @@ this.processOption =
         await this.submitButton.click();
     }
 
+    async getLoggedInEmployeeName(): Promise<string> {
+        const fromEnv =
+            process.env.EMPLOYEE_NAME?.trim() ||
+            process.env.EMP_NAME?.trim();
+
+        if (fromEnv) {
+            return fromEnv;
+        }
+
+        const nameNearProfile = this.page
+            .getByRole('img', {
+                name: 'Profile Image'
+            })
+            .locator('xpath=ancestor::*[.//p][1]//p[1]');
+
+        await nameNearProfile.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        const name = (await nameNearProfile.innerText()).trim();
+
+        if (!name) {
+            throw new Error(
+                'Could not read the logged-in employee name. Set EMPLOYEE_NAME or EMPLOYEE_ID in .env'
+            );
+        }
+
+        return name;
+    }
+
+
+    // =====================================================
+    // PENDING APPROVALS - FIND THE RAISED RECORD
+    // =====================================================
+
+    resolveEmployeeQuery(employeeQuery?: string): string {
+        const query =
+            employeeQuery?.trim() ||
+            process.env.EMPLOYEE_ID?.trim() ||
+            process.env.EMPLOYEE_NAME?.trim() ||
+            process.env.EMP_NAME?.trim();
+
+        if (!query) {
+            throw new Error(
+                'Pass the employee who raised the request, or set EMPLOYEE_NAME / EMPLOYEE_ID in .env'
+            );
+        }
+
+        return query;
+    }
+
+    employeeRow(employeeQuery: string): Locator {
+        const pattern = new RegExp(
+            employeeQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+            'i'
+        );
+
+        return this.page
+            .locator('table tbody tr, .custom-table-content tbody tr')
+            .filter({
+                hasText: pattern
+            })
+            .first();
+    }
+
+    async searchPendingRecord(employeeQuery: string) {
+        const query = this.resolveEmployeeQuery(employeeQuery);
+
+        await this.pendingSearch.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+
+        await this.pendingSearch.click();
+        await this.pendingSearch.fill('');
+        await this.pendingSearch.fill(query);
+        await this.pendingSearch.press('Enter').catch(() => {});
+
+        const row = this.employeeRow(query);
+
+        await row.waitFor({
+            state: 'visible',
+            timeout: 15000
+        });
+    }
+
+    async openKebabForEmployee(employeeQuery?: string) {
+        const query = this.resolveEmployeeQuery(employeeQuery);
+
+        await this.searchPendingRecord(query);
+
+        const row = this.employeeRow(query);
+        const table = this.page.locator('.custom-table-content');
+
+        await table.evaluate((element) => {
+            element.scrollLeft = element.scrollWidth;
+        });
+
+        const kebabMenu = row.locator('.dropdown > a').first();
+
+        await kebabMenu.scrollIntoViewIfNeeded();
+        await kebabMenu.click();
+    }
+
 
     // =====================================================
     // MANAGER NAVIGATION
     // =====================================================
+
 
     async clickPendingApprovals() {
         await this.pendingApprovals.waitFor({
@@ -318,26 +433,8 @@ this.processOption =
     // MANAGER KEBAB
     // =====================================================
 
-    async clickManagerKebabMenu() {
-
-        const table =
-            this.page.locator('.custom-table-content');
-
-        await table.evaluate((element) => {
-            element.scrollLeft = element.scrollWidth;
-        });
-
-        await this.page.waitForTimeout(1000);
-
-        const kebabMenu =
-            this.page
-                .locator('.custom-table-content')
-                .locator('.dropdown > a')
-                .first();
-
-        await kebabMenu.scrollIntoViewIfNeeded();
-
-        await kebabMenu.click();
+    async clickManagerKebabMenu(employeeQuery?: string) {
+        await this.openKebabForEmployee(employeeQuery);
     }
 
 
@@ -347,11 +444,22 @@ this.processOption =
 
     async clickApproveOption() {
 
-        await this.approveOption.waitFor({
+        const approveOption =
+            this.page
+                .locator('a.dropdown-item')
+                .filter({
+                    hasText: /^Approve$/
+                })
+                .filter({
+                    visible: true
+                })
+                .first();
+
+        await approveOption.waitFor({
             state: 'visible'
         });
 
-        await this.approveOption.click();
+        await approveOption.click();
     }
 
     async selectRegular() {
@@ -462,28 +570,8 @@ this.processOption =
     // HR KEBAB
     // =====================================================
 
-    async clickHRKebabMenu() {
-
-        const table =
-            this.page.locator('.custom-table-content');
-
-        await table.evaluate((element) => {
-            element.scrollLeft = element.scrollWidth;
-        });
-
-        await this.page.waitForTimeout(1000);
-
-        const kebabMenu =
-            this.page
-                .locator('.custom-table-content')
-                .locator('.dropdown > a')
-                .first();
-
-        await kebabMenu.scrollIntoViewIfNeeded();
-
-        await kebabMenu.click();
-
-        await this.page.waitForTimeout(500);
+    async clickHRKebabMenu(employeeQuery?: string) {
+        await this.openKebabForEmployee(employeeQuery);
     }
 
 
@@ -497,7 +585,8 @@ this.processOption =
         this.page
             .locator('a.dropdown-item')
             .filter({ hasText: /Process/ })
-            .last();
+            .filter({ visible: true })
+            .first();
 
     await processOption.waitFor({
         state: 'visible',

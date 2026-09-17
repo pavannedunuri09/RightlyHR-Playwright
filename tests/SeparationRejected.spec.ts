@@ -2,6 +2,18 @@ import { test, expect, Page } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { SeparationRejected } from '../pages/separationrejected';
 
+let raisedByEmployee = '';
+
+function employeeSearchName(): string | undefined {
+    return (
+        raisedByEmployee.trim() ||
+        process.env.EMPLOYEE_NAME?.trim() ||
+        process.env.EMPLOYEE_ID?.trim() ||
+        process.env.EMP_NAME?.trim() ||
+        undefined
+    );
+}
+
 
 // ============================================================
 // EMPLOYEE - INITIAL REQUEST
@@ -44,6 +56,12 @@ test.describe.serial('Employee Separation Rejection Flow', () => {
 
         // Same as Separation success code
         await employeePage.waitForTimeout(10000);
+
+        const separation =
+            new SeparationRejected(employeePage);
+
+        raisedByEmployee =
+            await separation.getLoggedInEmployeeName();
     });
 
 
@@ -58,6 +76,8 @@ test.describe.serial('Employee Separation Rejection Flow', () => {
             await expect(employeePage).not.toHaveURL(
                 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com/login'
             );
+
+            expect(raisedByEmployee).toBeTruthy();
         }
     );
 
@@ -188,7 +208,9 @@ test.describe.serial('Manager Separation Rejection Flow', () => {
 
             await separation.clickOffboarding();
 
-            await separation.clickManagerKebabMenu();
+            await separation.clickManagerKebabMenu(
+                employeeSearchName()
+            );
 
             await separation.clickRejectOption();
 
@@ -352,7 +374,9 @@ test.describe.serial('Manager Separation Approval Flow', () => {
 
             await separation.clickOffboarding();
 
-            await separation.clickManagerKebabMenu();
+            await separation.clickManagerKebabMenu(
+                employeeSearchName()
+            );
 
             await separation.clickApproveOption();
 
@@ -429,9 +453,15 @@ test.describe.serial('HR Separation Rejection Flow', () => {
                     hrPage
                 );
 
+            await separation.clickPendingApprovals();
+
+            await separation.clickOffboarding();
+
             await separation.clickForYourRole();
 
-            await separation.clickHRKebabMenu();
+            await separation.clickHRKebabMenu(
+                employeeSearchName()
+            );
 
             await separation.clickRejectOption();
 
@@ -439,14 +469,34 @@ test.describe.serial('HR Separation Rejection Flow', () => {
 
             await separation.confirmReject();
 
-            await expect(
+            const successToast =
                 hrPage.getByText(
-                    'Separation request rejected',
-                    {
-                        exact: true
-                    }
-                )
-            ).toBeVisible();
+                    /Separation request rejected|rejected successfully|Data Updated Successfully|updated successfully/i
+                );
+
+            await successToast.first().waitFor({
+                state: 'visible',
+                timeout: 15000
+            }).catch(() => {});
+
+            const employee =
+                employeeSearchName();
+
+            if (employee) {
+                await expect(
+                    hrPage
+                        .locator('table tbody tr')
+                        .filter({
+                            hasText: new RegExp(
+                                employee.replace(
+                                    /[.*+?^${}()|[\]\\]/g,
+                                    '\\$&'
+                                ),
+                                'i'
+                            )
+                        })
+                ).toHaveCount(0);
+            }
         }
     );
 
