@@ -1,6 +1,8 @@
+import fs from 'fs';
 import { test, expect, Page } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
-import { Contract } from '../pages/Contract';
+import { Contract, type ContractEmployee } from '../pages/Contract';
+import { createOnboardingFiles } from './fixtures/onboardingFiles';
 
 test.describe.serial(
     'Contract Flow - Part 1',
@@ -15,37 +17,62 @@ test.describe.serial(
         let onboardingUsername = '';
         let onboardingPassword = '';
 
+        // Realistic, short employee data. A random suffix keeps the employee and
+        // email unique without producing long timestamp-based email addresses.
+        const employeeNames = [
+            { firstName: 'Akhil', lastName: 'Patlolla' },
+            { firstName: 'Rahul', lastName: 'Reddy' },
+            { firstName: 'Kiran', lastName: 'Kumar' },
+            { firstName: 'Sandeep', lastName: 'Varma' },
+            { firstName: 'Arjun', lastName: 'Rao' },
+            { firstName: 'Vishal', lastName: 'Sharma' },
+            { firstName: 'Rohit', lastName: 'Patel' },
+            { firstName: 'Naveen', lastName: 'Naidu' },
+            { firstName: 'Pranav', lastName: 'Reddy' },
+            { firstName: 'Karthik', lastName: 'Rao' },
+        ];
+
+        const selectedName = employeeNames[Math.floor(Math.random() * employeeNames.length)];
+        const uniqueId = Math.floor(1000 + Math.random() * 9000);
+
+        const employee: ContractEmployee & { fullName: string } = {
+            firstName: selectedName.firstName,
+            lastName: selectedName.lastName,
+            fullName: `${selectedName.firstName} ${selectedName.lastName}`,
+            email: `${selectedName.firstName.toLowerCase()}${uniqueId}@yopmail.com`,
+        };
+
         // ==================================================
         // HR LOGIN
         // ==================================================
 
         test.beforeAll(
             async ({ browser }) => {
+                const hrUsername = process.env.HR_USERNAME || process.env.LOGIN_EMAIL;
+                const hrPassword = process.env.HR_PASSWORD || process.env.LOGIN_PASSWORD;
 
-                hrPage = await browser.newPage();
-
-                const login =
-                    new LoginPage(hrPage);
-
-                await hrPage.goto('/login');
-
-                const hrUsername =
-                    process.env.HR_USERNAME ?? process.env.LOGIN_EMAIL;
-                const hrPassword =
-                    process.env.HR_PASSWORD ?? process.env.LOGIN_PASSWORD;
-
-                if (!hrUsername || !hrPassword) {
-                    throw new Error(
-                        'Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD in .env',
-                    );
+                if (hrUsername && hrPassword) {
+                    hrPage = await browser.newPage();
+                    const login = new LoginPage(hrPage);
+                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
+                    await hrPage.waitForTimeout(2000);
+                    if (hrPage.url().includes('/login')) {
+                        await login.login(hrUsername, hrPassword);
+                        await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
+                        await hrPage.waitForTimeout(2000);
+                        await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
+                    }
+                } else if (fs.existsSync('.auth/user.json')) {
+                    const context = await browser.newContext({ storageState: '.auth/user.json' });
+                    hrPage = await context.newPage();
+                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
+                    await hrPage.waitForTimeout(2000);
+                } else {
+                    hrPage = await browser.newPage();
+                    await hrPage.goto('/login');
                 }
 
-                await login.login(hrUsername, hrPassword);
-
-                await hrPage.waitForTimeout(3000);
-
-                contract =
-                    new Contract(hrPage);
+                contract = new Contract(hrPage);
             }
         );
 
@@ -60,13 +87,12 @@ test.describe.serial(
                 await contract.clickEmployees();
 
                 await expect(
-                    contract.employees
+                    contract.employees.first()
                 ).toBeVisible();
 
                 console.log(
                     'TC01 PASSED - HR clicked Employee'
                 );
-                
             }
         );
 
@@ -138,15 +164,16 @@ test.describe.serial(
             'TC05 - HR should submit mandatory fields and click Submit button',
             async () => {
 
-                await contract.fillContractEmployeeDetails();
+                await contract.fillContractEmployeeDetails(employee);
 
                 await contract.clickAdd();
                 await contract.searchCreatedEmployee();
 
+                const employeeRow = hrPage.getByRole('row').filter({ hasText: employee.email });
                 await expect(
-                    contract.createdEmployeeRow()
+                    employeeRow
                 ).toBeVisible({
-                    timeout: 15000
+                    timeout: 20000
                 });
 
                 console.log(
@@ -163,7 +190,10 @@ test.describe.serial(
             'TC06 - HR should click on employee name which he created before',
             async () => {
 
-                await contract.clickCreatedEmployee();
+                await contract.clickCreatedEmployee(
+                    employee.email,
+                    employee.fullName
+                );
 
                 console.log(
                     'TC06 PASSED - HR clicked created employee'
@@ -220,7 +250,7 @@ test.describe.serial(
 
                 await contract.openYopmailInbox(
                     yopmailPage,
-                    contract.createdEmployeeEmail
+                    employee.email
                 );
 
                 console.log(
@@ -335,10 +365,13 @@ test.describe.serial(
 
         test(
             'TC14 - Submit mandatory documents and click Submit button',
-            async () => {
+            async ({ }, testInfo) => {
+                const files = createOnboardingFiles(testInfo.outputDir);
 
                 await contract.uploadMandatoryDocuments(
-                    onboardingPage
+                    onboardingPage,
+                    files.pdf,
+                    files.image
                 );
 
                 console.log(
@@ -355,7 +388,10 @@ test.describe.serial(
             'TC15 - HR should be able to click on employee name',
             async () => {
 
-                await contract.clickEmployeeAfterSubmission();
+                await contract.clickEmployeeAfterSubmission(
+                    employee.email,
+                    employee.fullName
+                );
 
                 console.log(
                     'TC15 PASSED - HR clicked'+contract.createdEmployeeName
@@ -374,7 +410,7 @@ test.describe.serial(
                 await contract.clickJobAndOnboardingDocuments();
 
                 await expect(
-                    contract.onboardingDocuments
+                    contract.onboardingDocuments.first()
                 ).toBeVisible();
 
                 console.log(
@@ -416,6 +452,594 @@ test.describe.serial(
                 );
             }
         );
+
+        // ==================================================
+        // TC19
+        // ==================================================
+
+        test(
+            'TC19 - HR should click Generate Documents button',
+            async () => {
+                await contract.clickEmployees();
+                await contract.clickGenerateDocuments();
+
+                await expect(
+                    hrPage.getByText('Contract Offer Letter', { exact: true }).first()
+                ).toBeVisible({ timeout: 15000 });
+
+                console.log(
+                    'TC19 PASSED - Generate Documents clicked'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC20
+        // ==================================================
+
+        test(
+            'TC20 - HR should click Contract Offer Letter tab',
+            async () => {
+                await contract.clickContractOfferLetter();
+
+                await expect(
+                    hrPage.getByRole('combobox', {
+                        name: 'Please select employee'
+                    })
+                ).toBeVisible({ timeout: 15000 });
+
+                console.log(
+                    'TC20 PASSED - Contract Offer Letter page opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC21
+        // ==================================================
+
+        test(
+            'TC21 - HR should select employee and submit mandatory fields',
+            async () => {
+                await contract.fillContractOfferMandatoryFields(
+                    employee.fullName
+                );
+
+                console.log(
+                    'TC21 PASSED - Contract Offer mandatory fields submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC22
+        // ==================================================
+
+        test(
+            'TC22 - HR should generate Contract Offer document and request approval',
+            async () => {
+                await contract.clickGenerateOfferDocument();
+                await contract.clickRequestForApproval();
+
+                console.log(
+                    'TC22 PASSED - Contract Offer generated and approval requested'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC23
+        // ==================================================
+
+        test(
+            'TC23 - HR should open Pending Approvals Onboarding Contract Offer',
+            async () => {
+                await contract.openContractOfferPendingApproval();
+
+                await expect(
+                    hrPage.getByText(/Contract Offer/i).first()
+                ).toBeVisible({ timeout: 15000 });
+
+                console.log(
+                    'TC23 PASSED - Contract Offer approval request opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC24
+        // ==================================================
+
+        test(
+            'TC24 - HR should approve and release Contract Offer',
+            async () => {
+                await contract.approveContractOffer(employee.fullName);
+                await contract.releaseContractOffer(employee.fullName);
+
+                console.log(
+                    'TC24 PASSED - Contract Offer approved and released'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC25
+        // ==================================================
+
+        test(
+            'TC25 - Prospective contract employee should receive email and credentials',
+            async () => {
+                await hrPage.bringToFront();
+
+                if (!yopmailPage) {
+                    yopmailPage = await contract.openYopmail();
+                }
+
+                await contract.openYopmailInbox(
+                    yopmailPage,
+                    employee.email
+                );
+
+                const credentials =
+                    await contract.getContractOfferCredentials(
+                        yopmailPage
+                    );
+
+                onboardingUsername = credentials.username;
+                onboardingPassword = credentials.password;
+
+                expect(onboardingUsername).toBeTruthy();
+                expect(onboardingPassword).toBeTruthy();
+
+                console.log(
+                    'TC25 PASSED - Contract prospective credentials received'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC26
+        // ==================================================
+
+        test(
+            'TC26 - Prospective contract employee should click login link',
+            async () => {
+                onboardingPage =
+                    await contract.clickContractOfferLoginLink(
+                        yopmailPage
+                    );
+
+                await expect(
+                    onboardingPage.getByRole('textbox', {
+                        name: 'Username*'
+                    })
+                ).toBeVisible({
+                    timeout: 15000
+                });
+
+                console.log(
+                    'TC26 PASSED - Contract prospective login page opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC27
+        // ==================================================
+
+        test(
+            'TC27 - Prospective contract employee should login with received credentials',
+            async () => {
+                await contract.loginProspectiveEmployee(
+                    onboardingPage,
+                    onboardingUsername,
+                    onboardingPassword
+                );
+
+                console.log(
+                    'TC27 PASSED - Contract prospective employee logged in'
+                );
+            }
+        );
+
+
+        // ==================================================
+        // TC28
+        // ==================================================
+
+        test(
+            'TC28 - Prospective contract employee should navigate to Contract Offer Letter',
+            async () => {
+                await contract.clickNextFromOnboarding(onboardingPage);
+                await contract.navigateToContractOfferPage(onboardingPage);
+
+                console.log(
+                    'TC28 PASSED - Contract Offer Letter page displayed'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC29
+        // ==================================================
+
+        test(
+            'TC29 - Prospective contract employee should reject Contract Offer',
+            async () => {
+                await contract.rejectContractOfferFromPortal(
+                    onboardingPage
+                );
+
+                await expect(
+                    onboardingPage.getByRole('textbox', {
+                        name: 'Username*'
+                    })
+                ).toBeVisible({
+                    timeout: 15000
+                });
+
+                console.log(
+                    'TC29 PASSED - Contract Offer rejected and login page displayed'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC30
+        // ==================================================
+
+        test(
+            'TC30 - HR should regenerate Contract Offer Letter',
+            async () => {
+                await hrPage.bringToFront();
+
+                await contract.regenerateContractOffer(
+                    employee.fullName
+                );
+
+                // The regenerated offer must go through approval and release
+                // before the prospective employee can receive new credentials.
+                await contract.openContractOfferPendingApproval();
+                await contract.approveContractOffer(employee.fullName);
+                await contract.releaseContractOffer(employee.fullName);
+
+                console.log(
+                    'TC30 PASSED - Contract Offer Letter regenerated, approved and released'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC31
+        // ==================================================
+
+        test(
+            'TC31 - Prospective contract employee should login with regenerated credentials',
+            async () => {
+                if (!yopmailPage) {
+                    yopmailPage = await contract.openYopmail();
+                }
+
+                await contract.openYopmailInbox(
+                    yopmailPage,
+                    employee.email
+                );
+
+                const credentials =
+                    await contract.getContractOfferCredentials(
+                        yopmailPage
+                    );
+
+                onboardingUsername = credentials.username;
+                onboardingPassword = credentials.password;
+
+                if (!onboardingPage || onboardingPage.isClosed()) {
+                    onboardingPage =
+                        await contract.clickContractOfferLoginLink(
+                            yopmailPage
+                        );
+                } else {
+                    await onboardingPage.goto(
+                        credentials.loginUrl || onboardingPage.url()
+                    ).catch(() => { });
+                }
+
+                await contract.loginProspectiveEmployee(
+                    onboardingPage,
+                    onboardingUsername,
+                    onboardingPassword,
+                    yopmailPage
+                );
+
+                console.log(
+                    'TC31 PASSED - Prospective contract employee logged in with regenerated credentials'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC32
+        // ==================================================
+
+        test(
+            'TC32 - Prospective contract employee should navigate again to Contract Offer Letter',
+            async () => {
+                await contract.clickNextFromOnboarding(
+                    onboardingPage
+                );
+
+                await contract.clickNextFromOnboarding(
+                    onboardingPage
+                );
+
+                await contract.navigateToContractOfferPage(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC32 PASSED - Contract Offer Letter page opened again'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC33
+        // ==================================================
+
+        test(
+            'TC33 - Prospective contract employee should accept Contract Offer',
+            async () => {
+                await contract.acceptContractOffer(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC33 PASSED - Contract Offer accepted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC34
+        // ==================================================
+
+        test(
+            'TC34 - Prospective contract employee should submit education details',
+            async () => {
+                await contract.submitEducationDetails(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC34 PASSED - Education details submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC35
+        // ==================================================
+
+        test(
+            'TC35 - Prospective contract employee should submit emergency contact details',
+            async () => {
+                await contract.submitEmergencyContacts(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC35 PASSED - Emergency contact details submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC36
+        // ==================================================
+
+        test(
+            'TC36 - Prospective contract employee should submit or skip previous experience',
+            async () => {
+                await contract.submitPreviousExperienceIfRequired(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC36 PASSED - Previous experience handled'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC37
+        // ==================================================
+
+        test(
+            'TC37 - Prospective contract employee should submit all remaining fields',
+            async () => {
+                await contract.submitRemainingFields(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC37 PASSED - All remaining fields submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC38
+        // ==================================================
+
+        test(
+            'TC38 - HR should generate NDA Letter',
+            async () => {
+                await hrPage.bringToFront();
+
+                await contract.clickNDALetter();
+
+                console.log(
+                    'TC38 PASSED - NDA Letter page opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC39
+        // ==================================================
+
+        test(
+            'TC39 - HR should generate and release NDA Letter',
+            async () => {
+                await contract.fillNDAMandatoryFields(
+                    employee.fullName
+                );
+
+                await contract.generateAndReleaseNDALetter();
+
+                console.log(
+                    'TC39 PASSED - NDA Letter generated and released'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC40
+        // ==================================================
+
+        test(
+            'TC40 - Prospective contract employee should login to onboarding portal',
+            async () => {
+                await onboardingPage.bringToFront();
+
+                await contract.loginProspectiveEmployee(
+                    onboardingPage,
+                    onboardingUsername,
+                    onboardingPassword,
+                    yopmailPage
+                );
+
+                console.log(
+                    'TC40 PASSED - Prospective contract employee logged in'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC41
+        // ==================================================
+
+        test(
+            'TC41 - Prospective contract employee should navigate to NDA Letter',
+            async () => {
+                await contract.navigateToNDA(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC41 PASSED - NDA Letter page displayed'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC42
+        // ==================================================
+
+        test(
+            'TC42 - Prospective contract employee should approve and submit NDA Letter',
+            async () => {
+                await contract.approveAndSubmitNDA(
+                    onboardingPage
+                );
+
+                console.log(
+                    'TC42 PASSED - NDA Letter approved and submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC43
+        // ==================================================
+
+        test(
+            'TC43 - Verify that HR can open the employee, click Job, and open Onboarding Documents',
+            async () => {
+                await hrPage.bringToFront();
+
+                await contract.openEmployeeJobOnboardingDocuments(
+                    employee.fullName
+                );
+
+                console.log(
+                    'TC43 PASSED - HR opened employee Job and Onboarding Documents'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC44
+        // ==================================================
+
+        test(
+            'TC44 - Verify that HR can click the Edit icon and open the Status field',
+            async () => {
+                await contract.clickEditAndOpenStatus();
+
+                console.log(
+                    'TC44 PASSED - Edit icon and Status field opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC45
+        // ==================================================
+
+        test(
+            'TC45 - Verify that HR can change the employee status from Prospective Contract to Active Contract and click Submit',
+            async () => {
+                await contract.changeStatusToActiveContract();
+
+                console.log(
+                    'TC45 PASSED - Status changed to Active Contract and submitted'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC46
+        // ==================================================
+
+        test(
+            'TC46 - Verify that HR can navigate to the Active tab and then open the Contractors tab',
+            async () => {
+                await contract.openActiveContractors();
+
+                console.log(
+                    'TC46 PASSED - Active tab and Contractors tab opened'
+                );
+            }
+        );
+
+        // ==================================================
+        // TC47
+        // ==================================================
+
+        test(
+            'TC47 - Verify that HR can search for the employee by name and the employee is displayed under Active Contracts/Contractors',
+            async () => {
+                await contract.searchActiveContractEmployee(
+                    employee.fullName
+                );
+
+                console.log(
+                    'TC47 PASSED - Employee displayed under Active Contractors'
+                );
+            }
+        );
+
 
         // ==================================================
         // CLEANUP

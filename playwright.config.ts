@@ -45,13 +45,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
+  outputDir: path.resolve(process.env.LOCALAPPDATA || process.cwd(), 'playwright-results'),
   use: {
     baseURL,
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
-    trace: process.env.CI ? 'on-first-retry' : 'retain-on-failure',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 15000,
@@ -59,6 +60,18 @@ export default defineConfig({
   },
 
   projects: [
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: '.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
     {
       name: '01-login',
       testMatch: /(?:^|[\\/])login\.spec\.ts$/,
@@ -85,124 +98,38 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '06-onbehalf-remote-login',
-      testMatch: /on-behalf-remote-login\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '07-onbehalf-wfh',
-      testMatch: /on-behalf-wfh\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '08-probation',
-      testMatch: /probation\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '09-holidays',
-      testMatch: /holidays\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '10-codegen-holidays',
-      testDir: './pages',
-      testMatch: /codegen-holidays\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '11-leave-category',
-      testMatch: /leave-category\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '12-leave-allocation',
-      testMatch: /leave-allocation\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '13-load-entitlements',
-      testMatch: /load-entitlements\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '14-manage-shifts',
-      testMatch: /manage-shifts\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '15-leaves',
-      testMatch: /(?:^|[\\/])leaves\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '16-onbehalf-leaves',
-      testMatch: /(?:^|[\\/])on-behalf-leaves\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '17-prospective-trainee',
-      testMatch: /prospective-trainee\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '18-onboarding',
-      testMatch: /(?:^|[\\/])onboarding\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '19-personalization',
-      testMatch: /personalization\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '20-microsoft-login',
-      testMatch: /microsoftlogin\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '21-permissions',
-      testMatch: /(?:^|[\\/])permissions\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '22-regularization',
-      testMatch: /(?:^|[\\/])regularization\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '23-onbehalf-permissions',
-      testMatch: /on-behalf-permissions\.spec\.ts$/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: '24-separation',
+      name: '06-separation',
       testMatch: /Separation\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '25-helpdesk',
+      name: '07-helpdesk',
       testMatch: /(?:^|[\\/])HelpDesk\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '26-separation-rejected',
+      name: '08-separation-rejected',
       testMatch: /SeparationRejected\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '27-recall',
+      name: '09-recall',
       testMatch: /recall\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '28-extra-log-hours',
+      name: '10-extra-log-hours',
       testMatch: /ExtraLogHours\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: '29-contract',
+      name: '11-contract',
       testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '12-offboarding',
+      testMatch: /Offboarding\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {

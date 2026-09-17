@@ -77,8 +77,10 @@ export class SeparationRejected {
         });
 
         this.loginButton = page.getByRole('button', {
-            name: 'Login'
+            name: 'Login',
+            exact: true
         });
+
 
         // ========================================================
         // EMPLOYEE
