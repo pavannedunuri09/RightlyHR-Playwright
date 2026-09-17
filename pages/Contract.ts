@@ -495,8 +495,47 @@ export class Contract {
             return;
         }
 
-        // Collect passwords to try: primary password, plus any other credentials from Yopmail
         const passwordsToTry = [password].filter(Boolean);
+        const tryPassword = async (pwd: string, attemptLabel: string) => {
+            console.log(`Attempting pre-onboarding login for ${username} (${attemptLabel})...`);
+            await usernameInput.fill('');
+            await usernameInput.fill(username);
+
+            const pwdInput = onboardingPage.getByRole('textbox', { name: 'Password*' });
+            await pwdInput.fill('');
+            await pwdInput.fill(pwd);
+
+            await onboardingPage.getByRole('button', { name: 'Login', exact: true }).click();
+
+            const invalidMsg = onboardingPage.getByText(/Invalid Credentials/i);
+            const isInvalid = await invalidMsg.first().isVisible({ timeout: 4000 }).catch(() => false);
+            if (isInvalid) {
+                console.log(`${attemptLabel} failed with Invalid Credentials`);
+                return false;
+            }
+
+            const leftLogin = await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).then(() => true).catch(() => false);
+            if (!leftLogin && await usernameInput.isVisible().catch(() => false)) {
+                console.log(`${attemptLabel} did not leave the login page`);
+                return false;
+            }
+
+            if (!onboardingPage.isClosed()) {
+                const goToApp = onboardingPage.getByRole('button', { name: 'Go to Application' });
+                if (await goToApp.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    await goToApp.click();
+                    await onboardingPage.waitForTimeout(1000).catch(() => { });
+                }
+            }
+            console.log(`Pre-onboarding login succeeded for ${username}`);
+            return true;
+        };
+
+        if (await tryPassword(password, 'attempt 1/1')) {
+            return;
+        }
+
+        // Only scan Yopmail for alternate passwords after the known password fails.
         if (yopmailPage) {
             try {
                 const yop = new YopmailPage(yopmailPage);
@@ -509,37 +548,14 @@ export class Contract {
             } catch { }
         }
 
-        for (let attempt = 0; attempt < passwordsToTry.length; attempt++) {
-            const pwd = passwordsToTry[attempt];
-            console.log(`Attempting pre-onboarding login for ${username} (attempt ${attempt + 1}/${passwordsToTry.length})...`);
-            await usernameInput.fill('');
-            await usernameInput.fill(username);
-
-            const pwdInput = onboardingPage.getByRole('textbox', { name: 'Password*' });
-            await pwdInput.fill('');
-            await pwdInput.fill(pwd);
-
-            await onboardingPage.getByRole('button', { name: 'Login', exact: true }).click();
-
-            const invalidMsg = onboardingPage.getByText(/Invalid Credentials/i);
-            const isInvalid = await invalidMsg.first().isVisible({ timeout: 4000 }).catch(() => false);
-
-            if (!isInvalid) {
-                await usernameInput.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => { });
-                await onboardingPage.waitForTimeout(1000);
-                const goToApp = onboardingPage.getByRole('button', { name: 'Go to Application' });
-                if (await goToApp.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await goToApp.click();
-                    await onboardingPage.waitForTimeout(1000);
-                }
-                console.log(`Pre-onboarding login succeeded for ${username}`);
-                return;
+        for (let attempt = 1; attempt < passwordsToTry.length; attempt++) {
+            if (onboardingPage.isClosed()) {
+                break;
             }
-
-            console.log(`Login attempt ${attempt + 1} failed with Invalid Credentials`);
-            if (attempt < passwordsToTry.length - 1) {
-                await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
-                await usernameInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
+            await onboardingPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
+            await usernameInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
+            if (await tryPassword(passwordsToTry[attempt], `attempt ${attempt + 1}/${passwordsToTry.length}`)) {
+                return;
             }
         }
 
@@ -985,21 +1001,73 @@ export class Contract {
             return;
         }
         await combobox.scrollIntoViewIfNeeded().catch(() => { });
-        await combobox.click();
+        const trigger = combobox.locator('xpath=ancestor::*[.//button[@aria-label="dropdown trigger"] or .//button[contains(@class,"p-select")]][1]')
+            .getByRole('button', { name: 'dropdown trigger' });
+        if (await trigger.first().isVisible().catch(() => false)) {
+            await trigger.first().click();
+        } else {
+            await combobox.click();
+        }
         await this.page.waitForTimeout(400);
 
+        const listbox = this.page.getByRole('listbox').last();
+        await listbox.waitFor({ state: 'visible', timeout: 5000 }).catch(() => { });
+        const options = listbox.getByRole('option').or(this.page.getByRole('option'));
         const targetOption = preferredText
-            ? this.page.getByRole('option', { name: preferredText })
-                .or(this.page.getByText(preferredText, { exact: true }))
-                .or(this.page.getByRole('option').filter({ hasText: preferredText }))
-                .or(this.page.getByRole('option').filter({ hasNotText: /select|please/i }))
-                .or(this.page.getByRole('option'))
-            : this.page.getByRole('option').filter({ hasNotText: /select|please/i })
-                .or(this.page.getByRole('option'));
+            ? options.filter({ hasText: preferredText })
+            : options.filter({ hasNotText: /select|please/i });
 
         await targetOption.first().waitFor({ state: 'visible', timeout: 5000 });
         await targetOption.first().click();
+        await listbox.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => { });
         await this.page.waitForTimeout(400);
+    }
+
+    private async selectSignatureAuthority() {
+        await this.page.keyboard.press('Escape').catch(() => { });
+        await this.page.waitForTimeout(300);
+
+        const combobox = this.page.getByRole('combobox', { name: /Please select signature authority|signature authority/i }).first();
+        const field = this.page.getByText(/Signature Authority Name/i).first().locator('xpath=following-sibling::*[1]');
+        const signatureCombo = (await combobox.isVisible({ timeout: 2000 }).catch(() => false))
+            ? combobox
+            : field.getByRole('combobox').first();
+
+        await signatureCombo.scrollIntoViewIfNeeded();
+        await expect(signatureCombo).toBeVisible({ timeout: 10000 });
+
+        const selected = ((await signatureCombo.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+        if (selected && !/please select/i.test(selected)) {
+            console.log(`Signature authority already selected: ${selected}`);
+            return;
+        }
+
+        const trigger = field.getByRole('button', { name: 'dropdown trigger' })
+            .or(signatureCombo.locator('xpath=..').getByRole('button', { name: 'dropdown trigger' }));
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+            await this.page.keyboard.press('Escape').catch(() => { });
+            await this.page.waitForTimeout(250);
+            if (await trigger.first().isVisible().catch(() => false)) {
+                await trigger.first().click();
+            } else {
+                await signatureCombo.click();
+            }
+
+            const listbox = this.page.getByRole('listbox').last();
+            const option = listbox.getByRole('option').filter({ hasNotText: /please select|select signature/i })
+                .or(this.page.getByRole('option').filter({ hasNotText: /please select|select signature/i }));
+
+            if (await option.first().isVisible({ timeout: 4000 }).catch(() => false)) {
+                const name = ((await option.first().innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+                await option.first().click();
+                await listbox.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => { });
+                console.log(`Selected signature authority: ${name || '(first option)'}`);
+                return;
+            }
+        }
+
+        throw new Error('Could not select Signature Authority from the dropdown');
     }
 
     async fillContractOfferMandatoryFields(employeeName?: string) {
@@ -1033,7 +1101,7 @@ export class Contract {
             await editor.fill('Contract offer letter generated for the prospective contract employee.');
         }
 
-        await this.selectComboboxOption(/signature/i, 'saii Pavan Dinesh Tejaa');
+        await this.selectSignatureAuthority();
 
         const generateBtn = this.page.getByRole('button', {
             name: /Generate Offer Letter|Generate Document/i
@@ -1051,6 +1119,9 @@ export class Contract {
             name: /Generate Offer Letter|Generate Document/i
         }).or(this.page.locator('button.btn-primary').filter({ hasText: /Generate Offer/i }));
         await generateBtn.first().waitFor({ state: 'visible', timeout: 15000 });
+        if (!(await generateBtn.first().isEnabled().catch(() => false))) {
+            await this.selectSignatureAuthority();
+        }
         await expect(generateBtn.first()).toBeEnabled({ timeout: 15000 });
         await generateBtn.first().click();
         await downloadPromise;
@@ -1158,30 +1229,60 @@ export class Contract {
     // TC25 - TC33 : Prospect Contract Offer Flow
     // ==================================================
 
-    async getContractOfferCredentials(yopmailPage: Page): Promise<{ username: string; password: string; loginUrl?: string }> {
+    async getContractOfferCredentials(
+        yopmailPage: Page,
+        previousPassword?: string,
+        email?: string,
+    ): Promise<{ username: string; password: string; loginUrl?: string }> {
         await yopmailPage.bringToFront();
-        await yopmailPage.waitForTimeout(2000);
         const yopmail = new YopmailPage(yopmailPage);
-        const offerPattern = /Contract Offer|Offer Letter|Offer Letter Released|Offer Letter Issued/i;
+        if (email) {
+            await yopmail.openInbox(email);
+        }
+        const offerPattern = /Offer Letter Issued|Offer Letter Released|Contract Offer/i;
+        const deadline = Date.now() + 90000;
+        let lastUsername = '';
+        let lastPassword = '';
 
-        await yopmail.waitForMailMatching(offerPattern, 60000).catch(() => {
-            console.log('waitForMailMatching for Offer Letter timed out, checking inbox directly...');
-        });
-        await yopmail.openMatchingMailInViewer(offerPattern).catch(() => { });
+        while (Date.now() < deadline) {
+            await yopmailPage.locator('#refresh, button#refresh, a#refresh').first().click().catch(() => { });
+            await yopmailPage.waitForTimeout(1500);
 
-        // Prefer reading directly from open ifmail iframe (which is the actual opened mail)
-        const mailFrame = yopmailPage.locator('iframe[name="ifmail"]').contentFrame();
-        await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
-        const bodyText = await mailFrame.locator('body').innerText().catch(() => '');
-        const uMatch = bodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || bodyText.match(/Username\s*[:*]\s*(\S+)/i);
-        const pMatch = bodyText.match(/Password\s*[:*]\s*(\S+)/i);
+            await yopmail.waitForMailMatching(offerPattern, 15000).catch(() => {
+                console.log('Offer letter mail not in inbox yet; retrying...');
+            });
+            try {
+                await yopmail.openMatchingMailInViewer(offerPattern);
+            } catch {
+                await yopmailPage.waitForTimeout(5000);
+                continue;
+            }
 
-        if (uMatch && pMatch) {
-            return {
-                username: uMatch[1].trim(),
-                password: pMatch[1].trim(),
-                loginUrl: undefined,
-            };
+            const mailFrame = yopmailPage.locator('iframe[name="ifmail"]').contentFrame();
+            await mailFrame.locator('body').waitFor({ state: 'visible', timeout: 10000 }).catch(() => { });
+            const bodyText = await mailFrame.locator('body').innerText().catch(() => '');
+            const uMatch = bodyText.match(/Username\s*[:*]\s*([^\s]+@[^\s]+)/i) || bodyText.match(/Username\s*[:*]\s*(\S+)/i);
+            const pMatch = bodyText.match(/Password\s*[:*]\s*(\S+)/i);
+
+            if (uMatch && pMatch) {
+                lastUsername = uMatch[1].trim();
+                lastPassword = pMatch[1].trim();
+                if (!previousPassword || lastPassword !== previousPassword) {
+                    console.log(`Using latest offer-letter credentials for ${lastUsername}`);
+                    return {
+                        username: lastUsername,
+                        password: lastPassword,
+                        loginUrl: undefined,
+                    };
+                }
+                console.log('Latest offer mail still has the previous password; waiting for regenerated credentials...');
+            }
+
+            await yopmailPage.waitForTimeout(5000);
+        }
+
+        if (lastUsername && lastPassword) {
+            return { username: lastUsername, password: lastPassword, loginUrl: undefined };
         }
 
         const creds = await yopmail.findCredentialsInInbox({
@@ -1198,6 +1299,34 @@ export class Contract {
 
     async clickContractOfferLoginLink(yopmailPage: Page): Promise<Page> {
         return await this.clickHereFromEmail(yopmailPage);
+    }
+
+    async openPreOnboardingFromLatestMail(
+        yopmailPage: Page,
+        email?: string,
+    ): Promise<{ page: Page; username: string; password: string }> {
+        const credentials = await this.getContractOfferCredentials(yopmailPage, undefined, email);
+
+        let portalPage: Page;
+        try {
+            portalPage = await this.clickHereFromEmail(yopmailPage);
+        } catch {
+            console.log('Click here popup did not open; opening pre-onboarding portal in a new tab');
+            portalPage = await yopmailPage.context().newPage();
+            await portalPage.goto(this.getPreonboardingUrl(), { waitUntil: 'domcontentloaded' });
+        }
+
+        const usernameInput = portalPage.getByRole('textbox', { name: 'Username*' });
+        if (!(await usernameInput.isVisible({ timeout: 8000 }).catch(() => false))) {
+            await portalPage.goto(this.getPreonboardingUrl(), { waitUntil: 'domcontentloaded' });
+            await usernameInput.waitFor({ state: 'visible', timeout: 15000 });
+        }
+
+        return {
+            page: portalPage,
+            username: credentials.username,
+            password: credentials.password,
+        };
     }
 
     async clickNextFromOnboarding(onboardingPage: Page) {
@@ -1294,7 +1423,7 @@ export class Contract {
             await editor.fill('Regenerated contract offer letter for the prospective contract employee.');
         }
 
-        await this.selectComboboxOption(/signature/i, 'saii Pavan Dinesh Tejaa');
+        await this.selectSignatureAuthority();
 
         const downloadPromise = this.page.waitForEvent('download').catch(() => null);
         const generateBtn = this.page.getByRole('button', { name: /Regenerate Offer Letter|Generate Offer Letter|Generate Document/i })
@@ -1374,7 +1503,7 @@ export class Contract {
 
         await this.selectComboboxOption(/document type/i, 'Soft Copy');
 
-        await this.selectComboboxOption(/signature/i, 'saii Pavan Dinesh Tejaa');
+        await this.selectSignatureAuthority();
 
         const editor = this.page.locator('.ql-editor');
         if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -1831,56 +1960,56 @@ export class Contract {
         await this.clickEmployees();
         await this.page.waitForTimeout(1000);
 
-        const activeTab = this.page.getByRole('link', { name: /Active/i })
-            .or(this.page.getByText(/Active Employees|Active/i))
-            .or(this.page.getByText(/Active\(\d+\)/));
-        if (await activeTab.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-            await activeTab.first().click();
-            await this.page.waitForTimeout(1000);
-        }
+        const activeNav = this.page.getByText(/^Active\s*\(/)
+            .or(this.page.locator('#sidenav-main-drop, .sidenav, aside').getByText('Active', { exact: true }));
+        const visibleActive = activeNav.filter({ visible: true }).first();
+        await visibleActive.waitFor({ state: 'visible', timeout: 15000 });
+        await visibleActive.click();
+        await this.page.waitForTimeout(1000);
 
-        const contractTab = this.contractorsTab
-            .or(this.page.getByRole('link', { name: /Contractor/i }))
-            .or(this.page.getByRole('link', { name: /Contract/i }))
-            .or(this.page.getByText(/Contractors/i, { exact: true }))
-            .or(this.page.getByText(/Contract/i, { exact: true }));
-        await contractTab.first().waitFor({ state: 'visible', timeout: 15000 });
-        await contractTab.first().click();
+        const contractorsTab = this.page.getByText(/Contractors\s*\(\d+\)/).filter({ visible: true })
+            .or(this.page.getByRole('tab', { name: /Contractors/i }).filter({ visible: true }));
+        await contractorsTab.first().waitFor({ state: 'visible', timeout: 15000 });
+        await contractorsTab.first().click();
         await this.page.waitForTimeout(1500);
+        await expect(this.page.getByText(/Contractors\s*\(\d+\)/).filter({ visible: true }).first()).toBeVisible();
     }
 
     async searchActiveContractEmployee(employeeName: string) {
         const targetName = this.activeEmployeeName || employeeName;
-        const search = this.page.getByRole('searchbox', { name: 'Username' })
+        const search = this.page.getByPlaceholder(/Search by employee/i)
+            .or(this.page.getByRole('searchbox'))
             .or(this.page.getByPlaceholder(/search|username/i));
         await search.first().waitFor({ state: 'visible', timeout: 10000 });
 
         const nameParts = targetName.trim().split(/\s+/);
         const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : targetName;
+        const firstName = nameParts[0];
 
-        await search.first().fill(lastName);
+        const rowFor = (name: string) =>
+            this.page.getByRole('row').filter({ hasText: new RegExp(name, 'i') })
+                .or(this.page.getByRole('link', { name: new RegExp(name, 'i') }));
+
+        await search.first().fill('');
+        await search.first().fill(firstName);
         await search.first().press('Enter');
         await this.page.waitForTimeout(1500);
 
-        let employee = this.page.getByRole('cell', { name: new RegExp(lastName, 'i') })
-            .or(this.page.getByText(new RegExp(lastName, 'i'))).first();
-
+        let employee = rowFor(lastName).first();
         if (!(await employee.isVisible({ timeout: 5000 }).catch(() => false))) {
             await search.first().fill('');
             await search.first().fill(targetName);
             await search.first().press('Enter');
             await this.page.waitForTimeout(1500);
-
-            employee = this.page.getByRole('cell', { name: targetName, exact: true })
-                .or(this.page.getByText(targetName, { exact: true }))
-                .or(this.page.getByRole('cell', { name: new RegExp(lastName, 'i') })).first();
+            employee = rowFor(targetName).first();
         }
 
         if (!(await employee.isVisible({ timeout: 5000 }).catch(() => false))) {
             await search.first().fill('');
+            await search.first().fill(lastName);
             await search.first().press('Enter');
             await this.page.waitForTimeout(1500);
-            employee = this.page.getByText(new RegExp(lastName, 'i')).first();
+            employee = rowFor(lastName).first();
         }
 
         await expect(employee).toBeVisible({ timeout: 15000 });

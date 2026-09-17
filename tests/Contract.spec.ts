@@ -30,6 +30,14 @@ test.describe.serial(
             { firstName: 'Naveen', lastName: 'Naidu' },
             { firstName: 'Pranav', lastName: 'Reddy' },
             { firstName: 'Karthik', lastName: 'Rao' },
+            { firstName: 'Pavan', lastName: 'Nedunuri' },
+            { firstName: 'Sai', lastName: 'Palagiri' },
+            { firstName: 'Rajesh', lastName: 'Kumar' },
+            { firstName: 'Suresh', lastName: 'Yadav' },
+            { firstName: 'Mahesh', lastName: 'Verma' },
+            { firstName: 'Raj', lastName: 'Patel' },
+            { firstName: 'Rajesh', lastName: 'Kumar' },
+            { firstName: 'Suresh', lastName: 'Yadav' },
         ];
 
         const selectedName = employeeNames[Math.floor(Math.random() * employeeNames.length)];
@@ -359,6 +367,7 @@ test.describe.serial(
         test(
             'TC14 - Submit mandatory documents and click Submit button',
             async ({ }, testInfo) => {
+                test.setTimeout(240000);
                 const files = createOnboardingFiles(testInfo.outputDir);
 
                 await contract.uploadMandatoryDocuments(
@@ -709,18 +718,18 @@ test.describe.serial(
         test(
             'TC31 - Prospective contract employee should login with regenerated credentials',
             async () => {
+                test.setTimeout(180000);
+
                 if (!yopmailPage) {
                     yopmailPage = await contract.openYopmail();
                 }
 
-                await contract.openYopmailInbox(
-                    yopmailPage,
-                    employee.email
-                );
-
+                await yopmailPage.bringToFront();
                 const credentials =
                     await contract.getContractOfferCredentials(
-                        yopmailPage
+                        yopmailPage,
+                        onboardingPassword,
+                        employee.email
                     );
 
                 onboardingUsername = credentials.username;
@@ -732,16 +741,18 @@ test.describe.serial(
                             yopmailPage
                         );
                 } else {
-                    await onboardingPage.goto(
-                        credentials.loginUrl || onboardingPage.url()
-                    ).catch(() => { });
+                    await onboardingPage.bringToFront();
+                    const usernameInput = onboardingPage.getByRole('textbox', { name: 'Username*' });
+                    if (!(await usernameInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+                        const origin = new URL(onboardingPage.url()).origin;
+                        await onboardingPage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' }).catch(() => { });
+                    }
                 }
 
                 await contract.loginProspectiveEmployee(
                     onboardingPage,
                     onboardingUsername,
-                    onboardingPassword,
-                    yopmailPage
+                    onboardingPassword
                 );
 
                 console.log(
@@ -903,13 +914,24 @@ test.describe.serial(
         test(
             'TC40 - Prospective contract employee should login to onboarding portal',
             async () => {
-                await onboardingPage.bringToFront();
+                test.setTimeout(180000);
+
+                if (!yopmailPage) {
+                    yopmailPage = await contract.openYopmail();
+                }
+
+                const portal = await contract.openPreOnboardingFromLatestMail(
+                    yopmailPage,
+                    employee.email
+                );
+                onboardingPage = portal.page;
+                onboardingUsername = portal.username;
+                onboardingPassword = portal.password;
 
                 await contract.loginProspectiveEmployee(
                     onboardingPage,
                     onboardingUsername,
-                    onboardingPassword,
-                    yopmailPage
+                    onboardingPassword
                 );
 
                 console.log(

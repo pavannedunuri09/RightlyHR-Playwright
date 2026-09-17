@@ -362,7 +362,7 @@ export class OnboardingApplicationPage {
         name,
         this.filePathForDocument(name, pdfPath, imagePath),
         this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
+        this.alternateFilePathForDocument(name, imagePath, pdfPath),
       );
       uploaded += 1;
     }
@@ -394,7 +394,7 @@ export class OnboardingApplicationPage {
         name,
         this.resolveFilePathForDocument(name, pdfPath, imagePath, perDocFiles),
         this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
+        this.alternateFilePathForDocument(name, imagePath, pdfPath),
       );
     }
 
@@ -511,8 +511,14 @@ export class OnboardingApplicationPage {
     return randomDocumentNumber(documentName);
   }
 
-  private alternateFilePathForDocument(documentName: string, imagePath: string) {
-    return /resume|driving\s*l/i.test(documentName) ? imagePath : undefined;
+  private alternateFilePathForDocument(documentName: string, imagePath: string, pdfPath?: string) {
+    if (/resume|driving\s*l/i.test(documentName)) {
+      return imagePath;
+    }
+    if (/pan|aadha?r/i.test(documentName)) {
+      return pdfPath;
+    }
+    return undefined;
   }
 
   private async fillDocumentNumberIfRequired(
@@ -525,9 +531,12 @@ export class OnboardingApplicationPage {
       return;
     }
 
-    const value = documentNumber ?? this.documentNumberForDocument(documentName);
+    let value = documentNumber ?? this.documentNumberForDocument(documentName);
     if (!value) {
       return;
+    }
+    if (/pan/i.test(documentName)) {
+      value = value.toUpperCase();
     }
     await numberInput.click();
     await numberInput.fill('');
@@ -576,7 +585,9 @@ export class OnboardingApplicationPage {
 
   private async openDocumentUpload(documentName: string) {
     await this.closeUploadDialog();
-    await this.page.bringToFront();
+    if (!this.page.isClosed()) {
+      await this.page.bringToFront().catch(() => {});
+    }
     await this.goToDocumentsIfNeeded();
 
     const row = this.documentRow(documentName);
@@ -610,6 +621,11 @@ export class OnboardingApplicationPage {
     await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
   }
 
+  private async documentIsComplete(documentName: string) {
+    const status = await this.getDocumentRowStatus(documentName).catch(() => null);
+    return Boolean(status && this.isDocumentComplete(status));
+  }
+
   private async uploadDocument(
     documentName: string,
     filePath: string,
@@ -618,8 +634,7 @@ export class OnboardingApplicationPage {
   ) {
     const row = this.documentRow(documentName);
     await row.scrollIntoViewIfNeeded().catch(() => {});
-    const current = await this.getDocumentRowStatus(documentName);
-    if (current && this.isDocumentComplete(current)) {
+    if (await this.documentIsComplete(documentName)) {
       console.log(`${documentName} already uploaded, reusing it`);
       return;
     }
@@ -629,6 +644,10 @@ export class OnboardingApplicationPage {
 
     for (const candidate of candidates) {
       try {
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`${documentName} already uploaded, reusing it`);
+          return;
+        }
         if (!fs.existsSync(candidate)) {
           throw new Error(`ENOENT: no such file or directory, stat '${candidate}'`);
         }
@@ -655,19 +674,27 @@ export class OnboardingApplicationPage {
         await expect(upload).toBeEnabled({ timeout: 15000 });
         await upload.click();
 
-        if (await this.waitForUploadSuccess(scope, row)) {
+        const toastSeen = await this.waitForUploadSuccess(scope, row);
+        await this.closeUploadDialog();
+        if (toastSeen || await this.waitForRowComplete(documentName)) {
           console.log(`Uploaded ${documentName}`);
-          await this.closeUploadDialog();
-          await this.page.waitForTimeout(500);
           return;
         }
 
         lastError = `${documentName} upload did not succeed with ${pathBasename(candidate)}`;
-        await this.closeUploadDialog();
       } catch (error) {
         lastError = `${documentName} upload failed with ${pathBasename(candidate)}: ${error}`;
-        await this.closeUploadDialog();
+        await this.closeUploadDialog().catch(() => {});
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`Uploaded ${documentName}`);
+          return;
+        }
       }
+    }
+
+    if (await this.documentIsComplete(documentName)) {
+      console.log(`Uploaded ${documentName}`);
+      return;
     }
 
     const scope = await this.activeUploadScope();
@@ -675,8 +702,19 @@ export class OnboardingApplicationPage {
     throw new Error(`${lastError}. Dialog: ${dialogText.replace(/\s+/g, ' ').trim()}`);
   }
 
+  private async waitForRowComplete(documentName: string, timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.documentIsComplete(documentName)) {
+        return true;
+      }
+      await this.page.waitForTimeout(400);
+    }
+    return this.documentIsComplete(documentName);
+  }
+
   private async waitForUploadSuccess(scope: Locator, row: Locator) {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 12000;
     while (Date.now() < deadline) {
       const scopeText = await scope.innerText().catch(() => '');
       if (/Document uploaded successfully|uploaded successfully/i.test(scopeText)) {
@@ -688,6 +726,9 @@ export class OnboardingApplicationPage {
       await row.scrollIntoViewIfNeeded().catch(() => {});
       const rowText = await row.innerText().catch(() => '');
       if (/Waiting for submission/i.test(rowText) && !/Rejected/i.test(rowText)) {
+        return true;
+      }
+      if (!(await this.hasOpenUploadUi()) && /Waiting for submission/i.test(rowText)) {
         return true;
       }
       await this.page.waitForTimeout(400);

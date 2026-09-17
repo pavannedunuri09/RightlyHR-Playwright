@@ -33,7 +33,8 @@ export function randomPan(): string {
   const pick = (count: number) =>
     Array.from({ length: count }, () => letters[Math.floor(Math.random() * 26)]).join('');
   const digits = String(Math.floor(1000 + Math.random() * 9000));
-  return `${pick(5)}${digits}${pick(1)}`;
+  // Individual PAN: 4th character must be P (Person).
+  return `${pick(3)}P${pick(1)}${digits}${pick(1)}`;
 }
 
 export function randomAadhaar(): string {
