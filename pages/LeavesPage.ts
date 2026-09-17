@@ -4,6 +4,7 @@ import { GENERAL_LEAVE_CATEGORY, SICK_LEAVE_CATEGORY } from './LeaveCategoryPage
 
 export type LeaveEntitlementExpectation = {
   entitledBalance?: string;
+  entitledTotal?: string;
   frequency: string;
   booked?: string;
   processed?: string;
@@ -91,32 +92,46 @@ export function weekendDateFromOffset(startOffset: number, jsDay: 0 | 6): LeaveD
   return null;
 }
 
+function shuffle<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
+  }
+  return copy;
+}
+
+function isWeekendInput(input: string) {
+  const [year, month, day] = input.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const weekday = date.getDay();
+  return weekday === 0 || weekday === 6;
+}
+
 export function leaveOffsetCandidates(preferFuture = true, nearOffset?: number) {
   const { minOffset, maxOffset } = leaveDateRange();
-  const offsets: number[] = [];
-  if (preferFuture) {
-    for (let offset = 1; offset <= maxOffset; offset += 1) {
-      offsets.push(offset);
-    }
-    for (let offset = -1; offset >= minOffset; offset -= 1) {
-      offsets.push(offset);
-    }
-  } else {
-    for (let offset = -1; offset >= minOffset; offset -= 1) {
-      offsets.push(offset);
-    }
-    for (let offset = 1; offset <= maxOffset; offset += 1) {
-      offsets.push(offset);
-    }
+  const future: number[] = [];
+  const past: number[] = [];
+  for (let offset = 1; offset <= maxOffset; offset += 1) {
+    future.push(offset);
   }
+  for (let offset = -1; offset >= minOffset; offset -= 1) {
+    past.push(offset);
+  }
+
   if (nearOffset !== undefined) {
+    const offsets = [...future, ...past];
     offsets.sort((left, right) => Math.abs(left - nearOffset) - Math.abs(right - nearOffset));
+    return offsets;
   }
-  return offsets;
+
+  return shuffle(preferFuture ? future : past);
 }
 
 const DEFAULT_LEAVE_SESSIONS: LeaveSession[] = ['full', 'first', 'second'];
 let nextLeaveSessionIndex = 0;
+const claimedLeaveSessions = new Map<string, BookedLeaveState>();
+const DATE_ATTEMPT_POOL = 5;
 
 export function nextDefaultLeaveSession(): LeaveSession {
   const session = DEFAULT_LEAVE_SESSIONS[nextLeaveSessionIndex % DEFAULT_LEAVE_SESSIONS.length];
@@ -142,6 +157,60 @@ function canBookSession(state: BookedLeaveState | undefined, session: LeaveSessi
     return !state.hasFirst;
   }
   return !state.hasSecond;
+}
+
+function mergeClaimedInto(booked: Map<string, BookedLeaveState>) {
+  for (const [input, state] of claimedLeaveSessions) {
+    const existing = booked.get(input) || emptyBookedState();
+    booked.set(input, {
+      hasFull: existing.hasFull || state.hasFull,
+      hasFirst: existing.hasFirst || state.hasFirst,
+      hasSecond: existing.hasSecond || state.hasSecond,
+    });
+  }
+}
+
+function claimLeaveSession(input: string, session: LeaveSession) {
+  const state = claimedLeaveSessions.get(input) || emptyBookedState();
+  if (session === 'full') {
+    state.hasFull = true;
+  } else if (session === 'first') {
+    state.hasFirst = true;
+  } else {
+    state.hasSecond = true;
+  }
+  claimedLeaveSessions.set(input, state);
+}
+
+export function randomLeaveDate(preferFuture = true, exclude: Set<string> = new Set()): LeaveDateParts {
+  const seen = new Set<string>();
+  for (const offset of leaveOffsetCandidates(preferFuture)) {
+    const candidate = leaveDateFromOffset(offset);
+    const daysOut = daysFromToday(candidate.input);
+    if (daysOut < -MAX_LEAVE_PAST_DAYS || daysOut > MAX_LEAVE_FUTURE_DAYS) {
+      continue;
+    }
+    if (isWeekendInput(candidate.input) || seen.has(candidate.input) || exclude.has(candidate.input)) {
+      continue;
+    }
+    if (!canBookSession(claimedLeaveSessions.get(candidate.input), 'full')) {
+      continue;
+    }
+    seen.add(candidate.input);
+    return candidate;
+  }
+  throw new Error(`Could not find a random weekday within ±${MAX_LEAVE_FUTURE_DAYS} days`);
+}
+
+export function randomEndBeforeStartDates() {
+  const first = randomLeaveDate(true);
+  const second = randomLeaveDate(false, new Set([first.input]));
+  if (first.input === second.input) {
+    throw new Error('Could not pick two distinct leave dates');
+  }
+  return first.input > second.input
+    ? { start: first, end: second }
+    : { start: second, end: first };
 }
 
 export class LeavesPage {
@@ -182,6 +251,8 @@ export class LeavesPage {
   readonly approveConfirmButton: Locator;
   readonly bulkRejectButton: Locator;
   readonly successRecordsHeader: Locator;
+  readonly approvedToast: Locator;
+  readonly processedToast: Locator;
   readonly duplicateRequestMessage: Locator;
   readonly weekendRequestMessage: Locator;
   readonly sessionConflictMessage: Locator;
@@ -240,6 +311,8 @@ export class LeavesPage {
     this.approveConfirmButton = page.getByRole('button', { name: 'Approve', exact: true });
     this.bulkRejectButton = page.getByRole('button', { name: 'Reject', exact: true });
     this.successRecordsHeader = page.getByRole('columnheader', { name: 'Success Records' });
+    this.approvedToast = page.getByText(/leave request[s]?\s+Approved|Approved successfully|successfully approved/i);
+    this.processedToast = page.getByText(/leave request[s]?\s+Processed|Processed successfully|successfully processed/i);
     this.duplicateRequestMessage = page.getByText(/already exist|already applied|already booked|duplicate/i);
     this.weekendRequestMessage = page.getByText(/weekend|weekly off|week off|not a working day|non[- ]working|off day/i);
     this.sessionConflictMessage = page.getByText(/already a half day is applied|already exist|already applied|already booked|duplicate/i);
@@ -288,10 +361,10 @@ export class LeavesPage {
   }
 
   leaveEntitlementBlock(categoryName: string) {
+    const escaped = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
     return this.page
       .locator('div')
-      .filter({ has: this.page.getByText(categoryName, { exact: true }) })
-      .filter({ hasText: /Booked/i })
+      .filter({ hasText: new RegExp(`^${escaped}\\s*Booked\\s*\\d`, 'i') })
       .filter({ hasText: /\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?/ })
       .last();
   }
@@ -332,12 +405,26 @@ export class LeavesPage {
     await this.timeOffLeavesTab.waitFor({ state: 'visible', timeout: 15000 });
   }
 
+  async waitForLeavesPageReady() {
+    await this.requestLeaveButton.waitFor({ state: 'visible', timeout: 20000 });
+    const skeleton = this.page.locator('.p-skeleton').first();
+    if (await skeleton.isVisible().catch(() => false)) {
+      await skeleton.waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {});
+    }
+    await this.waitingForApprovalTab.waitFor({ state: 'visible', timeout: 30000 });
+  }
+
   async openLeavesTab() {
+    await this.closeRequestDialogIfOpen();
+    if (/\/time-off\/leaves/i.test(this.page.url()) && (await this.requestLeaveButton.isVisible().catch(() => false))) {
+      await this.waitForLeavesPageReady();
+      return;
+    }
+
     await this.openTimeOffMenu();
     await this.timeOffLeavesTab.click();
     await this.page.waitForURL(/\/time-off\/leaves/i, { timeout: 15000 });
-    await this.requestLeaveButton.waitFor({ state: 'visible', timeout: 15000 });
-    await this.waitingForApprovalTab.waitFor({ state: 'visible', timeout: 15000 });
+    await this.waitForLeavesPageReady();
   }
 
   async openFromDashboard() {
@@ -386,10 +473,25 @@ export class LeavesPage {
     expect(blockText).toContain(categoryName);
     expect(blockText).toContain(expectation.frequency);
 
+    const afterProcessed = normalizedBlockText.split(/Processed/i).pop() || normalizedBlockText;
+    const balanceMatch = afterProcessed.match(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
+    expect(balanceMatch, `Expected remaining/total balance on the ${categoryName} card`).toBeTruthy();
+    expect(blockText).toMatch(/Booked\s*\d/i);
+    expect(blockText).toMatch(/Processed\s*\d/i);
+
+    if (expectation.entitledTotal) {
+      expect(balanceMatch![2]).toBe(String(expectation.entitledTotal).replace(/\s/g, ''));
+    }
+
     if (expectation.entitledBalance) {
-      expect(normalizedBlockText).toContain(expectation.entitledBalance.replace(/\s/g, ''));
-    } else {
-      expect(normalizedBlockText).toMatch(/\d+(?:\.\d+)?\/\d+(?:\.\d+)?/);
+      const expected = expectation.entitledBalance.replace(/\s/g, '');
+      const parts = expected.split('/');
+      if (parts.length === 2 && parts[0] === parts[1]) {
+        expect(balanceMatch![2]).toBe(parts[1]);
+        expect(Number(balanceMatch![1])).toBeLessThanOrEqual(Number(parts[1]));
+      } else {
+        expect(normalizedBlockText).toContain(expected);
+      }
     }
 
     if (expectation.booked !== undefined) {
@@ -484,7 +586,7 @@ export class LeavesPage {
   }
 
   async openFilledRequestForm(categoryName: string) {
-    const date = leaveDateFromOffset(14);
+    const date = randomLeaveDate(true);
     await this.openRequestLeaveDialog();
     await this.selectLeaveCategory(categoryName);
     await this.fillStartDate(date.input);
@@ -684,15 +786,19 @@ export class LeavesPage {
     return dates;
   }
 
-  async collectBookedLeaveState() {
-    const booked = new Map<string, BookedLeaveState>();
-    const tabs = [this.waitingForApprovalTab, this.approvedTab, this.processedTab];
+  async collectBookedStateFromOpenTable(booked: Map<string, BookedLeaveState>) {
+    const columnIndex = await this.startDateColumnIndex();
+    const next = this.page.locator('.p-paginator-next').last();
+    const first = this.page.locator('.p-paginator-first').last();
+    if (await first.isVisible().catch(() => false)) {
+      const firstClass = (await first.getAttribute('class')) || '';
+      if (!firstClass.includes('p-disabled') && !(await first.isDisabled().catch(() => false))) {
+        await first.click();
+        await this.page.waitForTimeout(400);
+      }
+    }
 
-    for (const tab of tabs) {
-      await tab.click();
-      await this.page.waitForTimeout(600);
-      await this.expandTablePageSize();
-      const columnIndex = await this.startDateColumnIndex();
+    for (let pageIndex = 0; pageIndex < 25; pageIndex += 1) {
       const rows = this.page.locator('table tbody tr').filter({ hasNotText: /No Data Found/i });
       const rowCount = await rows.count();
       for (let index = 0; index < rowCount; index += 1) {
@@ -722,8 +828,31 @@ export class LeavesPage {
         }
         booked.set(input, state);
       }
+
+      if (!(await next.isVisible().catch(() => false))) {
+        break;
+      }
+      const className = (await next.getAttribute('class')) || '';
+      if (className.includes('p-disabled') || (await next.isDisabled().catch(() => false))) {
+        break;
+      }
+      await next.click();
+      await this.page.waitForTimeout(500);
+    }
+  }
+
+  async collectBookedLeaveState() {
+    const booked = new Map<string, BookedLeaveState>();
+    const tabs = [this.waitingForApprovalTab, this.approvedTab, this.processedTab];
+
+    for (const tab of tabs) {
+      await tab.click();
+      await this.page.waitForTimeout(600);
+      await this.expandTablePageSize();
+      await this.collectBookedStateFromOpenTable(booked);
     }
 
+    mergeClaimedInto(booked);
     await this.waitingForApprovalTab.click();
     return booked;
   }
@@ -814,11 +943,14 @@ export class LeavesPage {
     count: number,
     booked: Map<string, BookedLeaveState>,
     options: RequestLeaveOptions,
+    excludeInputs: Set<string> = new Set(),
   ) {
     const preferFuture = options.preferFuture ?? true;
     const session = options.session ?? nextDefaultLeaveSession();
     const found: LeaveDateParts[] = [];
     const seen = new Set<string>();
+    const bookedState = new Map(booked);
+    mergeClaimedInto(bookedState);
 
     for (const offset of leaveOffsetCandidates(preferFuture, options.nearOffset)) {
       const candidate = leaveDateFromOffset(offset);
@@ -826,7 +958,18 @@ export class LeavesPage {
       if (daysOut < -MAX_LEAVE_PAST_DAYS || daysOut > MAX_LEAVE_FUTURE_DAYS) {
         continue;
       }
-      if (seen.has(candidate.input) || !canBookSession(booked.get(candidate.input), session)) {
+      if (options.nearOffset === undefined) {
+        if (preferFuture && daysOut < 1) {
+          continue;
+        }
+        if (!preferFuture && daysOut > -1) {
+          continue;
+        }
+      }
+      if (isWeekendInput(candidate.input) || seen.has(candidate.input) || excludeInputs.has(candidate.input)) {
+        continue;
+      }
+      if (!canBookSession(bookedState.get(candidate.input), session)) {
         continue;
       }
       seen.add(candidate.input);
@@ -842,6 +985,12 @@ export class LeavesPage {
       );
     }
     return found;
+  }
+
+  async pickRandomAvailableLeaveDate(preferFuture = true, session: LeaveSession = 'full') {
+    const booked = await this.collectBookedLeaveState();
+    const dates = this.findAvailableLeaveDates(1, booked, { preferFuture, session });
+    return dates[0];
   }
 
   async requestAvailableLeave(
@@ -900,23 +1049,34 @@ export class LeavesPage {
       const categories = await this.categoriesWithBalance(options.categoryNames);
       let submitted = false;
 
+      const excludeInputs = new Set(created.map((date) => date.input));
+      for (const attemptKey of tried) {
+        excludeInputs.add(attemptKey.split(':')[0]);
+      }
+
       for (const requestSession of sessionsToTry) {
         let candidates: LeaveDateParts[] = [];
         try {
-          candidates = this.findAvailableLeaveDates(1, booked, {
-            ...options,
-            session: requestSession,
-          });
+          candidates = this.findAvailableLeaveDates(
+            DATE_ATTEMPT_POOL,
+            booked,
+            {
+              ...options,
+              session: requestSession,
+            },
+            excludeInputs,
+          );
         } catch {
           continue;
         }
 
         for (const date of candidates) {
           const attemptKey = `${date.input}:${requestSession}`;
-          if (tried.has(attemptKey)) {
+          if (tried.has(attemptKey) || excludeInputs.has(date.input)) {
             continue;
           }
           tried.add(attemptKey);
+          excludeInputs.add(date.input);
 
           for (const categoryName of categories) {
             if (
@@ -928,6 +1088,7 @@ export class LeavesPage {
                 requestSession,
               )
             ) {
+              claimLeaveSession(date.input, requestSession);
               created.push({ ...date, categoryName, session: requestSession });
               submitted = true;
               break;
@@ -996,20 +1157,57 @@ export class LeavesPage {
       .catch(() => {});
   }
 
-  async closeSuccessDialog() {
-    await this.successRecordsHeader.waitFor({ state: 'visible', timeout: 15000 });
-    await this.page.keyboard.press('Escape');
-    const dialog = this.requestDialog();
-    await dialog.waitFor({ state: 'hidden', timeout: 10000 }).catch(async () => {
+  async waitForActionDialogToSettle() {
+    const success = this.successRecordsHeader
+      .or(this.approvedToast)
+      .or(this.processedToast)
+      .or(this.page.getByRole('dialog').getByText(/^Summary$/i));
+    const loadingButton = this.requestDialog().getByRole('button', { name: /Loading/i });
+
+    await expect.poll(async () => {
+      if (await success.first().isVisible().catch(() => false)) {
+        return 'done';
+      }
+      if (await loadingButton.isVisible().catch(() => false)) {
+        return 'loading';
+      }
+      if (!(await this.requestDialog().isVisible().catch(() => false))) {
+        return 'done';
+      }
+      return 'open';
+    }, { timeout: 45000 }).toBe('done');
+  }
+
+  async closeSuccessDialog(workedDates: string[] = []) {
+    await this.waitForActionDialogToSettle();
+
+    const successFeedback = this.successRecordsHeader
+      .or(this.approvedToast)
+      .or(this.processedToast)
+      .or(this.page.getByText(/Success Records?/i));
+
+    if (await successFeedback.first().isVisible().catch(() => false)) {
       await this.page.keyboard.press('Escape');
-      await dialog.waitFor({ state: 'hidden', timeout: 5000 });
-    });
+      const dialog = this.requestDialog();
+      await dialog.waitFor({ state: 'hidden', timeout: 10000 }).catch(async () => {
+        await this.page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+      });
+    }
+
+    if (workedDates.length > 0 && (await this.requestDialog().isVisible().catch(() => false)) === false) {
+      await this.waitForRequestRowsHidden(workedDates).catch(() => {});
+    }
   }
 
   requestRow(workedDate: string) {
-    const dateLabel = workedDate.replace(/,$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dateLabel = workedDate.replace(/,$/, '').trim();
+    const monthDay = dateLabel.match(/^([A-Za-z]+)\s+(\d{1,2})$/);
+    const pattern = monthDay
+      ? new RegExp(`^${monthDay[1]}\\s+0?${Number(monthDay[2])}(,|\\s|$)`, 'i')
+      : new RegExp(`^${dateLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(,|\\s|$)`);
     return this.page.getByRole('row').filter({
-      has: this.page.getByRole('cell', { name: new RegExp(`^${dateLabel}(,|$)`) }),
+      has: this.page.getByRole('cell', { name: pattern }),
     }).filter({ hasText: EMPLOYEE_NAME });
   }
 
@@ -1051,27 +1249,45 @@ export class LeavesPage {
   }
 
   async waitForRequestRows(workedDates: string[]) {
+    await this.expandTablePageSize();
+    const search = this.page.getByPlaceholder(/Search by employee/i);
+    if (await search.isVisible().catch(() => false)) {
+      await search.fill(EMPLOYEE_NAME.split(' ')[0]);
+      await this.page.waitForTimeout(800);
+    }
     for (const workedDate of workedDates) {
-      await this.requestRow(workedDate).waitFor({ state: 'visible', timeout: 15000 });
+      await this.requestRow(workedDate).first().waitFor({ state: 'visible', timeout: 20000 });
+    }
+  }
+
+  async waitForRequestRowsHidden(workedDates: string[]) {
+    for (const workedDate of workedDates) {
+      await this.requestRow(workedDate).waitFor({ state: 'hidden', timeout: 20000 });
     }
   }
 
   async approveAtCurrentQueue(workedDates: string[]) {
     await this.waitForRequestRows(workedDates);
     await this.selectRequests(workedDates);
+    const planned = workedDates.some((cell) => {
+      const input = workedDateToInput(cell);
+      return input ? daysFromToday(input) < 0 : false;
+    })
+      ? 'No'
+      : 'Yes';
     if (await this.processButton.isVisible().catch(() => false)) {
       await this.processSelected();
     } else {
-      await this.approveSelected();
+      await this.approveSelected(planned);
     }
-    await this.closeSuccessDialog();
+    await this.closeSuccessDialog(workedDates);
   }
 
   async processAtCurrentQueue(workedDates: string[]) {
     await this.waitForRequestRows(workedDates);
     await this.selectRequests(workedDates);
     await this.processSelected();
-    await this.closeSuccessDialog();
+    await this.closeSuccessDialog(workedDates);
   }
 
   async rejectAtCurrentQueue(workedDates: string[]) {
@@ -1153,6 +1369,7 @@ export class LeavesPage {
     const approveConfirm = dialog.getByRole('button', { name: 'Approve', exact: true });
     await expect(approveConfirm).toBeEnabled({ timeout: 15000 });
     await approveConfirm.click();
+    await this.waitForActionDialogToSettle();
   }
 
   async processSelected() {
@@ -1170,6 +1387,7 @@ export class LeavesPage {
     } else if (await approveConfirm.isVisible().catch(() => false)) {
       await approveConfirm.click();
     }
+    await this.waitForActionDialogToSettle();
   }
 
   async rejectSelected() {
