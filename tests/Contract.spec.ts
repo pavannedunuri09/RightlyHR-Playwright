@@ -347,10 +347,10 @@ test.describe.serial(
         test(
             'TC13 - Submit mandatory fields and click Next button',
             async () => {
-                await onboardingPage.getByRole('button', { name: 'Go to Application' }).click();
-
                 await contract.fillPersonalDetails(
-                    onboardingPage
+                    onboardingPage,
+                    employee.firstName,
+                    employee.lastName,
                 );
 
                 console.log(

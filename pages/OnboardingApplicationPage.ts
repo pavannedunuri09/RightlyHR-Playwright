@@ -1,10 +1,11 @@
 import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
-
-const FEMALE_NAMES = new Set([
-  'Kavya', 'Meera', 'Sneha', 'Pooja', 'Anjali', 'Divya', 'Isha', 'Neha', 'Shreya', 'Nandini',
-  'Sindhuja', 'Priya', 'Ananya', 'Lakshmi', 'Aishwarya',
-]);
+import {
+  genderSalutationForFirstName,
+  randomDocumentNumber,
+  randomMobile,
+  randomNumericId,
+} from '../tests/fixtures/randomTestData';
 
 const CITIES = [
   { city: 'Hyderabad', state: 'Telangana', zip: '500012' },
@@ -100,9 +101,16 @@ export class OnboardingApplicationPage {
       ? this.page.locator(`#${controlsId}`)
       : this.page.locator('.p-select-overlay').last();
     await expect(panel).toBeVisible({ timeout: 5000 });
-    await panel.getByRole('option', { name: optionName, exact: true }).first().click();
+
+    const option = panel.getByRole('option', { name: optionName, exact: true })
+      .or(panel.locator('[role="option"]').filter({ hasText: new RegExp(`^\\s*${optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) }));
+    await option.first().click();
     await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
-    await expect(field).toContainText(optionName, { timeout: 5000 });
+
+    const selectedText = ((await field.innerText().catch(() => '')) || '').trim();
+    if (!selectedText.includes(optionName)) {
+      await expect(field).toContainText(optionName, { timeout: 5000 });
+    }
   }
 
   private async selectMobileCountryCode() {
@@ -191,19 +199,18 @@ export class OnboardingApplicationPage {
   }
 
   static expectedPersonalDefaults(firstName: string) {
-    const female = FEMALE_NAMES.has(firstName);
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
     return {
-      gender: female ? 'Female' : 'Male',
-      salutation: female ? 'Miss.' : 'Mr.',
+      gender,
+      salutation,
       middleName: '',
       designation: 'Front End Developer',
     };
   }
 
   async fillMandatoryIndianDetails(firstName: string, lastName: string) {
-    const female = FEMALE_NAMES.has(firstName);
     const place = CITIES[Math.floor(Math.random() * CITIES.length)];
-    const mobile = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const mobile = randomMobile();
     const plot = Math.floor(Math.random() * 80) + 10;
     const details = {
       ...OnboardingApplicationPage.expectedPersonalDefaults(firstName),
@@ -222,8 +229,7 @@ export class OnboardingApplicationPage {
       await this.lastNameInput.fill(lastName);
     }
 
-    const salutation = female ? 'Miss.' : 'Mr.';
-    const gender = female ? 'Female' : 'Male';
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
 
     await this.selectComboboxOption(this.genderCombobox, gender);
     const salutationText = ((await this.salutationCombobox.innerText().catch(() => '')) || '').trim();
@@ -467,16 +473,7 @@ export class OnboardingApplicationPage {
   }
 
   private documentNumberForDocument(documentName: string) {
-    if (/pan/i.test(documentName)) {
-      return randomPan();
-    }
-    if (/aadha?r/i.test(documentName)) {
-      return randomAadhaar();
-    }
-    if (/driving\s*l/i.test(documentName)) {
-      return randomNumericId(10);
-    }
-    return randomNumericId(10);
+    return randomDocumentNumber(documentName) ?? randomNumericId(12);
   }
 
   private alternateFilePathForDocument(documentName: string, imagePath: string) {
@@ -655,19 +652,4 @@ export class OnboardingApplicationPage {
 
 function pathBasename(filePath: string) {
   return filePath.split(/[/\\]/).pop() ?? filePath;
-}
-
-function randomPan() {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const pick = (count: number) => Array.from({ length: count }, () => letters[Math.floor(Math.random() * 26)]).join('');
-  const digits = String(Math.floor(1000 + Math.random() * 9000));
-  return `${pick(5)}${digits}${pick(1)}`;
-}
-
-function randomAadhaar() {
-  return `8${Array.from({ length: 11 }, () => Math.floor(Math.random() * 10)).join('')}`;
-}
-
-function randomNumericId(length: number) {
-  return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
 }

@@ -8,6 +8,7 @@ import { PreOnboardingPostOfferPage } from './PreOnboardingPostOfferPage';
 import { PreOnboardingOfferLetterPage } from './PreOnboardingOfferLetterPage';
 import { createOnboardingFiles } from '../tests/fixtures/onboardingFiles';
 import { EmployeeOnboardingInfoPage } from './EmployeeOnboardingInfoPage';
+import { OnboardingApplicationPage } from './OnboardingApplicationPage';
 
 export type ContractEmployee = {
     firstName: string;
@@ -20,9 +21,17 @@ export class Contract {
     createdEmployeeName = '';
     createdEmployeeEmail = '';
 
-    private createRandomUploadFile(documentName: string): string {
-        const fileName = `${documentName}-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`;
+    private createRandomUploadFile(documentName: string, extension: 'png' | 'pdf' = 'png'): string {
+        const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+        const fileName = `${documentName}-${suffix}.${extension}`;
         const filePath = path.join(os.tmpdir(), fileName);
+
+        if (extension === 'pdf') {
+            const pdfContent = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj\n4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n5 0 obj<</Length 44>>stream\nBT /F1 12 Tf 72 720 Td (${documentName} ${suffix}) Tj ET\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000343 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n435\n%%EOF\n`;
+            fs.writeFileSync(filePath, Buffer.concat([Buffer.from(pdfContent), Buffer.alloc(2048, 0)]));
+            return filePath;
+        }
+
         const onePixelPng = Buffer.from(
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
             'base64',
@@ -210,26 +219,13 @@ export class Contract {
 
         await this.personalEmailInput.fill(employee.email);
 
-        await this.designationDropdown.click();
-        await this.selectOpenOption('Front End Developer');
+        await this.selectDesignation('qa', 'QA Tester');
 
         await this.employmentTypeDropdown.click();
-        await this.selectFirstOpenOption();
+        await this.page.getByText('Fresher', { exact: true }).click();
 
-        await this.locationDropdown.click();
-        await this.selectOpenOption('Hyderabad');
-
-        await this.page.waitForTimeout(1000);
-
-        await expect(this.sublocationDropdown).toBeEnabled({
-            timeout: 15000
-        });
-        await this.sublocationDropdown.click();
-        await this.selectFirstOpenOption();
-
-        await this.page.getByRole('option', {
-            name: /Jai Hind Enclave Building/i,
-        }).first().click();
+        await this.selectLocationInDialog('Hyderabad');
+        await this.selectSublocation('Jai Hind Enclave Building');
     }
 
     async clickAdd() {
@@ -256,6 +252,25 @@ export class Contract {
         });
     }
 
+    private async selectDesignation(searchTerm: string, label: string) {
+        const dialog = this.page.getByRole('dialog');
+        const trigger = dialog.locator('[id^="pn_id_"]')
+            .getByRole('button', { name: 'dropdown trigger' }).first();
+
+        if (await trigger.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await trigger.click();
+        } else {
+            await this.designationDropdown.click();
+        }
+
+        const searchbox = this.page.getByRole('searchbox');
+        if (await searchbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await searchbox.fill(searchTerm);
+        }
+
+        await this.page.getByRole('option', { name: label }).click();
+    }
+
     private async selectOpenOption(name: string) {
         const namedOption = this.page.getByRole('option', { name: new RegExp(name, 'i') }).first();
         if (await namedOption.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -266,8 +281,36 @@ export class Contract {
         await this.selectFirstOpenOption();
     }
 
+    private async selectLocationInDialog(label: string) {
+        const dialog = this.page.getByRole('dialog');
+        const locationCombo = dialog.getByRole('combobox', { name: 'Please select location' })
+            .or(dialog.getByRole('combobox', { name: label }));
+        await locationCombo.first().click();
+        await this.page.getByRole('option', { name: label }).click();
+
+        await this.sublocationDropdown.waitFor({ state: 'visible', timeout: 10000 });
+        await expect(this.sublocationDropdown).toBeEnabled({ timeout: 15000 });
+        await this.page.waitForTimeout(400);
+    }
+
+    private async selectSublocation(label: string) {
+        await expect(this.sublocationDropdown).toBeEnabled({ timeout: 15000 });
+
+        await this.page.locator('#sublocation')
+            .getByRole('button', { name: 'dropdown trigger' })
+            .click();
+
+        await this.page.locator('span').filter({ hasText: label }).click();
+    }
 
     private async selectFirstOpenOption() {
+        const listboxOption = this.page.getByRole('listbox').last().getByRole('option')
+            .filter({ hasNotText: /select|please/i }).first();
+        if (await listboxOption.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await listboxOption.click();
+            return;
+        }
+
         const option = this.page.getByRole('option')
             .filter({ hasNotText: /select|please/i })
             .first();
@@ -519,82 +562,47 @@ export class Contract {
     // TC13
     // --------------------------------------------------
 
+    private getPreonboardingUrl() {
+        const base = process.env.BASE_URL || '';
+        if (/snad/i.test(base)) {
+            return 'https://preonboardingqasnad.onpremise.cluster.rightlyhr.com/';
+        }
+        return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com/';
+    }
+
     async fillPersonalDetails(
-        onboardingPage: Page
+        onboardingPage: Page,
+        firstName: string,
+        lastName: string,
     ) {
         const goToApplicationButton = onboardingPage.getByRole('button', { name: 'Go to Application' });
         if (await goToApplicationButton.isVisible({ timeout: 5000 }).catch(() => false)) {
             await goToApplicationButton.click();
+            await onboardingPage.waitForTimeout(1500);
         }
 
-        await onboardingPage.getByRole(
-            'combobox',
-            { name: 'Please select salutation' }
-        ).waitFor({ state: 'visible', timeout: 20000 });
+        if (!/preonboarding/i.test(onboardingPage.url())) {
+            await onboardingPage.goto(this.getPreonboardingUrl(), { waitUntil: 'domcontentloaded' });
+            await onboardingPage.waitForTimeout(1500);
+        }
 
-        await onboardingPage.getByRole(
-            'combobox',
-            { name: 'Please select salutation' }
-        ).click();
+        const application = new OnboardingApplicationPage(onboardingPage);
+        await application.preparePersonalDetailsAndOpenDocuments(firstName, lastName);
 
-        await onboardingPage.getByRole('option', {
-            name: 'Mr.',
-            exact: true,
-        }).first().click();
-
-        await onboardingPage.getByRole('combobox', { name: 'Please select gender' }).click();
-
-        await onboardingPage.getByRole(
-            'option',
-            { name: 'Male', exact: true }
-        ).click();
-
-        await onboardingPage.getByRole('combobox', { name: 'Select country' }).click()
-            .catch(async () => onboardingPage.getByText('Select country').click());
-
-        await onboardingPage.locator('lib-country-list').getByRole('textbox').fill('91');
-
-        await onboardingPage.getByText(
-            'India (भारत)'
-        ).click();
-
-        await onboardingPage.getByRole('textbox', { name: /Please enter your mobile/ }).fill('9874544645');
-
-        await onboardingPage.getByRole(
-            'textbox',
-            { name: 'Date Of Birth *' }
-        ).fill('2000-06-06');
-
-        await onboardingPage.getByRole('textbox', { name: 'Zip Code*' }).first().fill('500081');
-
-        await onboardingPage.getByRole('textbox', { name: 'Country*' }).fill('India');
-
-        await onboardingPage.getByRole('textbox', { name: 'Please enter state' }).first().fill('Telangana');
-
-        await onboardingPage.getByRole('textbox', { name: 'City*' }).first().fill('Hyderabad');
-        await onboardingPage.getByRole('textbox', { name: 'Address Line 1*' }).first().fill('Meerut colony');
-
-        await onboardingPage.getByRole(
-            'checkbox',
-            { name: 'Same as Current Address' }
-        ).check();
-
-        await onboardingPage.getByRole(
-            'button',
-            { name: 'Next' }
-        ).click();
-
-        await onboardingPage.getByRole('row', { name: /Requested/ }).first().waitFor({ state: 'visible', timeout: 20000 });
+        await onboardingPage.getByRole('row', { name: /Requested|Resume/ }).first()
+            .waitFor({ state: 'visible', timeout: 20000 });
     }
 
     // --------------------------------------------------
     // TC14
     // --------------------------------------------------
 
-    async uploadMandatoryDocuments(onboardingPage: Page, pdfPath: string, imagePath: string) {
-        await this.uploadDocInPortal(onboardingPage, 'Aadhaar', imagePath, '987654321098');
-        await this.uploadDocInPortal(onboardingPage, 'PAN', imagePath, 'ABCDE1234F');
-        await this.uploadDocInPortal(onboardingPage, 'Resume', pdfPath, undefined, imagePath);
+    async uploadMandatoryDocuments(onboardingPage: Page, _pdfPath?: string, _imagePath?: string) {
+        const pdfPath = this.createRandomUploadFile('Resume', 'pdf');
+        const imagePath = this.createRandomUploadFile('Document', 'png');
+
+        const application = new OnboardingApplicationPage(onboardingPage);
+        await application.uploadMissingDocuments(pdfPath, imagePath);
 
         const submitButton = onboardingPage.getByRole('button', {
             name: 'Submit',
@@ -629,104 +637,6 @@ export class Contract {
             timeout: 20000
         }).catch(() => { });
         await onboardingPage.waitForTimeout(1500);
-    }
-
-    private async uploadDocInPortal(
-        onboardingPage: Page,
-        docName: string,
-        filePath: string,
-        docNumber?: string,
-        fallbackPath?: string
-    ) {
-        const row = onboardingPage.getByRole('row', { name: new RegExp(docName, 'i') })
-            .or(onboardingPage.getByRole('row').filter({ hasText: new RegExp(docName, 'i') }))
-            .first();
-
-        await row.waitFor({ state: 'visible', timeout: 15000 });
-        const uploadBtn = row.getByRole('button', { name: /Upload/i })
-            .or(row.locator('button').filter({ hasText: /Upload/i }))
-            .or(row.getByRole('button').last());
-        await uploadBtn.click();
-        await onboardingPage.waitForTimeout(600);
-
-        const dialog = onboardingPage.getByRole('dialog').last();
-        const scope = (await dialog.isVisible({ timeout: 3000 }).catch(() => false))
-            ? dialog
-            : onboardingPage.locator('body');
-
-        if (docNumber) {
-            const numberInput = scope.getByPlaceholder(/document number/i)
-                .or(scope.locator('input[formcontrolname="documentNumber"], #documentNumber'))
-                .or(scope.getByRole('textbox', { name: /Document Number/i }));
-            if (await numberInput.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-                await numberInput.first().fill(docNumber);
-            }
-        }
-
-        const fileInput = scope.locator('input[type="file"]');
-        if (await fileInput.count() > 0) {
-            await fileInput.first().setInputFiles(filePath);
-        } else {
-            await scope.getByRole('button', { name: /Choose File/i }).setInputFiles(filePath);
-        }
-        await onboardingPage.waitForTimeout(1000);
-
-        const note = scope.getByText(/Only Pdf and image are allowed/i);
-        if (await note.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await note.click().catch(() => { });
-        }
-
-        const uploadSubmit = scope.getByRole('button', { name: 'Upload', exact: true })
-            .or(scope.getByRole('button', { name: /Upload/i }));
-
-        let isEnabled = await uploadSubmit.first().isEnabled().catch(() => false);
-
-        if (!isEnabled && fallbackPath && fs.existsSync(fallbackPath)) {
-            if (await fileInput.count() > 0) {
-                await fileInput.first().setInputFiles(fallbackPath);
-            } else {
-                await scope.getByRole('button', { name: /Choose File/i }).setInputFiles(fallbackPath);
-            }
-            await onboardingPage.waitForTimeout(1000);
-            if (await note.isVisible().catch(() => false)) {
-                await note.click().catch(() => { });
-            }
-            isEnabled = await uploadSubmit.first().isEnabled().catch(() => false);
-        }
-
-        if (!isEnabled) {
-            const numberInput = scope.getByPlaceholder(/document number/i)
-                .or(scope.locator('input[formcontrolname="documentNumber"], #documentNumber'))
-                .or(scope.getByRole('textbox', { name: /Document Number/i }));
-            if (await numberInput.first().isVisible({ timeout: 1000 }).catch(() => false)) {
-                if (!docNumber) {
-                    await numberInput.first().fill('RESUME1234');
-                    await onboardingPage.waitForTimeout(500);
-                    if (await note.isVisible().catch(() => false)) {
-                        await note.click().catch(() => { });
-                    }
-                }
-            }
-        }
-
-        await expect(uploadSubmit.first()).toBeEnabled({ timeout: 10000 });
-        await uploadSubmit.first().click();
-
-        await expect(
-            onboardingPage.getByText(/Document uploaded successfully|uploaded successfully/i).first()
-        ).toBeVisible({ timeout: 20000 }).catch(() => { });
-
-        await onboardingPage.waitForTimeout(1000);
-        if (await dialog.isVisible({ timeout: 1000 }).catch(() => false)) {
-            const closeBtn = scope.getByRole('button', { name: /close|cancel/i })
-                .or(scope.locator('button.btn-close, .close'));
-            if (await closeBtn.first().isVisible({ timeout: 1000 }).catch(() => false)) {
-                await closeBtn.first().click();
-            } else {
-                await onboardingPage.keyboard.press('Escape').catch(() => { });
-            }
-        }
-        await onboardingPage.waitForTimeout(1000);
     }
 
     // --------------------------------------------------
@@ -769,7 +679,8 @@ export class Contract {
         await this.jobTab.click();
         await this.page.waitForTimeout(1000);
 
-        const documents = this.page.getByText('Onboarding Documents', { exact: true })
+        const documents = this.page.getByRole('img', { name: 'Onboarding Documents' })
+            .or(this.page.getByText('Onboarding Documents', { exact: true }))
             .or(this.page.getByRole('link', { name: /Onboarding Documents/i }))
             .or(this.page.locator('div').filter({ hasText: /^Onboarding Documents$/ }));
         await documents.first().waitFor({ state: 'visible', timeout: 15000 });
@@ -790,7 +701,8 @@ export class Contract {
 
         const row = this.page.getByRole('row').filter({ hasText: /Resume|PAN|Aadhaar/i }).first();
         await row.waitFor({ state: 'visible', timeout: 15000 });
-        const kebab = row.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted').last();
+        const kebab = this.page.locator('.dropdown > a').first()
+            .or(row.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted').last());
         await kebab.scrollIntoViewIfNeeded();
         await kebab.waitFor({ state: 'visible', timeout: 10000 });
         await kebab.click();
@@ -835,7 +747,7 @@ export class Contract {
         const deadline = Date.now() + 60000;
         while (Date.now() < deadline) {
             const unverifiedRows = this.page.locator('table tbody tr').filter({
-                hasText: /submitted|pending|waiting|verify\s*reject/i
+                hasText: /submitted|pending|waiting|approve\s*reject|verify\s*reject/i
             });
             const unverifiedCount = await unverifiedRows.count();
             if (unverifiedCount === 0) {
@@ -843,7 +755,7 @@ export class Contract {
                 let hasUnverified = false;
                 for (let k = 0; k < total; k++) {
                     const text = await rows.nth(k).innerText();
-                    if (!/verified/i.test(text)) {
+                    if (!/verified|approved/i.test(text)) {
                         hasUnverified = true;
                         break;
                     }
@@ -867,7 +779,7 @@ export class Contract {
             await this.page.keyboard.press('Escape').catch(() => { });
             await this.page.locator('.dropdown-menu.show').waitFor({ state: 'hidden', timeout: 2000 }).catch(() => { });
 
-            const kebab = targetRow.locator('td:last-child .dropdown, td .dropdown, .dropdown > a, .dropdown.ng-star-inserted, .dropdown-toggle').last();
+            const kebab = targetRow.locator('.dropdown > a, td:last-child .dropdown, td .dropdown, .dropdown.ng-star-inserted, .dropdown-toggle').first();
             await kebab.scrollIntoViewIfNeeded();
             await kebab.waitFor({ state: 'visible', timeout: 10000 });
             await kebab.click();
@@ -893,7 +805,7 @@ export class Contract {
                 }
             }
 
-            const toast = this.page.getByText(/Document verified successfully|verified successfully/i);
+            const toast = this.page.getByText(/Document (verified|approved) successfully|(verified|approved) successfully/i);
             await toast.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => { });
             await toast.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => { });
             await this.page.waitForTimeout(1000);
@@ -903,7 +815,7 @@ export class Contract {
         const finalCount = await rows.count();
         for (let i = 0; i < finalCount; i++) {
             const rowText = await rows.nth(i).innerText();
-            expect(rowText).toMatch(/verified/i);
+            expect(rowText).toMatch(/verified|approved/i);
         }
 
         await this.page.waitForTimeout(1500);
