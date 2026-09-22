@@ -354,9 +354,10 @@ export class YopmailPage {
       }
       const portalUrl = extractPortalUrl(mail.body);
       if (portalUrl) {
-        const onboardingPage = await this.page.context().newPage();
-        await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
-        return onboardingPage;
+        const opened = await this.openConfirmedPortalAtUrl(portalUrl);
+        if (opened) {
+          return opened;
+        }
       }
     }
 
@@ -374,16 +375,19 @@ export class YopmailPage {
 
     const portalUrl = await this.findPortalUrlInInbox();
     if (portalUrl) {
-      const onboardingPage = await this.page.context().newPage();
-      await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
-      return onboardingPage;
+      const opened = await this.openConfirmedPortalAtUrl(portalUrl);
+      if (opened) {
+        return opened;
+      }
     }
 
     const preOnboardingBase = defaultPreOnboardingBaseUrl();
     console.log(`Opening onboarding portal from default URL: ${preOnboardingBase}`);
-    const onboardingPage = await this.page.context().newPage();
-    await onboardingPage.goto(preOnboardingBase, { waitUntil: 'domcontentloaded' });
-    return onboardingPage;
+    const opened = await this.openConfirmedPortalAtUrl(preOnboardingBase);
+    if (opened) {
+      return opened;
+    }
+    throw new Error('Could not open pre-onboarding login page from Yopmail');
   }
 
   async openOnboardingPortalFromOfferLetterMail() {
@@ -548,20 +552,66 @@ export class YopmailPage {
 
   private async openPortalFromOpenMail() {
     await sleep(1200);
-    const portalUrl = await this.getPortalUrlFromOpenMail();
-    if (portalUrl) {
-      console.log(`Opening onboarding portal URL from mail: ${portalUrl}`);
-      const onboardingPage = await this.page.context().newPage();
-      await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
-      return onboardingPage;
-    }
 
     const fromFrame = await this.clickPortalViaMailFrameDirect();
     if (fromFrame) {
       return fromFrame;
     }
 
-    return this.openPortalViaMailFrame();
+    const fromClick = await this.openPortalViaMailFrame();
+    if (fromClick) {
+      return fromClick;
+    }
+
+    const portalUrl = await this.getPortalUrlFromOpenMail();
+    if (portalUrl) {
+      console.log(`Opening onboarding portal URL from mail: ${portalUrl}`);
+      return this.openConfirmedPortalAtUrl(portalUrl);
+    }
+
+    return null;
+  }
+
+  private async openConfirmedPortalAtUrl(url: string): Promise<Page | null> {
+    for (const candidate of portalUrlCandidates(url)) {
+      const { portal, close } = await this.newPortalTab();
+      try {
+        console.log(`Opening pre-onboarding portal: ${candidate}`);
+        await portal.goto(candidate, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        if (await isPreOnboardingLoginVisible(portal, 8000)) {
+          return portal;
+        }
+        console.log(`Portal URL did not show login (${candidate}): ${portal.url()}`);
+      } catch (error) {
+        console.log(`Portal navigation failed (${candidate}): ${error}`);
+      }
+      await close();
+    }
+    return null;
+  }
+
+  private async newPortalTab(): Promise<{ portal: Page; close: () => Promise<void> }> {
+    const browser = this.page.context().browser();
+    if (browser) {
+      const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      this.page.context().once('close', () => {
+        context.close().catch(() => {});
+      });
+      return {
+        portal: await context.newPage(),
+        close: async () => {
+          await context.close().catch(() => {});
+        },
+      };
+    }
+
+    const portal = await this.page.context().newPage();
+    return {
+      portal,
+      close: async () => {
+        await portal.close().catch(() => {});
+      },
+    };
   }
 
   private async readAnchorHrefsFromMailFrame(): Promise<string[]> {
@@ -583,18 +633,21 @@ export class YopmailPage {
     }
 
     const link = frame.getByRole('link', { name: 'Click here' })
+      .or(frame.getByRole('button', { name: 'Click here' }))
       .or(frame.getByRole('link', { name: /^Click$/i }))
-      .or(frame.locator('a').filter({ hasText: /^Click$/i }).first());
+      .or(frame.locator('a').filter({ hasText: /click here/i }).first());
     if (!(await link.isVisible({ timeout: 5000 }).catch(() => false))) {
       return null;
     }
 
     const href = ((await link.getAttribute('href').catch(() => '')) || '').trim();
+    console.log(`Click here href: ${href || '(none)'}`);
     const normalized = href ? normalizePortalHref(href) : null;
     if (normalized) {
-      const onboardingPage = await this.page.context().newPage();
-      await onboardingPage.goto(normalized, { waitUntil: 'domcontentloaded' });
-      return onboardingPage;
+      const fromHref = await this.openConfirmedPortalAtUrl(normalized);
+      if (fromHref) {
+        return fromHref;
+      }
     }
 
     const popupPromise = this.page.context().waitForEvent('page', { timeout: 20000 }).catch(() => null);
@@ -602,7 +655,9 @@ export class YopmailPage {
     const onboardingPage = await popupPromise;
     if (onboardingPage) {
       await onboardingPage.waitForLoadState('domcontentloaded');
-      return onboardingPage;
+      if (await this.ensurePortalShowsLogin(onboardingPage)) {
+        return onboardingPage;
+      }
     }
 
     return null;
@@ -650,9 +705,11 @@ export class YopmailPage {
       return null;
     }
     console.log(`Opening onboarding portal URL from mail body: ${portalUrl}`);
-    const onboardingPage = await this.page.context().newPage();
-    await onboardingPage.goto(portalUrl, { waitUntil: 'domcontentloaded' });
-    return onboardingPage;
+    return this.openConfirmedPortalAtUrl(portalUrl);
+  }
+
+  private async ensurePortalShowsLogin(portal: Page) {
+    return isPreOnboardingLoginVisible(portal);
   }
 
   private async openPortalViaMailFrame() {
@@ -710,9 +767,10 @@ export class YopmailPage {
     const href = ((await link.getAttribute('href').catch(() => '')) || '').trim();
     const normalizedHref = href ? normalizePortalHref(href) : null;
     if (normalizedHref) {
-      const onboardingPage = await this.page.context().newPage();
-      await onboardingPage.goto(normalizedHref, { waitUntil: 'domcontentloaded' });
-      return onboardingPage;
+      const fromHref = await this.openConfirmedPortalAtUrl(normalizedHref);
+      if (fromHref) {
+        return fromHref;
+      }
     }
     if (href && isDocumentDownloadHref(href)) {
       return null;
@@ -726,7 +784,9 @@ export class YopmailPage {
     const onboardingPage = await popupPromise;
     if (onboardingPage) {
       await onboardingPage.waitForLoadState('domcontentloaded');
-      return onboardingPage;
+      if (await this.ensurePortalShowsLogin(onboardingPage)) {
+        return onboardingPage;
+      }
     }
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -735,7 +795,9 @@ export class YopmailPage {
       const latest = pages.at(-1);
       if (latest && /onboarding|portal|rightlyhr|pre-onboarding|snaddevelopers/i.test(latest.url())) {
         await latest.waitForLoadState('domcontentloaded');
-        return latest;
+        if (await this.ensurePortalShowsLogin(latest)) {
+          return latest;
+        }
       }
     }
 
@@ -1291,11 +1353,32 @@ function normalizePortalHref(href: string): string | null {
 }
 
 function defaultPreOnboardingBaseUrl() {
-  return (
-    process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
-    process.env.RHR_BASE_URL?.trim() ||
-    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
-  ).replace(/\/$/, '');
+  const explicit = process.env.PRE_ONBOARDING_BASE_URL?.trim() || process.env.PRE_ONBOARDING_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, '');
+  }
+  const hrms = (process.env.BASE_URL || process.env.RHR_BASE_URL || '').replace(/\/$/, '');
+  if (/hrmsqa/i.test(hrms)) {
+    return hrms.replace(/hrmsqa/i, 'preonboardingqa');
+  }
+  return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
+}
+
+function portalUrlCandidates(url: string) {
+  const original = url.replace(/\/$/, '');
+  const swapped = /^https:/i.test(original)
+    ? original.replace(/^https:/i, 'http:')
+    : original.replace(/^http:/i, 'https:');
+  return [...new Set([
+    original,
+    `${original}/login`,
+    swapped,
+    `${swapped}/login`,
+  ])];
+}
+
+async function isPreOnboardingLoginVisible(page: Page, timeout = 10000) {
+  return page.getByRole('textbox', { name: 'Username*' }).isVisible({ timeout }).catch(() => false);
 }
 
 function parseCredentials(body: string) {

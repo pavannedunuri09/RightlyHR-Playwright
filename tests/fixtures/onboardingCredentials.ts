@@ -134,16 +134,24 @@ export async function loginPreOnboardingPortal(
 }
 
 async function resolvePreOnboardingLoginPage(context: import('@playwright/test').BrowserContext): Promise<Page> {
-  const hrmsBase = (process.env.RHR_BASE_URL?.trim() || 'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com').replace(
-    /\/$/,
-    '',
-  );
+  const hrmsBase = (
+    process.env.BASE_URL?.trim() ||
+    process.env.RHR_BASE_URL?.trim() ||
+    'https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com'
+  ).replace(/\/$/, '').replace(/^http:\/\//i, 'https://');
+  const derivedPreOnboarding = /hrmsqa/i.test(hrmsBase)
+    ? hrmsBase.replace(/hrmsqa/i, 'preonboardingqa')
+    : 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
   const preOnboardingBase = (
     process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
-    'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com'
-  ).replace(/\/$/, '');
+    process.env.PRE_ONBOARDING_URL?.trim() ||
+    derivedPreOnboarding
+  ).replace(/\/$/, '').replace(/^http:\/\//i, 'https://');
+  const httpPreOnboarding = preOnboardingBase.replace(/^https:/i, 'http:');
   const candidates = [
     process.env.PRE_ONBOARDING_URL?.trim(),
+    httpPreOnboarding,
+    `${httpPreOnboarding}/login`,
     preOnboardingBase,
     `${preOnboardingBase}/login`,
     `${hrmsBase}/pre-onboarding/login`,
@@ -175,6 +183,17 @@ async function resolvePreOnboardingLoginPage(context: import('@playwright/test')
 
 async function openPreOnboardingPortalDirect(yopmail: YopmailPage): Promise<Page> {
   try {
+    const fromDocs = await yopmail.openOnboardingPortalFromDocumentRequestMail();
+    if (await hasPreOnboardingLogin(fromDocs)) {
+      return fromDocs;
+    }
+    console.log(`Document-request portal did not show login: ${fromDocs.url()}`);
+    await fromDocs.close().catch(() => {});
+  } catch (error) {
+    console.log(`Document-request portal direct open failed: ${error}`);
+  }
+
+  try {
     return await yopmail.openOnboardingPortalFromOfferLetterMail();
   } catch (error) {
     console.log(`Offer-letter portal direct open failed: ${error}`);
@@ -185,38 +204,45 @@ async function openPreOnboardingPortalDirect(yopmail: YopmailPage): Promise<Page
     console.log(`Opening pre-onboarding portal from mail URL: ${portalUrl}`);
     const portal = await yopmail.page.context().newPage();
     await portal.goto(portalUrl, { waitUntil: 'domcontentloaded' });
-    return portal;
+    if (await hasPreOnboardingLogin(portal)) {
+      return portal;
+    }
+    console.log(`Mail portal URL did not show login (${portalUrl}): ${portal.url()}`);
+    await portal.close().catch(() => {});
   }
 
   return resolvePreOnboardingLoginPage(yopmail.page.context());
 }
 
+async function hasPreOnboardingLogin(page: Page) {
+  return page.getByRole('textbox', { name: 'Username*' }).isVisible({ timeout: 10000 }).catch(() => false);
+}
+
 export async function openOnboardingLoginPage(yopmail: YopmailPage): Promise<Page> {
   const portalOpeners = [
-    () => yopmail.openOnboardingPortalFromOfferLetterMail(),
-    () => openPreOnboardingPortalDirect(yopmail),
     () => yopmail.openOnboardingPortalFromDocumentRequestMail(),
     () => yopmail.openOnboardingPortal(),
     () => yopmail.openOnboardingPortalFromCredentialMails(),
+    () => openPreOnboardingPortalDirect(yopmail),
+    () => yopmail.openOnboardingPortalFromOfferLetterMail(),
   ];
 
-  let portal: Page | null = null;
   let lastError: unknown = new Error('Could not open onboarding portal from Yopmail');
   for (const openPortal of portalOpeners) {
     try {
-      portal = await openPortal();
-      break;
+      const portal = await openPortal();
+      if (await hasPreOnboardingLogin(portal)) {
+        return portal;
+      }
+      console.log(`Portal opener returned a page without login form: ${portal.url()}`);
+      await portal.close().catch(() => {});
     } catch (error) {
       lastError = error;
       console.log(`Portal open attempt failed: ${error}`);
     }
   }
 
-  if (!portal) {
-    throw lastError;
-  }
-
-  return portal;
+  throw lastError;
 }
 
 export async function openPreOnboardingFromYopmail(
@@ -231,18 +257,30 @@ export async function openPreOnboardingFromYopmail(
   const { PreOnboardingPage } = await import('../../pages/PreOnboardingPage');
   const portalOpeners = [
     () => yopmail.openOnboardingPortalFromOfferLetterMail(),
-    () => openPreOnboardingPortalDirect(yopmail),
     () => yopmail.openOnboardingPortalFromDocumentRequestMail(),
     () => yopmail.openOnboardingPortal(),
     () => yopmail.openOnboardingPortalFromCredentialMails(),
+    () => openPreOnboardingPortalDirect(yopmail),
   ];
 
   let portal: Page | null = null;
   let lastError: unknown = new Error('Could not open onboarding portal from Yopmail');
   for (const openPortal of portalOpeners) {
     try {
-      portal = await openPortal();
-      break;
+      const opened = await openPortal();
+      const hasLogin = await hasPreOnboardingLogin(opened);
+      const loggedIn = await opened
+        .getByRole('button', { name: 'Go to Application' })
+        .or(opened.getByRole('button', { name: /Offer Letter/ }))
+        .first()
+        .isVisible({ timeout: 2000 })
+        .catch(() => false);
+      if (hasLogin || loggedIn) {
+        portal = opened;
+        break;
+      }
+      console.log(`Portal opener returned a page without pre-onboarding UI: ${opened.url()}`);
+      await opened.close().catch(() => {});
     } catch (error) {
       lastError = error;
       console.log(`Portal open attempt failed: ${error}`);

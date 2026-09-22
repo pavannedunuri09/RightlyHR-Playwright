@@ -30,12 +30,37 @@ export class PreOnboardingPage {
   async login(username: string, password: string) {
     await this.usernameInput.fill(username);
     await this.passwordInput.fill(password);
-    await this.loginButton.click();
+    const onFailed = (request: { url: () => string; method: () => string; failure: () => { errorText?: string } | null }) => {
+      console.log(`Login request failed: ${request.method()} ${request.url()} (${request.failure()?.errorText || 'unknown'})`);
+    };
+    this.page.on('requestfailed', onFailed);
+    try {
+      await this.loginButton.click();
+      await this.page
+        .getByText(/invalid|ProgressEvent|Go to Application|Offer Letter/i)
+        .first()
+        .waitFor({ state: 'visible', timeout: 8000 })
+        .catch(() => {});
+    } finally {
+      this.page.off('requestfailed', onFailed);
+    }
   }
 
   async expectInvalidCredentials() {
-    await expect(this.invalidCredentialsMessage.first()).toBeVisible({ timeout: 15000 });
-    const text = (await this.invalidCredentialsMessage.first().innerText()).trim();
+    const progressEvent = this.page.getByText(/\[object ProgressEvent\]/i);
+    const invalid = this.invalidCredentialsMessage.or(
+      this.page.getByText(/invalid credentials|authentication failed|unauthorized|user not found/i),
+    );
+
+    await expect(invalid.or(progressEvent).first()).toBeVisible({ timeout: 15000 });
+
+    if (await progressEvent.first().isVisible().catch(() => false)) {
+      throw new Error(
+        `Pre-onboarding login API failed with "[object ProgressEvent]" on ${this.page.url()}. The request was blocked (mixed content/CORS/network), so the app never returned Invalid Credentials.`,
+      );
+    }
+
+    const text = (await invalid.first().innerText()).trim();
     console.log(`Login validation: ${text}`);
     await expect(this.usernameInput).toBeVisible();
     return text;
