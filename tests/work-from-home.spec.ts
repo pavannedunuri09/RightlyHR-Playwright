@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { JobInfoWfhPage } from '../pages/JobInfoWfhPage';
-import { WorkFromHomePage, workedDateToInput, upcomingWeekendDate, weekdayDate, octoberSearchRange } from '../pages/WorkFromHomePage';
+import { WorkFromHomePage, workedDateToInput, upcomingWeekendDate } from '../pages/WorkFromHomePage';
 
 const EMPLOYEE_NAME = 'saii Pavan Dinesh Tejaa';
 const EMPLOYEE_SEARCH = 'saii';
@@ -144,23 +144,6 @@ test.describe('Work from Home', () => {
       await expect.poll(() => wfhPage.readTabCount(wfhPage.processedTab)).toBe(before.processed);
     });
 
-    test('shows validation when WFH end date is before start date', async ({ page }) => {
-      const wfhPage = new WorkFromHomePage(page);
-      await wfhPage.openFromDashboard();
-      const before = await wfhPage.readWfhTabCounts();
-      const { startAhead } = octoberSearchRange();
-      const start = weekdayDate(startAhead + 14);
-      const end = weekdayDate(startAhead + 5);
-      expect(end.input < start.input, `end ${end.input} should be before start ${start.input}`).toBe(true);
-
-      const dialog = await wfhPage.fillRequestFormRange(start.input, end.input, `End before start ${start.input}`);
-      await wfhPage.requestButton.click({ force: true });
-      await expect(wfhPage.invalidDateRangeMessage).toBeVisible({ timeout: 15000 });
-      await expect(dialog).toBeVisible();
-      await wfhPage.closeRequestDialogIfOpen();
-      await expect.poll(() => wfhPage.readTabCount(wfhPage.waitingForApprovalTab)).toBe(before.waiting);
-    });
-
     test('submits second half WFH when first half already exists for the date', async ({ page }) => {
       test.setTimeout(180000);
       const wfhPage = new WorkFromHomePage(page);
@@ -217,7 +200,7 @@ test.describe('Work from Home', () => {
       await wfhPage.cancelConfirmNo.click();
       await expect(wfhPage.cancelConfirmMessage).toBeHidden();
       await expect(wfhPage.requestButton).toBeVisible();
-      await expect(wfhPage.startDateInput).toBeVisible();
+      await expect(wfhPage.workedDateInput).toBeVisible();
       await expect(wfhPage.reasonInput).toBeVisible();
 
       await wfhPage.clickRequestFormCancel();

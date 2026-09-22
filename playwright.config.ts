@@ -47,7 +47,8 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    headless: process.env.HEADLESS === 'true' || !!process.env.CI,
+    headless: process.env.HEADLESS === 'true',
+    //  || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
