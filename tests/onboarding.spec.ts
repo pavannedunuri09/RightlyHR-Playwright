@@ -73,7 +73,8 @@ async function ensurePortalSession(): Promise<Page> {
 
   portalTabForApp = await onboardingContext.newPage();
   const preOnboarding = new PreOnboardingPage(portalTabForApp);
-  await portalTabForApp.goto('https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com', {
+  const portalUrl = stored?.portalUrl || 'https://preonboardingqasnad.onpremise.cluster.rightlyhr.com';
+  await portalTabForApp.goto(portalUrl, {
     waitUntil: 'domcontentloaded',
   });
   await preOnboarding.expectLoaded();
@@ -118,14 +119,17 @@ test.describe('Onboarding Flow', () => {
     context = onboardingContext;
     page = await context.newPage();
     const loginPage = new LoginPage(page);
-    await loginPage.loginFromEnv();
-    try {
-      if (!fs.existsSync('.auth')) {
-        fs.mkdirSync('.auth', { recursive: true });
+    await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    if (page.url().includes('/login') || (await page.getByRole('textbox', { name: 'Please enter email' }).isVisible().catch(() => false))) {
+      await loginPage.loginFromEnv();
+      try {
+        if (!fs.existsSync('.auth')) {
+          fs.mkdirSync('.auth', { recursive: true });
+        }
+        await page.context().storageState({ path: authPath });
+      } catch {
+        // ignore storage state saving error if any
       }
-      await page.context().storageState({ path: authPath });
-    } catch {
-      // ignore storage state saving error if any
     }
     const stored = loadLastOnboardingEmployee();
     if (stored?.email) {
@@ -291,10 +295,20 @@ test.describe('Onboarding Flow', () => {
     // 6. Verify successful login to Pre-onboarding portal
     await preOnboarding.expectLoggedIn();
 
+    // 7. Click Go to Application button and navigate to Personal Details page
+    await preOnboarding.goToApplication();
+    const application = new OnboardingApplicationPage(portalTab);
+    await application.expectPersonalForm();
+
     // Store portal tab and username for Test-05
     portalTabForApp = portalTab;
     portalUsernameForApp = username;
-    saveLastOnboardingEmployee({ ...createdEmployee, username, password });
+    saveLastOnboardingEmployee({
+      ...createdEmployee,
+      username,
+      password,
+      portalUrl: portalTab.url(),
+    });
 
     await mailTab.close().catch(() => { });
   });

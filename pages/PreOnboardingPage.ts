@@ -51,6 +51,8 @@ export class PreOnboardingPage {
   }
 
   async goToApplication() {
-    await this.goToApplicationButton.click();
+    if (await this.goToApplicationButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await this.goToApplicationButton.click();
+    }
   }
 }

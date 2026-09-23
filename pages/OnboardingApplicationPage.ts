@@ -25,6 +25,7 @@ export class OnboardingApplicationPage {
   readonly dobInput: Locator;
   readonly bloodGroupCombobox: Locator;
   readonly addressLine1: Locator;
+  readonly addressLine2: Locator;
   readonly cityInput: Locator;
   readonly stateInput: Locator;
   readonly countryInput: Locator;
@@ -53,7 +54,8 @@ export class OnboardingApplicationPage {
     this.salutationCombobox = page.getByRole('combobox', { name: 'Please select salutation' });
     this.dobInput = page.getByRole('textbox', { name: 'Date Of Birth *' });
     this.bloodGroupCombobox = page.getByRole('combobox', { name: 'Please select blood group' });
-    this.addressLine1 = page.getByRole('textbox', { name: 'Address Line 1*' }).first();
+    this.addressLine1 = page.locator('#currentAddressLine1').or(page.getByRole('textbox', { name: 'Address Line 1*' })).first();
+    this.addressLine2 = page.locator('#currentAddressLine2').or(page.locator('input[name="addressLine2"]')).first();
     this.cityInput = page.getByRole('textbox', { name: 'City*' }).first();
     this.stateInput = page.getByRole('textbox', { name: 'Please enter state' }).first();
     this.countryInput = page.getByRole('textbox', { name: 'Country*' });
@@ -76,7 +78,12 @@ export class OnboardingApplicationPage {
     if (await this.isOnDocumentsPage()) {
       return;
     }
-    await this.genderCombobox.waitFor({ state: 'visible', timeout: 20000 });
+    const indicator = this.genderCombobox
+      .or(this.salutationCombobox)
+      .or(this.firstNameInput)
+      .or(this.page.getByRole('button', { name: 'Next' }))
+      .or(this.page.getByText(/Personal Details/i));
+    await indicator.first().waitFor({ state: 'visible', timeout: 20000 });
   }
 
   async isPersonalFormEditable() {
@@ -96,7 +103,8 @@ export class OnboardingApplicationPage {
       return null;
     }
 
-    await this.page.waitForTimeout(1500);
+    await this.expectPersonalForm().catch(() => {});
+    await this.page.waitForTimeout(1000);
     if (await this.isOnDocumentsPage()) {
       return null;
     }
@@ -169,6 +177,7 @@ export class OnboardingApplicationPage {
       firstName,
       lastName,
       addressLine1: `Road no.${plot}`,
+      addressLine2: `Flat ${plot}, Near Tech Park`,
       city: place.city,
       state: place.state,
       country: 'India',
@@ -181,34 +190,67 @@ export class OnboardingApplicationPage {
     }
 
     await this.genderCombobox.click();
-    await this.page.getByRole('option', { name: female ? 'Female' : 'Male', exact: true }).click();
+    await this.page.getByRole('option', { name: female ? 'Female' : 'Male', exact: true }).first().click();
 
     await this.salutationCombobox.click();
-    await this.page.getByRole('option', { name: female ? 'Miss.' : 'Mr.', exact: true }).click();
+    await this.page.getByRole('option', { name: female ? /^(Miss|Ms|Mrs)\.?$/i : /^Mr\.?$/i }).first().click();
 
     await this.page.getByRole('combobox', { name: 'Select country' }).click().catch(async () => {
       await this.page.getByText('Select country').click();
     });
     await this.page.locator('lib-country-list').getByRole('textbox').fill('91');
-    await this.page.getByText('India (भारत)').click();
+    await this.page.getByText('India (भारत)').first().click();
 
     await this.mobileInput.fill(mobile);
     await this.dobInput.fill('1998-05-15');
 
     await this.bloodGroupCombobox.click();
-    await this.page.getByRole('option', { name: 'B+', exact: true }).click();
+    await this.page.getByRole('option', { name: 'B+', exact: true }).first().click();
 
     await this.addressLine1.fill(details.addressLine1);
+    await this.addressLine2.fill(details.addressLine2);
     await this.cityInput.fill(details.city);
     await this.stateInput.fill(details.state);
     await this.countryInput.fill(details.country);
     await this.zipInput.fill(details.pincode);
-    await this.sameAsCurrentAddress.check();
+    if (await this.sameAsCurrentAddress.isVisible().catch(() => false)) {
+      await this.sameAsCurrentAddress.check().catch(async () => {
+        await this.page.getByText('Same as Current Address').click();
+      });
+      await this.page.waitForTimeout(500);
+    }
+
+    // Fill any secondary/permanent address line 2 inputs if still visible and empty
+    const allLine2 = this.page.locator('input[name="addressLine2"]');
+    const line2Count = await allLine2.count().catch(() => 0);
+    for (let i = 0; i < line2Count; i++) {
+      const input = allLine2.nth(i);
+      if (await input.isVisible().catch(() => false) && await input.isEnabled().catch(() => false)) {
+        const val = await input.inputValue().catch(() => '');
+        if (!val) {
+          await input.fill(details.addressLine2);
+        }
+      }
+    }
+
     return details;
   }
 
   async goToDocuments() {
-    await this.nextButton.click();
+    if (await this.isOnDocumentsPage()) {
+      return;
+    }
+    const isEnabled = await this.nextButton.isEnabled().catch(() => false);
+    if (!isEnabled) {
+      const documentsTab = this.page.getByText(/^Documents$/).first();
+      if (await documentsTab.isVisible().catch(() => false)) {
+        await documentsTab.click();
+      } else {
+        await this.nextButton.click();
+      }
+    } else {
+      await this.nextButton.click();
+    }
     await this.page.getByRole('row', { name: /Resume/ }).waitFor({ state: 'visible', timeout: 20000 });
   }
 

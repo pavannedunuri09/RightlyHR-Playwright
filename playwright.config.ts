@@ -44,7 +44,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never' }], ['allure-playwright']],
   use: {
     baseURL,
     headless: process.env.HEADLESS === 'true' || !!process.env.CI,

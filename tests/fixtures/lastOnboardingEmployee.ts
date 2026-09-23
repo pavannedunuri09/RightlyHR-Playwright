@@ -12,8 +12,11 @@ export type SavedOnboardingEmployee = {
   sublocation?: string;
   username?: string;
   password?: string;
+  portalUrl?: string;
   employeeId?: string;
   workEmail?: string;
+  addressLine1?: string;
+  addressLine2?: string;
 };
 
 const STORE_PATH = path.resolve(process.cwd(), 'tests', 'fixtures', 'last-onboarding-employee.json');
