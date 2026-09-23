@@ -2,9 +2,9 @@ import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { ProbationPage } from '../pages/ProbationPage';
 
-const PROBATION_EMPLOYEE_NAME = 'Bhavitha Palagiriii';
-const PROBATION_EMPLOYEE_SEARCH = 'bhav';
-const PROBATION_EMPLOYEE_ID = 'SD302134';
+const PROBATION_EMPLOYEE_NAME = 'harshitha Palagiriii';
+const PROBATION_EMPLOYEE_SEARCH = 'hars';
+const PROBATION_EMPLOYEE_ID = 'SD3021343';
 const PROBATION_EMPLOYEE_OPTION = `${PROBATION_EMPLOYEE_ID}-${PROBATION_EMPLOYEE_NAME}`;
 
 test.describe.serial('Probation Flow', () => {

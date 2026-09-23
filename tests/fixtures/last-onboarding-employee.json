@@ -1,14 +1,12 @@
 {
-  "firstName": "Manish",
-  "lastName": "Patel",
-  "fullName": "Manish Patel",
-  "email": "manish.patel2318@yopmail.com",
+  "firstName": "Suresh",
+  "lastName": "Iyer",
+  "fullName": "Suresh Iyer",
+  "email": "suresh.iyer4355@yopmail.com",
   "designation": "Front End Developer",
   "employmentType": "Fresher",
   "location": "Hyderabad",
   "sublocation": "Jai Hind Enclave building",
-  "username": "manish.patel2318@yopmail.com",
-  "password": "jPmqxMsY",
-  "employeeId": "RHR216138",
-  "workEmail": "manish6138@yopmail.com"
+  "employeeId": "15947",
+  "workEmail": "suresh3510@yopmail.com"
 }
