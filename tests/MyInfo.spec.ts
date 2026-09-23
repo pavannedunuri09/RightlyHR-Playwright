@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { MyInfoPage } from '../pages/MyInfoPage';
 import {
-  alternateNameSet,
-  alternateValidDob,
-  alternateBloodGroup,
-  alternateMarriageAnniversary,
-  MARRIAGE_ANNIVERSARY_A,
-  INVALID_DOB_UNDERAGE,
-} from './fixtures/myInfoFields';
-import { alternateContactSet } from './fixtures/myInfoContactFields';
+    alternateNameSet,
+    alternateValidDob,
+    alternateBloodGroup,
+    alternateMarriageAnniversary,
+    MARRIAGE_ANNIVERSARY_A,
+    INVALID_DOB_UNDERAGE,
+} from '../fixtures/myInfoFields';
+import { alternateContactSet } from '../fixtures/myInfoContactFields';
 
 test('Test 01: Employee should navigate to My Info Basic Info tab', async ({ page }) => {
     const loginPage = new LoginPage(page);
@@ -101,7 +101,7 @@ test('Test-03: Verify Employee can update Salutation', async ({ page }) => {
     // Toggle salutation/gender pair: Mr. -> Miss./Female, Miss. -> Mr./Male
     const currentSalutation = await myInfoPage.readCurrentSalutation();
     const { salutation: selectedSalutation, gender: selectedGender } = myInfoPage.alternateSalutationPair(
-      currentSalutation,
+        currentSalutation,
     );
     console.log(`Updating salutation from ${currentSalutation || 'unknown'} to ${selectedSalutation} / ${selectedGender}`);
     await myInfoPage.selectSalutationWithGender(selectedSalutation, selectedGender);

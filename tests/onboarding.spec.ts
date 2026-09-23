@@ -13,12 +13,12 @@ import { PreOnboardingPostOfferPage } from '../pages/PreOnboardingPostOfferPage'
 import { ProspectiveEmployeePage } from '../pages/ProspectiveEmployeePage';
 import { EmployeeOnboardingInfoPage, generateEmployeeId } from '../pages/EmployeeOnboardingInfoPage';
 import { EmployeeJobPrepPage } from '../pages/EmployeeJobPrepPage';
-import { createOnboardingFiles } from './fixtures/onboardingFiles';
+import { createOnboardingFiles } from '../fixtures/onboardingFiles';
 import {
   loadLastOnboardingEmployee,
   saveLastOnboardingEmployee,
   type SavedOnboardingEmployee,
-} from './fixtures/lastOnboardingEmployee';
+} from '../fixtures/lastOnboardingEmployee';
 
 const INDIAN_FIRST_NAMES = [
   'Aarav', 'Ananya', 'Rohan', 'Priya', 'Aditya', 'Sneha', 'Vikram', 'Pooja',
@@ -119,7 +119,7 @@ test.describe('Onboarding Flow', () => {
     context = onboardingContext;
     page = await context.newPage();
     const loginPage = new LoginPage(page);
-    await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.goto('/employee-management/prospective/employees', { waitUntil: 'domcontentloaded' }).catch(() => { });
     if (page.url().includes('/login') || (await page.getByRole('textbox', { name: 'Please enter email' }).isVisible().catch(() => false))) {
       await loginPage.loginFromEnv();
       try {

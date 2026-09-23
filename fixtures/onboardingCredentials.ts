@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
-import type { PreOnboardingPage } from '../../pages/PreOnboardingPage';
-import type { YopmailPage } from '../../pages/YopmailPage';
+import type { PreOnboardingPage } from '../pages/PreOnboardingPage';
+import type { YopmailPage } from '../pages/YopmailPage';
 import { loadLastTrainee, saveLastTrainee, type SavedTrainee } from './lastTrainee';
 
 const CREDENTIAL_MAIL_PATTERN = /Request for Documents|Documents Upload|Document Submitted|Onboarding Portal/i;
@@ -167,7 +167,7 @@ async function resolvePreOnboardingLoginPage(context: import('@playwright/test')
     } catch (error) {
       console.log(`Pre-onboarding URL candidate failed (${url}): ${error}`);
     }
-    await portal.close().catch(() => {});
+    await portal.close().catch(() => { });
   }
 
   throw new Error('Could not resolve pre-onboarding login page URL');
@@ -228,7 +228,7 @@ export async function openPreOnboardingFromYopmail(
   preOnboarding: PreOnboardingPage;
   employee: SavedTrainee;
 }> {
-  const { PreOnboardingPage } = await import('../../pages/PreOnboardingPage');
+  const { PreOnboardingPage } = await import('../pages/PreOnboardingPage');
   const portalOpeners = [
     () => yopmail.openOnboardingPortalFromOfferLetterMail(),
     () => openPreOnboardingPortalDirect(yopmail),

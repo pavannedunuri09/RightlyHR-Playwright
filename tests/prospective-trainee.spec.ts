@@ -17,9 +17,9 @@ import { PendingTraineeOnboardApprovalPage } from '../pages/PendingTraineeOnboar
 
 declare const process: { env: Record<string, string | undefined> };
 
-import { createOnboardingFiles } from './fixtures/onboardingFiles';
-import { openOnboardingLoginPage, openPreOnboardingForReleasedOffer, openPreOnboardingFromYopmail, readOnboardingCredentials, refreshPreOnboardingCredentials } from './fixtures/onboardingCredentials';
-import { loadLastTrainee, saveLastTrainee, needsDocumentRequest, type SavedTrainee } from './fixtures/lastTrainee';
+import { createOnboardingFiles } from '../fixtures/onboardingFiles';
+import { openOnboardingLoginPage, openPreOnboardingForReleasedOffer, openPreOnboardingFromYopmail, readOnboardingCredentials, refreshPreOnboardingCredentials } from '../fixtures/onboardingCredentials';
+import { loadLastTrainee, saveLastTrainee, needsDocumentRequest, type SavedTrainee } from '../fixtures/lastTrainee';
 import {
   approveAndReleaseOffer,
   ensureDocumentsSubmittedTrainee,
@@ -43,7 +43,7 @@ import {
   withOfferDefaults,
   resolveProspectiveTraineeForDocuments,
   resolveTraineeEmail,
-} from './fixtures/traineeBootstrap';
+} from '../fixtures/traineeBootstrap';
 
 const DUPLICATE_TRAINEE = {
   firstName: 'Swetha',
@@ -129,7 +129,7 @@ test.describe('Prospective Trainees', () => {
     const mailTab = await page.context().newPage();
     const yopmail = new YopmailPage(mailTab);
     await yopmail.openInbox(details.email);
-    await mailTab.bringToFront().catch(() => {});
+    await mailTab.bringToFront().catch(() => { });
 
     let subject: string;
     try {
@@ -734,7 +734,7 @@ test.describe('Prospective Trainees', () => {
       throw new Error(`${employee.email} has no Request For Onboard button and no pending approval to extend`);
     }
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await trainees.openActiveTraineesList();
     await trainees.searchTrainee(employee.firstName);
     await trainees.openActiveTraineeProfile(employee);
@@ -814,7 +814,7 @@ test.describe('Prospective Trainees', () => {
       throw new Error(`${employee.email} has no Request For Onboard button and no pending approval to continue Test-18`);
     }
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await approvals.approveThroughAllLevels(employee);
 
     await trainees.openActiveTraineesList();
@@ -866,7 +866,7 @@ test.describe('Prospective Trainees', () => {
       `Approving onboard request for ${employee.firstName} ${employee.lastName} (${employee.email})`,
     );
 
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => { });
     await page.bringToFront();
     await approvals.approveThroughAllLevels(employee);
 
@@ -941,7 +941,7 @@ async function approveOnboardRequestThroughHr(
   const approvals = new PendingTraineeOnboardApprovalPage(page);
   const onboard = new TraineeOnboardRequestPage(page);
 
-  await page.keyboard.press('Escape').catch(() => {});
+  await page.keyboard.press('Escape').catch(() => { });
   try {
     await approvals.approveThroughAllLevels(employee);
   } catch (error) {

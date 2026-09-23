@@ -47,7 +47,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }], ['allure-playwright']],
   use: {
     baseURL,
-    headless: process.env.HEADLESS === 'true' || !!process.env.CI,
+    headless: process.env.HEADLESS === 'false' || !!process.env.CI,
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
@@ -202,6 +202,11 @@ export default defineConfig({
     {
       name: '29-contract',
       testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: '30-audit-trails',
+      testMatch: /(?:^|[\\/])audit-trails\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     // {
