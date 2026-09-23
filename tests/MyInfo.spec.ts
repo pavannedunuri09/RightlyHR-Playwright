@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
-import { MyInfoPage } from '../pages/MyInfoPage';
+import { MyInfoPage } from '../pages/MyinfoPage';
 import {
   alternateNameSet,
   alternateValidDob,
