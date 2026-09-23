@@ -1045,6 +1045,10 @@ test.describe.serial(
         test(
             'TC47 - Verify that HR can search for the employee by name and the employee is displayed under Active Contracts/Contractors',
             async () => {
+                if (!contract.activeEmployeeName && !contract.createdEmployeeName) {
+                    contract.activeEmployeeName = employee.fullName;
+                }
+
                 await contract.searchActiveContractEmployee(
                     employee.fullName
                 );
