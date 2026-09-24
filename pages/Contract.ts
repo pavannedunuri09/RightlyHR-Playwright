@@ -143,14 +143,14 @@ export class Contract {
     // --------------------------------------------------
 
     async clickEmployees() {
-        await this.page.bringToFront();
+        await this.ensureHrSession();
         await this.page.waitForTimeout(500);
         await this.page.keyboard.press('Escape').catch(() => { });
 
         const empNav = this.employees.first();
         await empNav.waitFor({
             state: 'visible',
-            timeout: 15000
+            timeout: 20000
         });
 
         await empNav.click();
@@ -1985,8 +1985,7 @@ export class Contract {
         }
 
         const login = new LoginPage(this.page);
-        await login.login(hrUsername, hrPassword);
-        await this.page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30000 });
+        await login.loginHrFromEnv();
         await this.page.waitForTimeout(1500);
     }
 

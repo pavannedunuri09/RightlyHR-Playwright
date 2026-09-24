@@ -56,28 +56,18 @@ test.describe.serial(
 
         test.beforeAll(
             async ({ browser }) => {
-                const hrUsername = process.env.HR_USERNAME || process.env.LOGIN_EMAIL;
-                const hrPassword = process.env.HR_PASSWORD || process.env.LOGIN_PASSWORD;
+                const context = fs.existsSync('.auth/user.json')
+                    ? await browser.newContext({ storageState: '.auth/user.json' })
+                    : await browser.newContext();
 
-                if (hrUsername && hrPassword) {
-                    hrPage = await browser.newPage();
+                hrPage = await context.newPage();
+                await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
+                await hrPage.waitForTimeout(1500);
+
+                if (hrPage.url().includes('/login')) {
                     const login = new LoginPage(hrPage);
-                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
-                    await hrPage.waitForTimeout(2000);
-                    if (hrPage.url().includes('/login')) {
-                        await login.login(hrUsername, hrPassword);
-                        await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
-                        await hrPage.waitForTimeout(2000);
-                        await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
-                    }
-                } else if (fs.existsSync('.auth/user.json')) {
-                    const context = await browser.newContext({ storageState: '.auth/user.json' });
-                    hrPage = await context.newPage();
-                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
-                    await hrPage.waitForTimeout(2000);
-                } else {
-                    hrPage = await browser.newPage();
-                    await hrPage.goto('/login');
+                    await login.loginHrFromEnv();
+                    await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
                 }
 
                 contract = new Contract(hrPage);

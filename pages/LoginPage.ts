@@ -59,6 +59,30 @@ export class LoginPage {
     await this.passwordVisibilityToggle.click();
   }
 
+  async loginHrFromEnv() {
+    const email = process.env.HR_USERNAME?.trim() || process.env.LOGIN_EMAIL?.trim();
+    const password = process.env.HR_PASSWORD?.trim() || process.env.LOGIN_PASSWORD?.trim();
+    if (!email || !password) {
+      throw new Error('Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD in .env');
+    }
+
+    await this.logoutOrClearSession();
+    await this.goto();
+    await this.login(email, password);
+    await this.page.waitForTimeout(2000);
+
+    if (await this.errorMessage.isVisible().catch(() => false)) {
+      throw new Error(
+        `HR login failed for ${email}: Invalid email or inactive employee. Update .env with an active HR account.`,
+      );
+    }
+
+    await this.page.waitForURL((url) => !url.pathname.includes('/login'), {
+      timeout: 45000,
+      waitUntil: 'domcontentloaded',
+    });
+  }
+
   async loginFromEnv() {
     const email = process.env.LOGIN_EMAIL?.trim();
     const password = process.env.LOGIN_PASSWORD?.trim();
