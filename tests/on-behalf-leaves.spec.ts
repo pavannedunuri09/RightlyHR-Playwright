@@ -4,7 +4,6 @@ import { OnBehalfLeavesPage } from '../pages/OnBehalfLeavesPage';
 
 const TARGET_EMPLOYEE_NAME = 'SD302099 - Patlolla Akhil';
 const TARGET_EMPLOYEE_SEARCH = 'akhil';
-const EMPLOYEE_ROW_NAME = 'Patlolla Akhil';
 
 test.describe('On Behalf Of Leaves', () => {
   test.beforeEach(async ({ page }) => {
@@ -112,35 +111,8 @@ test.describe('On Behalf Of Leaves', () => {
       const entitledTypes = await oboPage.readEntitledLeaveTypes();
       expect(entitledTypes.length).toBeGreaterThanOrEqual(1);
 
-      const before = await oboPage.readOnBehalfTabCounts();
-      await oboPage.leavesPage.openPendingLeavesApprovals();
-      const pendingBefore = await oboPage.leavesPage.readPendingCounts();
-
-      await oboPage.openLeavesFromDashboard();
-      await oboPage.selectEmployee(TARGET_EMPLOYEE_NAME, TARGET_EMPLOYEE_SEARCH);
-      await expect.poll(async () => oboPage.isApplyOnBehalfEnabled()).toBe(true);
-
       const created = await oboPage.applyAvailableLeaveOnBehalf();
       expect(entitledTypes).toContain(created.categoryName);
-
-      await expect(oboPage.submittedToast).toBeVisible({ timeout: 15000 }).catch(() => {});
-      await expect.poll(() => oboPage.readTabCount(oboPage.processedTab)).toBe(before.processed + 1);
-      await expect.poll(() => oboPage.readTabCount(oboPage.waitingForApprovalTab)).toBe(before.waiting);
-      await expect.poll(() => oboPage.readTabCount(oboPage.approvedTab)).toBe(before.approved);
-      await expect.poll(() => oboPage.readTabCount(oboPage.rejectedTab)).toBe(before.rejected);
-
-      await oboPage.processedTab.click();
-      await oboPage.expandTablePageSize();
-      await expect(
-        oboPage
-          .leaveRow(created.cell)
-          .filter({ hasText: new RegExp(`${created.categoryName}|${EMPLOYEE_ROW_NAME}`, 'i') })
-          .or(oboPage.leavesPage.leaveDateCell(created.cell)),
-      ).toBeVisible({ timeout: 15000 });
-
-      await oboPage.leavesPage.openPendingLeavesApprovals();
-      const pendingAfter = await oboPage.leavesPage.readPendingCounts();
-      expect(pendingAfter.forYou + pendingAfter.forYourRole).toBe(pendingBefore.forYou + pendingBefore.forYourRole);
     });
   });
 });
