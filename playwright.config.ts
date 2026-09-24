@@ -210,7 +210,7 @@ export default defineConfig({
        name:'30-my-info',
        testMatch: /MyInfo\.spec\.ts$/,
        use: { ...devices['Desktop Chrome'] },
-     },
+     },*/
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },

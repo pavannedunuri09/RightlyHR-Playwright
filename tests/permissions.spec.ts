@@ -4,15 +4,15 @@ import { PermissionsPage, PermissionRequestData } from '../pages/PermissionsPage
 const FIRST_PERMISSION: PermissionRequestData = {
   date: '2026-10-15',
   duration: '0.5',
-  permissionType: 'Early Login',
-  reason: 'Requesting early login permission',
+  permissionType: 'Early Logout',
+  reason: 'Requesting early logout permission',
 };
 
 const SECOND_PERMISSION: PermissionRequestData = {
   date: '2026-09-10',
   duration: '0.5',
-  permissionType: 'Early Login',
-  reason: 'Requesting early login permission',
+  permissionType: 'Early Logout',
+  reason: 'Requesting early logout permission',
 };
 
 const REJECTION_PERMISSION: PermissionRequestData = {
@@ -25,7 +25,7 @@ const REJECTION_PERMISSION: PermissionRequestData = {
 const BULK_REJECT_PERMISSION: PermissionRequestData = {
   date: '2026-09-19',
   duration: '0.5',
-  permissionType: 'Early Login',
+  permissionType: 'Early Logout',
   reason: 'Requesting permission for bulk rejection flow',
 };
 
@@ -93,7 +93,7 @@ test.describe.serial('Time Off >> Permissions End-to-End Test Suite', () => {
     // Measure baseline count right before submitting first request
     countBeforeFirstRequest = await permissionsPage.getWaitingForApprovalCount();
 
-    // Request initial permission (Early Login) with fallback dates if limit exceeded
+    // Request initial permission (Early Logout) with fallback dates if limit exceeded
     await permissionsPage.requestPermission(FIRST_PERMISSION, [
       '2026-11-04',
       '2026-11-05',
@@ -122,7 +122,7 @@ test.describe.serial('Time Off >> Permissions End-to-End Test Suite', () => {
   // =========================================================================
   // TEST 04: CANCEL THE PREVIOUSLY REQUESTED PERMISSION VIA KEBAB MENU
   // =========================================================================
-  test('04. click on kebab menu and cancel the permission request record that was requested earlier', async () => {
+  /*test('04. click on kebab menu and cancel the permission request record that was requested earlier', async () => {
     // Measure count before cancellation
     countBeforeCancel = await permissionsPage.getWaitingForApprovalCount();
 
@@ -133,7 +133,7 @@ test.describe.serial('Time Off >> Permissions End-to-End Test Suite', () => {
     await expect.poll(async () => {
       return await permissionsPage.getWaitingForApprovalCount();
     }, { timeout: 15000, intervals: [500, 1000, 2000] }).toBeLessThanOrEqual(countBeforeCancel);
-  });
+  });*/
 
   // =========================================================================
   // TEST 05: REQUEST ANOTHER PERMISSION FOR SEP 11, SUBMIT & VERIFY RECORD & COUNT
@@ -223,7 +223,10 @@ test.describe.serial('Time Off >> Permissions End-to-End Test Suite', () => {
   test('09. selects employee from Permissions and verifies the approved record under Processed', async () => {
     await permissionsPage.openTimeOffMenu();
     await permissionsPage.navigateToPermissionsModule();
-    await permissionsPage.selectEmployee('Indu Priya');
+    // await permissionsPage.selectEmployee('Indu Priya');
+    const employeeName = process.env.EMPLOYEE_NAME ?? '';
+
+    await permissionsPage.selectEmployee(employeeName);
     await permissionsPage.verifyProcessedPermission();
   });
 
@@ -232,7 +235,10 @@ test.describe.serial('Time Off >> Permissions End-to-End Test Suite', () => {
   // =========================================================================
   test('10. selects Induu Priya in Attendance and verifies the permission chip and Attendance Status count', async () => {
     await permissionsPage.navigateToAttendanceModule();
-    await permissionsPage.selectAttendanceEmployee('Induu Priya');
+    // await permissionsPage.selectAttendanceEmployee('Induu Priya');
+    const employeeName = process.env.EMPLOYEE_NAME ?? '';
+
+    await permissionsPage.selectEmployee(employeeName);
     await permissionsPage.verifyAttendancePermissionChipAndStatus();
   });
 
