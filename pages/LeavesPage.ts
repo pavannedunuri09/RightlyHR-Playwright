@@ -528,7 +528,7 @@ export class LeavesPage {
       await leaveTypeTrigger.click();
     }
 
-    const option = this.page.getByRole('option', { name: categoryName, exact: true });
+    const option = this.page.getByRole('option', { name: categoryName, exact: true }).first();
     await option.waitFor({ state: 'visible', timeout: 15000 });
     await option.click();
 
@@ -614,7 +614,7 @@ export class LeavesPage {
       const yesButton = dialog.getByRole('button', { name: 'Yes', exact: true });
       const cancelButton = dialog.getByRole('button', { name: 'Cancel', exact: true });
       if (await yesButton.isVisible().catch(() => false)) {
-        await yesButton.click();
+        await yesButton.click({ timeout: 5000 }).catch(() => {});
       } else if (await cancelButton.isVisible().catch(() => false)) {
         await cancelButton.click();
         continue;

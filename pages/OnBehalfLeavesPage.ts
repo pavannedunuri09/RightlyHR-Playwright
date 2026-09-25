@@ -29,12 +29,17 @@ function isoToDmy(isoDate: string) {
   return `${day}/${month}/${year}`;
 }
 
-function randomFutureWeekdays(count: number): LeaveDateParts[] {
+function randomFutureWeekdays(count: number, taken: Set<string> = new Set()): LeaveDateParts[] {
   const pool: LeaveDateParts[] = [];
   const seen = new Set<string>();
-  for (let offset = 14; offset <= 56; offset += 1) {
+  for (let offset = 14; offset <= 90; offset += 1) {
     const candidate = leaveDateFromOffset(offset);
-    if (seen.has(candidate.input) || KNOWN_HOLIDAYS.has(candidate.input) || claimedOnBehalfLeaveDates.has(candidate.input)) {
+    if (
+      seen.has(candidate.input) ||
+      KNOWN_HOLIDAYS.has(candidate.input) ||
+      claimedOnBehalfLeaveDates.has(candidate.input) ||
+      taken.has(candidate.input)
+    ) {
       continue;
     }
     if (daysFromToday(candidate.input) < 14) {
@@ -323,12 +328,8 @@ export class OnBehalfLeavesPage {
 
   dateInput(field: 'start' | 'end') {
     const dialog = this.requestDialog();
-    const label = field === 'start' ? /Start Date\s*\*/ : /End Date\s*\*/;
-    return dialog
-      .getByRole('textbox', { name: label })
-      .or(dialog.locator('p-calendar, p-datepicker').filter({ hasText: label }).locator('input').first())
-      .or(dialog.getByText(label).locator('xpath=following::input[1]'))
-      .first();
+    const label = field === 'start' ? /^Start Date\s*\*$/ : /^End Date\s*\*$/;
+    return dialog.getByText(label).locator('xpath=..').locator('input');
   }
 
   dateValueMatches(shown: string, isoDate: string) {
@@ -345,8 +346,6 @@ export class OnBehalfLeavesPage {
   async fillDateField(field: 'start' | 'end', isoDate: string) {
     const input = this.dateInput(field);
     await input.waitFor({ state: 'visible', timeout: 15000 });
-    await input.click();
-    await this.page.keyboard.press('Escape').catch(() => {});
     const inputType = ((await input.getAttribute('type').catch(() => '')) || '').toLowerCase();
     const value = inputType === 'date' ? isoDate : isoToDmy(isoDate);
     await input.fill('');
@@ -355,7 +354,7 @@ export class OnBehalfLeavesPage {
     if (!this.dateValueMatches(shown, isoDate)) {
       await input.fill(isoDate);
     }
-    await input.press('Tab');
+    await this.requestDialog().getByText(/Apply Leave On Behalf Of/i).click();
   }
 
   async fillStartDate(isoDate: string) {
@@ -376,8 +375,12 @@ export class OnBehalfLeavesPage {
         await fullDay.check();
         return 'full';
       }
-      await fullDay.check({ force: true }).catch(() => {});
-      return 'full';
+      await this.leavesPage.halfDayRadio.check();
+      const firstHalf = dialog.getByRole('radio', { name: 'First Half' });
+      if (await firstHalf.isVisible().catch(() => false)) {
+        await firstHalf.check();
+      }
+      return 'first';
     }
 
     await this.leavesPage.halfDayRadio.check();
@@ -476,20 +479,33 @@ export class OnBehalfLeavesPage {
     const dates = new Set<string>();
     const rows = await this.page.locator('table tbody tr').allTextContents();
     for (const row of rows) {
+      const found: string[] = [];
       const month = 'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
       const matches = row.match(new RegExp(`(?:${month})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*\\d{4})?`, 'gi')) || [];
       for (const match of matches) {
         const parsed = workedDateToInput(match);
         if (parsed) {
-          dates.add(parsed);
+          found.push(parsed);
         }
       }
-      const iso = row.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
-      for (const match of iso) {
-        dates.add(match);
-      }
+      found.push(...(row.match(/\b\d{4}-\d{2}-\d{2}\b/g) || []));
+      this.addDateSpan(dates, found);
     }
     return dates;
+  }
+
+  addDateSpan(dates: Set<string>, found: string[]) {
+    const unique = [...new Set(found)].sort();
+    if (unique.length === 0) {
+      return;
+    }
+    const start = new Date(`${unique[0]}T00:00:00`);
+    const end = new Date(`${unique[unique.length - 1]}T00:00:00`);
+    for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      const month = String(cursor.getMonth() + 1).padStart(2, '0');
+      const day = String(cursor.getDate()).padStart(2, '0');
+      dates.add(`${cursor.getFullYear()}-${month}-${day}`);
+    }
   }
 
   async tryApplyLeaveOnBehalf(
@@ -554,14 +570,16 @@ export class OnBehalfLeavesPage {
       return 'skipped';
     }
 
-    try {
-      await this.submittedToast.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
-      await dialog.waitFor({ state: 'hidden', timeout: 20000 });
-      return 'submitted';
-    } catch {
+    const submitted = await this.submittedToast
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!submitted) {
       await this.closeRequestDialogIfOpen();
       return 'skipped';
     }
+    await dialog.waitFor({ state: 'hidden', timeout: 20000 }).catch(() => {});
+    return 'submitted';
   }
 
   async applyAvailableLeaveOnBehalf(): Promise<CreatedLeaveRequest> {
@@ -570,7 +588,11 @@ export class OnBehalfLeavesPage {
       throw new Error('No entitled leave types in Leave Type dropdown');
     }
 
-    const dates = randomFutureWeekdays(8);
+    const booked = await this.collectBookedDates();
+    const dates = randomFutureWeekdays(8, booked);
+    if (dates.length === 0) {
+      throw new Error('No free weekday is available. Every candidate date is already applied.');
+    }
     for (const date of dates) {
       for (const categoryName of types) {
         const result = await this.tryApplyLeaveOnBehalf(date.input, date.input, categoryName, 'full');

@@ -4,7 +4,7 @@ import { LoginPage } from './LoginPage';
 export interface PermissionRequestData {
   date?: string; // YYYY-MM-DD
   duration: '0.5' | '1' | '1.5' | '2' | string;
-  permissionType: 'Early Logout' | 'In Between Breaks' | 'Early Login' | string;
+  permissionType: 'Early Logout' | 'In Between Breaks' | 'Early Login' |'Late Login' |'Late Logout' |'Client Visit Permission' | string;
   reason: string;
 }
 
@@ -824,43 +824,53 @@ export class PermissionsPage {
       const candidate = datesToTry[i];
       if (!candidate) continue;
 
-      const modal = this.page.locator('ngb-modal-window, [role="dialog"]').last();
-      const isModalOpenBefore = await modal.isVisible({ timeout: 2000 }).catch(() => false);
-      if (!isModalOpenBefore) {
-        if (!successfulDate) successfulDate = candidate;
-        break;
+      let requestDialog = this.page.getByRole('dialog').filter({ hasText: 'Request Permission' });
+      const isRequestOpen = await requestDialog.isVisible().catch(() => false);
+      let refilled = false;
+      if (!isRequestOpen) {
+        if (successfulDate) break;
+        await this.openRequestPermissionModal();
+        await this.fillPermissionRequest({ ...data, date: candidate });
+        requestDialog = this.page.getByRole('dialog').filter({ hasText: 'Request Permission' });
+        refilled = true;
       }
 
-      if (i > 0) {
+      if (i > 0 && !refilled) {
         await this.selectDate(candidate);
       }
 
-      const reqBtn = modal.getByRole('button', { name: 'Request', exact: true });
+      const reqBtn = requestDialog.getByRole('button', { name: 'Request', exact: true });
       await reqBtn.waitFor({ state: 'visible', timeout: 5000 });
+      const createResponse = this.page.waitForResponse(
+        (response) =>
+          response.url().includes('RegularizationRequests/create') &&
+          response.request().method() === 'POST',
+        { timeout: 15000 }
+      );
       await reqBtn.click();
 
-      const toast = this.page.getByText('Permission request submitted')
-        .or(this.page.getByText(/Permission request submitted|submitted successfully/i))
-        .first();
-
-      const isToastVisible = await toast.isVisible({ timeout: 4000 }).catch(() => false);
-      if (isToastVisible) {
+      const response = await createResponse.catch(() => null);
+      const responseBody = response ? await response.text().catch(() => '') : '';
+      const limitHit = /limit exceeded|already requested|already exist/i.test(responseBody);
+      if (response?.ok() && !limitHit) {
         successfulDate = candidate;
-        await this.page.waitForTimeout(1000);
+        await requestDialog.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
         break;
       }
 
-      const isModalClosed = await modal.waitFor({ state: 'hidden', timeout: 3000 }).then(() => true).catch(() => false);
-      if (isModalClosed) {
+      if (limitHit) {
+        continue;
+      }
+
+      const toast = this.page.getByText(/Permission request submitted|submitted successfully/i).first();
+      if (await toast.isVisible({ timeout: 2000 }).catch(() => false)) {
         successfulDate = candidate;
         break;
       }
-
-      await this.page.waitForTimeout(1000);
     }
 
-    if (!successfulDate && datesToTry.length > 0) {
-      successfulDate = datesToTry[0];
+    if (!successfulDate) {
+      throw new Error(`Permission request was not created. Dates tried: ${datesToTry.filter(Boolean).join(', ')}`);
     }
 
     return successfulDate;
