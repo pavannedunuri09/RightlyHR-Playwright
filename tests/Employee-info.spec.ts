@@ -2948,18 +2948,19 @@ test('TC60 - Add Certification', async ({ page }) => {
     name: 'Certification Name *',
   });
 
-  await certificationName.fill('c');
+  await certificationName.fill('AWS Solutions Architect');
 
-  await expect(certificationName).toHaveValue('c');
+  await expect(certificationName).toHaveValue('AWS Solutions Architect');
 
   // Certification ID
   const certificationId = page.getByRole('textbox', {
     name: 'Certification ID *',
   });
 
-  await certificationId.fill('4566');
+  const uniqueCertId = 'CERT_' + Date.now().toString().slice(-5);
+  await certificationId.fill(uniqueCertId);
 
-  await expect(certificationId).toHaveValue('4566');
+  await expect(certificationId).toHaveValue(uniqueCertId);
 
   // Issued Date
   const issuedDate = page.getByRole('textbox', {
@@ -2997,6 +2998,7 @@ test('TC60 - Add Certification', async ({ page }) => {
   await expect(addButton).toBeEnabled();
 
   await addButton.click();
+  await page.waitForTimeout(2000);
 });
 // ========================================
 // TC61 - Update Certification
@@ -3042,9 +3044,10 @@ test('TC61 - Update Certification', async ({ page }) => {
     name: 'Certification ID *',
   });
 
-  await certificationId.fill('4566-898');
+  const updatedCertId = 'CERT_UPD_' + Date.now().toString().slice(-5);
+  await certificationId.fill(updatedCertId);
 
-  await expect(certificationId).toHaveValue('4566-898');
+  await expect(certificationId).toHaveValue(updatedCertId);
 
   // No Expiry
   const noExpiry = page.getByRole('checkbox', {
