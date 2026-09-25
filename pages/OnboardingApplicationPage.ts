@@ -1,10 +1,10 @@
 import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
-
-const FEMALE_NAMES = new Set([
-  'Kavya', 'Meera', 'Sneha', 'Pooja', 'Anjali', 'Divya', 'Isha', 'Neha', 'Shreya', 'Nandini',
-  'Sindhuja', 'Priya', 'Ananya', 'Lakshmi', 'Aishwarya',
-]);
+import {
+  genderSalutationForFirstName,
+  randomDocumentNumber,
+  randomMobile,
+} from '../tests/fixtures/randomTestData';
 
 const CITIES = [
   { city: 'Hyderabad', state: 'Telangana', zip: '500012' },
@@ -94,14 +94,29 @@ export class OnboardingApplicationPage {
 
   private async selectComboboxOption(field: Locator, optionName: string) {
     const combobox = field.getByRole('combobox');
-    await this.openComboboxField(field);
-    const controlsId = await combobox.getAttribute('aria-controls');
-    const panel = controlsId
-      ? this.page.locator(`#${controlsId}`)
-      : this.page.locator('.p-select-overlay').last();
-    await expect(panel).toBeVisible({ timeout: 5000 });
-    await panel.getByRole('option', { name: optionName, exact: true }).first().click();
-    await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    const escaped = optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.openComboboxField(field);
+      const controlsId = await combobox.getAttribute('aria-controls');
+      const panel = controlsId
+        ? this.page.locator(`#${controlsId}`)
+        : this.page.locator('.p-select-overlay').last();
+      await expect(panel).toBeVisible({ timeout: 5000 });
+
+      const option = panel.getByRole('option', { name: optionName, exact: true })
+        .or(panel.locator('[role="option"]').filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }))
+        .or(panel.getByText(optionName, { exact: true }));
+      await option.first().click();
+      await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(300);
+
+      const selectedText = ((await field.innerText().catch(() => '')) || '').trim();
+      if (selectedText.includes(optionName) || !/please select/i.test(selectedText)) {
+        return;
+      }
+    }
+
     await expect(field).toContainText(optionName, { timeout: 5000 });
   }
 
@@ -191,19 +206,18 @@ export class OnboardingApplicationPage {
   }
 
   static expectedPersonalDefaults(firstName: string) {
-    const female = FEMALE_NAMES.has(firstName);
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
     return {
-      gender: female ? 'Female' : 'Male',
-      salutation: female ? 'Miss.' : 'Mr.',
+      gender,
+      salutation,
       middleName: '',
       designation: 'Front End Developer',
     };
   }
 
   async fillMandatoryIndianDetails(firstName: string, lastName: string) {
-    const female = FEMALE_NAMES.has(firstName);
     const place = CITIES[Math.floor(Math.random() * CITIES.length)];
-    const mobile = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const mobile = randomMobile();
     const plot = Math.floor(Math.random() * 80) + 10;
     const details = {
       ...OnboardingApplicationPage.expectedPersonalDefaults(firstName),
@@ -222,8 +236,7 @@ export class OnboardingApplicationPage {
       await this.lastNameInput.fill(lastName);
     }
 
-    const salutation = female ? 'Miss.' : 'Mr.';
-    const gender = female ? 'Female' : 'Male';
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
 
     await this.selectComboboxOption(this.genderCombobox, gender);
     const salutationText = ((await this.salutationCombobox.innerText().catch(() => '')) || '').trim();
@@ -349,7 +362,7 @@ export class OnboardingApplicationPage {
         name,
         this.filePathForDocument(name, pdfPath, imagePath),
         this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
+        this.alternateFilePathForDocument(name, imagePath, pdfPath),
       );
       uploaded += 1;
     }
@@ -358,7 +371,11 @@ export class OnboardingApplicationPage {
     }
   }
 
-  async uploadMissingDocuments(pdfPath: string, imagePath: string) {
+  async uploadMissingDocuments(
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
     await this.goToDocumentsIfNeeded();
     const documentNames = await this.listDocumentNames();
     console.log(`Documents on page: ${documentNames.join(', ') || '(none found)'}`);
@@ -375,9 +392,9 @@ export class OnboardingApplicationPage {
       }
       await this.uploadDocument(
         name,
-        this.filePathForDocument(name, pdfPath, imagePath),
+        this.resolveFilePathForDocument(name, pdfPath, imagePath, perDocFiles),
         this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
+        this.alternateFilePathForDocument(name, imagePath, pdfPath),
       );
     }
 
@@ -460,22 +477,45 @@ export class OnboardingApplicationPage {
   }
 
   private filePathForDocument(documentName: string, pdfPath: string, imagePath: string) {
-    return /pan/i.test(documentName) ? imagePath : pdfPath;
+    if (/resume/i.test(documentName)) {
+      return pdfPath;
+    }
+    return imagePath;
+  }
+
+  private resolveFilePathForDocument(
+    documentName: string,
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
+    if (perDocFiles) {
+      const direct = perDocFiles[documentName];
+      if (direct) {
+        return direct;
+      }
+      const matchedKey = Object.keys(perDocFiles).find((key) =>
+        new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(documentName),
+      );
+      if (matchedKey && perDocFiles[matchedKey]) {
+        return perDocFiles[matchedKey];
+      }
+    }
+    return this.filePathForDocument(documentName, pdfPath, imagePath);
   }
 
   private documentNumberForDocument(documentName: string) {
-    if (/pan/i.test(documentName)) {
-      return randomPan();
-    }
-    if (/aadha?r/i.test(documentName)) {
-      return randomAadhaar();
-    }
-    // Resume and Driving License require a 12-character numeric document number.
-    return randomNumericId(12);
+    return randomDocumentNumber(documentName);
   }
 
-  private alternateFilePathForDocument(documentName: string, imagePath: string) {
-    return /resume|driving\s*l/i.test(documentName) ? imagePath : undefined;
+  private alternateFilePathForDocument(documentName: string, imagePath: string, pdfPath?: string) {
+    if (/resume|driving\s*l/i.test(documentName)) {
+      return imagePath;
+    }
+    if (/pan|aadha?r/i.test(documentName)) {
+      return pdfPath;
+    }
+    return undefined;
   }
 
   private async fillDocumentNumberIfRequired(
@@ -488,7 +528,13 @@ export class OnboardingApplicationPage {
       return;
     }
 
-    const value = documentNumber ?? this.documentNumberForDocument(documentName);
+    let value = documentNumber ?? this.documentNumberForDocument(documentName);
+    if (!value) {
+      return;
+    }
+    if (/pan/i.test(documentName)) {
+      value = value.toUpperCase();
+    }
     await numberInput.click();
     await numberInput.fill('');
     await numberInput.fill(value);
@@ -566,7 +612,9 @@ export class OnboardingApplicationPage {
 
   private async openDocumentUpload(documentName: string) {
     await this.closeUploadDialog();
-    await this.page.bringToFront();
+    if (!this.page.isClosed()) {
+      await this.page.bringToFront().catch(() => {});
+    }
     await this.goToDocumentsIfNeeded();
 
     const row = this.documentRow(documentName);
@@ -600,6 +648,11 @@ export class OnboardingApplicationPage {
     await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
   }
 
+  private async documentIsComplete(documentName: string) {
+    const status = await this.getDocumentRowStatus(documentName).catch(() => null);
+    return Boolean(status && this.isDocumentComplete(status));
+  }
+
   private async uploadDocument(
     documentName: string,
     filePath: string,
@@ -608,8 +661,7 @@ export class OnboardingApplicationPage {
   ) {
     const row = this.documentRow(documentName);
     await row.scrollIntoViewIfNeeded().catch(() => {});
-    const current = await this.getDocumentRowStatus(documentName);
-    if (current && this.isDocumentComplete(current)) {
+    if (await this.documentIsComplete(documentName)) {
       console.log(`${documentName} already uploaded, reusing it`);
       return;
     }
@@ -619,15 +671,27 @@ export class OnboardingApplicationPage {
 
     for (const candidate of candidates) {
       try {
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`${documentName} already uploaded, reusing it`);
+          return;
+        }
         if (!fs.existsSync(candidate)) {
           throw new Error(`ENOENT: no such file or directory, stat '${candidate}'`);
         }
         await this.openDocumentUpload(documentName);
         const scope = await this.activeUploadScope();
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
+        const docNum = documentNumber ?? this.documentNumberForDocument(documentName);
+
+        // Portal expects document number first, then file, then Upload.
+        await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        await this.page.waitForTimeout(500);
         await this.attachUploadFile(scope, candidate);
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
         await this.page.waitForTimeout(1000);
+
+        if (!/resume/i.test(documentName)) {
+          await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        }
+
         const note = scope.getByText(/Only Pdf and image are allowed/i);
         if (await note.isVisible().catch(() => false)) {
           await note.click().catch(() => {});
@@ -637,19 +701,27 @@ export class OnboardingApplicationPage {
         await expect(upload).toBeEnabled({ timeout: 15000 });
         await upload.click();
 
-        if (await this.waitForUploadSuccess(scope, row)) {
+        const toastSeen = await this.waitForUploadSuccess(scope, row);
+        await this.closeUploadDialog();
+        if (toastSeen || await this.waitForRowComplete(documentName)) {
           console.log(`Uploaded ${documentName}`);
-          await this.closeUploadDialog();
-          await this.page.waitForTimeout(500);
           return;
         }
 
         lastError = `${documentName} upload did not succeed with ${pathBasename(candidate)}`;
-        await this.closeUploadDialog();
       } catch (error) {
         lastError = `${documentName} upload failed with ${pathBasename(candidate)}: ${error}`;
-        await this.closeUploadDialog();
+        await this.closeUploadDialog().catch(() => {});
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`Uploaded ${documentName}`);
+          return;
+        }
       }
+    }
+
+    if (await this.documentIsComplete(documentName)) {
+      console.log(`Uploaded ${documentName}`);
+      return;
     }
 
     const scope = await this.activeUploadScope();
@@ -657,8 +729,19 @@ export class OnboardingApplicationPage {
     throw new Error(`${lastError}. Dialog: ${dialogText.replace(/\s+/g, ' ').trim()}`);
   }
 
+  private async waitForRowComplete(documentName: string, timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.documentIsComplete(documentName)) {
+        return true;
+      }
+      await this.page.waitForTimeout(400);
+    }
+    return this.documentIsComplete(documentName);
+  }
+
   private async waitForUploadSuccess(scope: Locator, row: Locator) {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 12000;
     while (Date.now() < deadline) {
       const scopeText = await scope.innerText().catch(() => '');
       if (/Document uploaded successfully|uploaded successfully/i.test(scopeText)) {
@@ -672,6 +755,9 @@ export class OnboardingApplicationPage {
       if (/Waiting for submission/i.test(rowText) && !/Rejected/i.test(rowText)) {
         return true;
       }
+      if (!(await this.hasOpenUploadUi()) && /Waiting for submission/i.test(rowText)) {
+        return true;
+      }
       await this.page.waitForTimeout(400);
     }
     return false;
@@ -681,7 +767,6 @@ export class OnboardingApplicationPage {
 function pathBasename(filePath: string) {
   return filePath.split(/[/\\]/).pop() ?? filePath;
 }
-
 function randomPan() {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const pick = (count: number) => Array.from({ length: count }, () => letters[Math.floor(Math.random() * 26)]).join('');

@@ -13,7 +13,7 @@ export class PreOnboardingPage {
     this.page = page;
     this.usernameInput = page.getByRole('textbox', { name: 'Username*' });
     this.passwordInput = page.getByRole('textbox', { name: 'Password*' });
-    this.loginButton = page.getByRole('button', { name: 'Login' });
+    this.loginButton = page.getByRole('button', { name: 'Login', exact: true });
     this.invalidCredentialsMessage = page.getByText(
       /invalid|incorrect|wrong (email|mail|password|username|credentials)|unable to login|login failed/i,
     );
@@ -30,20 +30,8 @@ export class PreOnboardingPage {
   async login(username: string, password: string) {
     await this.usernameInput.fill(username);
     await this.passwordInput.fill(password);
-    const onFailed = (request: { url: () => string; method: () => string; failure: () => { errorText?: string } | null }) => {
-      console.log(`Login request failed: ${request.method()} ${request.url()} (${request.failure()?.errorText || 'unknown'})`);
-    };
-    this.page.on('requestfailed', onFailed);
-    try {
-      await this.loginButton.click();
-      await this.page
-        .getByText(/invalid|ProgressEvent|Go to Application|Offer Letter/i)
-        .first()
-        .waitFor({ state: 'visible', timeout: 8000 })
-        .catch(() => {});
-    } finally {
-      this.page.off('requestfailed', onFailed);
-    }
+    await expect(this.loginButton).toBeEnabled({ timeout: 15000 }).catch(() => {});
+    await this.loginButton.click();
   }
 
   async expectInvalidCredentials() {
