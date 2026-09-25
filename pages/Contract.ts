@@ -137,6 +137,37 @@ export class Contract {
         );
     }
 
+    private async dismissProductTour() {
+        const tourButton = this.page.locator('.driver-popover')
+            .getByRole('button', { name: /Finish|Done|Skip|Close|Next/i })
+            .or(this.page.getByRole('button', { name: /^Finish$/i }));
+        if (await tourButton.first().isVisible({ timeout: 1500 }).catch(() => false)) {
+            await tourButton.first().click().catch(() => { });
+            await this.page.waitForTimeout(500);
+        }
+
+        await this.page.keyboard.press('Escape').catch(() => { });
+
+        await this.page.evaluate(() => {
+            document.querySelectorAll(
+                '.driver-overlay, .driver-popover, #driver-highlighted-element-stage, svg[class*="driver"]',
+            ).forEach((el) => el.remove());
+            document.body.classList.remove('modal-open', 'driver-active', 'driver-fade');
+        }).catch(() => { });
+    }
+
+    private async clickRowKebabMenu(kebab: Locator) {
+        await this.dismissProductTour();
+        await kebab.waitFor({ state: 'visible', timeout: 10000 });
+        try {
+            await kebab.click({ timeout: 5000 });
+        } catch {
+            await this.dismissProductTour();
+            await kebab.click({ force: true });
+        }
+        await this.page.waitForTimeout(500);
+    }
+
     // --------------------------------------------------
     // TC01
     // --------------------------------------------------
@@ -1145,6 +1176,7 @@ export class Contract {
 
     async openContractOfferPendingApproval() {
         await this.page.bringToFront();
+        await this.dismissProductTour();
         const pendingApprovals = this.page.locator('#sidenav-main-drop').getByText('Pending Approvals')
             .or(this.page.getByText('Pending Approvals', { exact: true }));
         await pendingApprovals.first().waitFor({ state: 'visible', timeout: 15000 });
@@ -1167,9 +1199,11 @@ export class Contract {
         });
         await contractOffer.click();
         await this.page.waitForTimeout(1000);
+        await this.dismissProductTour();
     }
 
     async approveContractOffer(employeeName?: string) {
+        await this.dismissProductTour();
         await this.page.waitForTimeout(1000);
         const row = employeeName
             ? this.page.getByRole('row').filter({ hasText: employeeName }).first()
@@ -1179,9 +1213,7 @@ export class Contract {
         const actionCell = row.locator('td').last();
         await actionCell.scrollIntoViewIfNeeded();
         const kebab = actionCell.locator('.dropdown > a, .dropdown-toggle').first();
-        await kebab.waitFor({ state: 'visible', timeout: 10000 });
-        await kebab.click();
-        await this.page.waitForTimeout(500);
+        await this.clickRowKebabMenu(kebab);
 
         const approveItem = this.page.locator('.dropdown-menu.show').getByText('Approve', { exact: true })
             .or(this.page.getByText('Approve', { exact: true }).filter({ visible: true }))
@@ -1198,6 +1230,7 @@ export class Contract {
     }
 
     async releaseContractOffer(employeeName?: string) {
+        await this.dismissProductTour();
         await this.page.waitForTimeout(1000);
         const row = employeeName
             ? this.page.getByRole('row').filter({ hasText: employeeName }).first()
@@ -1207,9 +1240,7 @@ export class Contract {
         const actionCell = row.locator('td').last();
         await actionCell.scrollIntoViewIfNeeded();
         const kebab = actionCell.locator('.dropdown > a, .dropdown-toggle').first();
-        await kebab.waitFor({ state: 'visible', timeout: 10000 });
-        await kebab.click();
-        await this.page.waitForTimeout(500);
+        await this.clickRowKebabMenu(kebab);
 
         const releaseItem = this.page.locator('.dropdown-menu.show').getByText('Release Offer', { exact: true })
             .or(this.page.getByText('Release Offer', { exact: true }).filter({ visible: true }))

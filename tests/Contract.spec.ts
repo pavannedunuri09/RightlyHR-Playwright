@@ -4,6 +4,31 @@ import { LoginPage } from '../pages/LoginPage';
 import { Contract, type ContractEmployee } from '../pages/Contract';
 import { createOnboardingFiles } from './fixtures/onboardingFiles';
 
+async function gotoHrPortal(page: Page, url = '/') {
+    const base = process.env.BASE_URL ?? 'the HR portal';
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            return;
+        } catch (error) {
+            lastError = error;
+            const message = String(error);
+            if (/ERR_CONNECTION|TIMED_OUT|ENOTFOUND|ECONNREFUSED/i.test(message) && attempt < 3) {
+                console.log(`HR portal unreachable (${attempt}/3); retrying in 5s...`);
+                await page.waitForTimeout(5000);
+                continue;
+            }
+            break;
+        }
+    }
+
+    throw new Error(
+        `Cannot reach ${base}. Check VPN/network connectivity and BASE_URL in .env. Original error: ${lastError}`,
+    );
+}
+
 test.describe.serial(
     'Contract Flow - Part 1',
     () => {
@@ -56,28 +81,27 @@ test.describe.serial(
 
         test.beforeAll(
             async ({ browser }) => {
-                const hrUsername = process.env.HR_USERNAME || process.env.LOGIN_EMAIL;
-                const hrPassword = process.env.HR_PASSWORD || process.env.LOGIN_PASSWORD;
+                const storageState = fs.existsSync('.auth/user.json') ? '.auth/user.json' : undefined;
+                const context = await browser.newContext({ storageState });
+                hrPage = await context.newPage();
 
-                if (hrUsername && hrPassword) {
-                    hrPage = await browser.newPage();
-                    const login = new LoginPage(hrPage);
-                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
-                    await hrPage.waitForTimeout(2000);
-                    if (hrPage.url().includes('/login')) {
-                        await login.login(hrUsername, hrPassword);
-                        await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
-                        await hrPage.waitForTimeout(2000);
-                        await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
+                await gotoHrPortal(hrPage);
+                await hrPage.waitForTimeout(2000);
+
+                if (hrPage.url().includes('/login')) {
+                    const hrUsername = process.env.HR_USERNAME || process.env.LOGIN_EMAIL;
+                    const hrPassword = process.env.HR_PASSWORD || process.env.LOGIN_PASSWORD;
+                    if (!hrUsername || !hrPassword) {
+                        throw new Error(
+                            'HR session expired. Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD in .env',
+                        );
                     }
-                } else if (fs.existsSync('.auth/user.json')) {
-                    const context = await browser.newContext({ storageState: '.auth/user.json' });
-                    hrPage = await context.newPage();
-                    await hrPage.goto('/', { waitUntil: 'domcontentloaded' });
+
+                    const login = new LoginPage(hrPage);
+                    await login.login(hrUsername, hrPassword);
+                    await hrPage.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 }).catch(() => { });
                     await hrPage.waitForTimeout(2000);
-                } else {
-                    hrPage = await browser.newPage();
-                    await hrPage.goto('/login');
+                    await hrPage.context().storageState({ path: '.auth/user.json' }).catch(() => { });
                 }
 
                 contract = new Contract(hrPage);
@@ -247,7 +271,8 @@ test.describe.serial(
 
         test(
             'TC09 - HR should navigate to prospective employee Yopmail inbox',
-            async () => {
+            async ({}, testInfo) => {
+                testInfo.setTimeout(180000);
 
                 await contract.openYopmailInbox(
                     yopmailPage,

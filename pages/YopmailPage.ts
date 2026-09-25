@@ -30,11 +30,11 @@ export class YopmailPage {
       if (await this.hasCaptcha()) {
         console.log('Yopmail already open with CAPTCHA; waiting up to 2 minutes for it to be solved.');
         await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
-        if (await this.inboxReady()) {
+        if (await this.inboxReady() && this.isOnRequestedMailbox()) {
           return;
         }
       }
-      if (await this.inboxReady()) {
+      if (await this.inboxReady() && this.isOnRequestedMailbox()) {
         return;
       }
     }
@@ -42,6 +42,11 @@ export class YopmailPage {
     await this.gotoInbox({ soft: true }).catch((error) => {
       console.log(`Yopmail open inbox soft-failed: ${error}`);
     });
+    if (!(await this.inboxReady()) && !(await this.hasCaptcha())) {
+      await this.gotoInbox({ soft: false }).catch((error) => {
+        console.log(`Yopmail open inbox retry failed: ${error}`);
+      });
+    }
   }
 
   async waitForMailSubject(fullName: string, timeoutMs = 180000, email?: string) {
@@ -66,14 +71,9 @@ export class YopmailPage {
           continue;
         }
       } else if (!(await this.inboxReady())) {
-        const onYopmail = /yopmail\.com/i.test(this.page.url());
-        if (!onYopmail) {
-          await this.gotoInbox({ soft: true }).catch((error) => {
-            console.log(`Yopmail inbox refresh failed: ${error}`);
-          });
-        } else {
-          await sleep(5000);
-        }
+        await this.gotoInbox({ soft: true }).catch((error) => {
+          console.log(`Yopmail inbox refresh failed: ${error}`);
+        });
       }
 
       try {
@@ -965,14 +965,13 @@ export class YopmailPage {
         }
         throw new Error('Yopmail CAPTCHA blocked inbox access');
       }
-      if (await this.inboxReady()) {
+      if (await this.inboxReady() && this.isOnRequestedMailbox()) {
         await this.handleCaptchaIfVisible(captchaTimeoutMs);
         return;
       }
       if (options?.soft) {
         await this.handleCaptchaIfVisible(captchaTimeoutMs);
-        console.log('Yopmail soft-open on existing tab; waiting for inbox.');
-        return;
+        console.log('Yopmail tab open but mailbox not loaded; navigating to inbox.');
       }
     }
 
@@ -1115,11 +1114,7 @@ export class YopmailPage {
       return false;
     }
 
-    console.log('Yopmail CAPTCHA resolved; pausing debugger then reading mail credentials.');
-    debugger;
-    if (headed) {
-      await this.page.pause();
-    }
+    console.log('Yopmail CAPTCHA resolved; continuing inbox access.');
     return true;
   }
 
@@ -1222,6 +1217,15 @@ export class YopmailPage {
 
   private pageUsable() {
     return !this.page.isClosed();
+  }
+
+  private isOnRequestedMailbox() {
+    if (!this.mailbox) {
+      return true;
+    }
+    const mailbox = this.mailbox.toLowerCase();
+    const url = this.page.url().toLowerCase();
+    return url.includes(`login=${encodeURIComponent(mailbox)}`) || url.includes(`login=${mailbox}`);
   }
 
   private async inboxReady() {
@@ -1353,6 +1357,7 @@ function normalizePortalHref(href: string): string | null {
 }
 
 function defaultPreOnboardingBaseUrl() {
+// <<<<<<< HEAD
   const explicit = process.env.PRE_ONBOARDING_BASE_URL?.trim() || process.env.PRE_ONBOARDING_URL?.trim();
   if (explicit) {
     return explicit.replace(/\/$/, '');
@@ -1363,6 +1368,29 @@ function defaultPreOnboardingBaseUrl() {
   }
   return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
 }
+
+function portalUrlCandidates(url: string) {
+  const original = url.replace(/\/$/, '');
+  const swapped = /^https:/i.test(original)
+    ? original.replace(/^https:/i, 'http:')
+    : original.replace(/^http:/i, 'https:');
+  return [...new Set([
+    original,
+    `${original}/login`,
+    swapped,
+    `${swapped}/login`,
+  ])];
+}
+
+async function isPreOnboardingLoginVisible(page: Page, timeout = 10000) {
+  return page.getByRole('textbox', { name: 'Username*' }).isVisible({ timeout }).catch(() => false);
+// =======
+//   return (
+//     process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
+//     process.env.RHR_BASE_URL?.trim() ||
+//     'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com'
+//   ).replace(/\/$/, '');
+// >>>>>>> b22b138ff64ef3f8fbf607fcaba566381a3860a2
 }
 
 function parseCredentials(body: string) {
