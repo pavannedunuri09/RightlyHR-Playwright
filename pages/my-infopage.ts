@@ -218,6 +218,21 @@ export class MyInfoPage {
     }
   }
 
+  private async selectIndiaCountryCode(phoneInput: Locator) {
+    const countryCombo = phoneInput.locator('xpath=preceding::*[@role="combobox"][1]');
+    await countryCombo.click();
+
+    const search = this.page.locator('lib-country-list input').first();
+    if (await search.isVisible().catch(() => false)) {
+      await search.fill('India');
+    }
+
+    const india = this.page.getByRole('listbox').getByText('India (भारत)', { exact: true });
+    await india.scrollIntoViewIfNeeded();
+    await india.click();
+    await this.page.locator('lib-country-list').first().waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
+
   private async selectDropdownOption(dropdown: Locator, optionText: string) {
     await this.openDropdown(dropdown);
 
@@ -462,6 +477,7 @@ export class MyInfoPage {
     await contact1Email.fill(data.contact1.email);
 
     const phone1Input = this.page.locator('input[formcontrolname="contact1Phone"]');
+    await this.selectIndiaCountryCode(phone1Input);
     await phone1Input.fill(data.contact1.phone);
 
     if (data.contact1.relationship) {
@@ -483,6 +499,7 @@ export class MyInfoPage {
 
       const phone2Input = this.page.locator('input[formcontrolname="contact2Phone"]');
       if (await phone2Input.isVisible()) {
+        await this.selectIndiaCountryCode(phone2Input);
         await phone2Input.fill(data.contact2.phone);
       }
 
