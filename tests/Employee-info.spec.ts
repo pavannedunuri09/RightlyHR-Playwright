@@ -12,7 +12,7 @@ test('TC01 - Open Employee Info', async ({ page }) => {
   );
 
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -32,7 +32,7 @@ test('TC02 - Verify Basic Info fields', async ({ page }) => {
   );
 
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -88,7 +88,7 @@ test('TC03 - Select Salutation', async ({ page }) => {
   );
 
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -126,7 +126,7 @@ test('TC04 - Select Gender', async ({ page }) => {
   );
 
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -170,7 +170,7 @@ test('TC05 - Select Marital Status', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -212,7 +212,7 @@ test('TC06 - Select Blood Group', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -254,7 +254,7 @@ test('TC07 - Enter Date of Birth', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -289,7 +289,7 @@ test('TC08 - Enter Employee ID', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -324,7 +324,7 @@ test('TC09 - Enter First Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -359,7 +359,7 @@ test('TC10 - Enter Last Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -394,7 +394,7 @@ test('TC11 - Enter Middle Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -429,7 +429,7 @@ test('TC12 - Save and Close Basic Info', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -529,7 +529,7 @@ test('TC13 - Verify Contact Info', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -596,7 +596,7 @@ test('TC14 - Enter Phone Number', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -635,7 +635,7 @@ test('TC15 - Enter Work Email', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -676,7 +676,7 @@ test('TC16 - Enter Personal Email', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -717,7 +717,7 @@ test('TC17 - Enter LinkedIn URL', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -758,7 +758,7 @@ test('TC18 - Enter Work Number', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -797,7 +797,7 @@ test('TC19 - Verify Addresses', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -831,7 +831,7 @@ test('TC20 - Verify Emergency Contacts', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -865,7 +865,7 @@ test('TC21 - Enter Emergency Contact 1 Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -902,7 +902,7 @@ test('TC22 - Enter Emergency Contact 1 Email', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -940,7 +940,7 @@ test('TC23 - Enter Emergency Contact 1 Phone Number', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -991,7 +991,7 @@ test('TC24 - Select Emergency Contact 1 Relationship', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1036,7 +1036,7 @@ test('TC25 - Enter Emergency Contact 2 Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1070,7 +1070,7 @@ test('TC26 - Enter Emergency Contact 2 Email', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1104,7 +1104,7 @@ test('TC27 - Enter Emergency Contact 2 Phone Number', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1155,7 +1155,7 @@ test('TC28 - Select Emergency Contact 2 Relationship', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1200,7 +1200,7 @@ test('TC29 - Save and Close Emergency Contacts', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1320,7 +1320,7 @@ test('TC30 - Verify Family Members', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1352,7 +1352,7 @@ test('TC31 - Enter Family Member Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1392,7 +1392,7 @@ test('TC32 - Enter Family Member Date of Birth', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1432,7 +1432,7 @@ test('TC33 - Select Family Member Relationship', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1479,7 +1479,7 @@ test('TC34 - Verify Dependent Checkbox', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1522,7 +1522,7 @@ test('TC35 - Add Family Member', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1585,7 +1585,7 @@ test('TC36 - Verify Added Family Member', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1616,7 +1616,7 @@ test('TC37 - Verify Family Member Relationship', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1649,7 +1649,7 @@ test('TC38 - Verify Family Member Date of Birth', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1681,7 +1681,7 @@ test('TC39 - Verify Dependent Status', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1714,7 +1714,7 @@ test('TC40 - Add Family Member Successfully', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1784,7 +1784,7 @@ test('TC41 - Verify Family Member Name', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1818,7 +1818,7 @@ test('TC43 - Verify Family Member Relationship', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1852,7 +1852,7 @@ test('TC44 - Verify Family Member Dependent Status', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1886,7 +1886,7 @@ test('TC45 - Update Family Member', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1949,7 +1949,7 @@ test('TC46 - Verify Identity Info', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -1985,7 +1985,7 @@ test('TC47 - Add Identity Information', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -2053,7 +2053,7 @@ test('TC48 - Update Identity Information', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -2107,7 +2107,7 @@ test('TC49 - Update Identity Number Again', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -2159,7 +2159,7 @@ test('TC50 - Delete Identity Information', async ({ page }) => {
 
   // Select employee
   await page
-    .getByText('Arpita Bhanja', { exact: true })
+    .getByText('Kushi Joerrr Bhuvanam', { exact: true })
     .first()
     .click();
 
@@ -2230,7 +2230,7 @@ test('TC51 - Add Bank Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2338,7 +2338,7 @@ test('TC52 - Update Bank Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2431,7 +2431,7 @@ test('TC53 - Delete Bank Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2502,7 +2502,7 @@ test('TC54 - Add Academic Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2617,7 +2617,7 @@ test('TC55 - Update Academic Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2684,7 +2684,7 @@ test('TC56 - Delete Academic Information', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2733,7 +2733,7 @@ test('TC57 - Add Skills', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -2925,7 +2925,7 @@ test('TC60 - Add Certification', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3017,7 +3017,7 @@ test('TC61 - Update Certification', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3087,7 +3087,7 @@ test('TC62 - Delete Certification', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3134,7 +3134,7 @@ test('TC63 - Save Onboarding Info', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3337,7 +3337,7 @@ test('TC64 - Add Compensation', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3475,7 +3475,7 @@ test('TC65 - Update Compensation', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3569,7 +3569,7 @@ test('TC66 - Delete Compensation', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3638,7 +3638,7 @@ test('TC67 - Add Job Info', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -3874,7 +3874,7 @@ test('TC70 - Update WFH / Remote Login', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4031,7 +4031,7 @@ test('TC72 - Bulk Location Change', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4120,7 +4120,7 @@ test('TC73 - Add Past Experience', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4293,7 +4293,7 @@ test('TC74 - Update Past Experience', async ({ page }) => {
   });
 
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4378,7 +4378,7 @@ test('TC75 - Delete Past Experience', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4430,7 +4430,7 @@ test('TC76 - Verify Desk Info', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4472,7 +4472,7 @@ test('TC77 - Separation Request Recall or Exit Feedback', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4558,7 +4558,7 @@ test('TC79 - Verify No Due Clearance Info', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4608,7 +4608,7 @@ test('TC80 - Verify Onboarding Documents', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4656,7 +4656,7 @@ test('TC81 - Verify Trainee Onboard Request', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4704,7 +4704,7 @@ test('TC82 - Verify Offboarding Info', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4754,7 +4754,7 @@ test('TC83 - Verify Cards', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4795,7 +4795,7 @@ test('TC84 - Verify Assigned Projects', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4850,7 +4850,7 @@ test('TC85 - Upload Client Call Document', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4919,7 +4919,7 @@ test('TC86 - Upload Client Requirement Document', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -4988,7 +4988,7 @@ test('TC87 - Upload Client Documents', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -5051,7 +5051,7 @@ test('TC88 - Upload Requirement Discussion', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -5114,7 +5114,7 @@ test('TC89 - Upload Academic Documents', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -5170,7 +5170,7 @@ async function openEmployeeDocuments(page: any) {
   });
 
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -5554,7 +5554,7 @@ test('TC109 - Upload Non-Disclosure Agreement', async ({ page }) => {
   });
 
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -5967,7 +5967,7 @@ test('TC128 - Download Timesheet Report 12460', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -6018,7 +6018,7 @@ test('TC129 - Download Consolidated Timesheet', async ({ page }) => {
 
   // Select Employee
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -6072,7 +6072,7 @@ test('TC130 - Upload organizationPolicy', async ({ page }) => {
   });
 
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -6131,7 +6131,7 @@ test('TC131 - Upload Trainee Documents', async ({ page }) => {
   });
 
   await page
-    .getByText('Arpita Bhanja', {
+    .getByText('Kushi Joerrr Bhuvanam', {
       exact: true,
     })
     .first()
@@ -6190,7 +6190,7 @@ test('TC132 - Verify Appointment Letter', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6232,7 +6232,7 @@ test('TC133 - Verify Appraisal Letter', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6274,7 +6274,7 @@ test('TC134 - Verify Contractor Extension', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6316,7 +6316,7 @@ test('TC135 - Verify Probation Confirmation', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6354,7 +6354,7 @@ test('TC136 - Verify Probation Extension', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6392,7 +6392,7 @@ test('TC137 - Verify Salary Revision Letter', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
@@ -6434,7 +6434,7 @@ test('TC138 - Verify Trainee Appointment', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  await page.getByText('Arpita Bhanja', {
+  await page.getByText('Kushi Joerrr Bhuvanam', {
     exact: true,
   }).first().click();
 
