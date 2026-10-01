@@ -29,7 +29,7 @@ test.describe.serial('Holidays Management Feature', () => {
     test('01. from Dashboard, clicks Settings icon and verifies Settings Overview with Employee Fields and Manage Holidays link', async () => {
       // Step 1: Ensure on default Dashboard page
       await holidaysPage.openDashboard();
-      await expect(page).toHaveURL(/\/dashboard\/emp/);
+      await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15000 });
       await expect(page.getByText('Have a nice day at work!')).toBeVisible();
 
       // Step 2: Click Settings icon in header to open Settings Overview

@@ -37,11 +37,40 @@ export class LoginPage {
   }
 
   async logoutOrClearSession() {
-    await this.page.context().clearCookies();
-    await this.page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    }).catch(() => {});
+    if (this.page.isClosed()) {
+      return;
+    }
+    await this.page.context().clearCookies().catch(() => {});
+    if (!this.page.isClosed()) {
+      await this.page.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      }).catch(() => {});
+    }
+  }
+
+  private credentialsFromEnv() {
+    const email = (
+      process.env.HR_USERNAME
+      || process.env.LOGIN_EMAIL
+      || process.env.EMPLOYEE_EMAIL
+    )?.trim();
+    const password = (
+      process.env.HR_PASSWORD
+      || process.env.LOGIN_PASSWORD
+      || process.env.EMPLOYEE_PASSWORD
+    )?.trim();
+    return { email, password };
+  }
+
+  private async waitForAuthenticated() {
+    await this.page.waitForURL(
+      (url) => !url.pathname.includes('/login'),
+      { timeout: 45000, waitUntil: 'domcontentloaded' },
+    );
+    await this.page.getByText('Have a nice day at work!')
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => {});
   }
 
   async loginWithCredentials(email: string, password: string) {
@@ -60,29 +89,31 @@ export class LoginPage {
   }
 
   async loginFromEnv() {
-    const email = (process.env.LOGIN_EMAIL || process.env.EMPLOYEE_EMAIL)?.trim();
-    const password = (process.env.LOGIN_PASSWORD || process.env.EMPLOYEE_PASSWORD)?.trim();
+    const { email, password } = this.credentialsFromEnv();
     if (!email || !password) {
-      throw new Error('Set EMPLOYEE_EMAIL / LOGIN_EMAIL and EMPLOYEE_PASSWORD / LOGIN_PASSWORD in .env');
+      throw new Error(
+        'Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD (or EMPLOYEE_EMAIL/EMPLOYEE_PASSWORD) in .env',
+      );
     }
+
     await this.logoutOrClearSession();
+    if (this.page.isClosed()) {
+      throw new Error('Browser page closed before login could start');
+    }
+
     await this.goto();
     await this.login(email, password);
+
     try {
-      await this.page.waitForURL(/\/dashboard\/emp/, {
-        timeout: 45000,
-        waitUntil: 'domcontentloaded',
-      });
-    } catch {
-      await this.logoutOrClearSession();
+      await this.waitForAuthenticated();
+    } catch (error) {
+      if (this.page.isClosed()) {
+        throw new Error(`Browser page closed during login: ${error}`);
+      }
       await this.goto();
       await this.login(email, password);
-      await this.page.waitForURL(/\/dashboard\/emp/, {
-        timeout: 45000,
-        waitUntil: 'domcontentloaded',
-      });
+      await this.waitForAuthenticated();
     }
-    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
   }
 
   async validateUserSession() {

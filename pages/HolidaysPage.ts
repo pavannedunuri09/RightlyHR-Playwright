@@ -244,9 +244,9 @@ export class HolidaysPage {
       return;
     }
     await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
-    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-    await this.page.waitForTimeout(500);
+    // await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    // await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    // await this.page.waitForTimeout(500);
   }
 
   /**

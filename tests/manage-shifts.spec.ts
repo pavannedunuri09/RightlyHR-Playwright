@@ -457,7 +457,7 @@ test.describe('Manage Shifts', () => {
     await shiftsPage.openClone();
 
     await shiftsPage.selectLocation('Delhi');
-    await selectFormSubLocation(page, 'Cyber City');
+    await selectFormSubLocation(page, 'New delhi');
 
     await cancelWithYes(page, shiftsPage);
   });
@@ -474,7 +474,7 @@ test.describe('Manage Shifts', () => {
     await shiftsPage.openClone();
 
     await shiftsPage.selectLocation('Delhi');
-    await selectFormSubLocation(page, 'Cyber City');
+    await selectFormSubLocation(page, 'New delhi');
     await shiftsPage.shiftCodeInput.fill(clonedShiftCode);
 
     await expect(shiftsPage.submitButton).toBeEnabled();

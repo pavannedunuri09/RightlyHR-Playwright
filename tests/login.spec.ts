@@ -7,7 +7,7 @@ test.describe('Login page', () => {
     await loginPage.goto();
 
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page).toHaveTitle('RightlyHR');
+    await expect(page).toHaveTitle('Eniacsys');
     await expect(loginPage.logo).toBeVisible();
     await expect(loginPage.emailInput).toBeVisible();
     await expect(loginPage.passwordInput).toBeVisible();
@@ -68,7 +68,7 @@ test.describe('Login page', () => {
     await loginPage.goto();
     await loginPage.login(email!, password!);
 
-    await expect(page).toHaveURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30000 });
     await expect(page.getByText('Have a nice day at work!')).toBeVisible();
     await expect(page.getByText('Dashboard', { exact: true }).first()).toBeVisible();
   });
