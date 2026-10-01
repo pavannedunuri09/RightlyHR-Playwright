@@ -13,3 +13,5 @@ downloads/
 .env
 /tests/fixtures/last-trainee.json
 /tests/fixtures/last-onboarding-employee.json
+allure-results/
+allure-report/
