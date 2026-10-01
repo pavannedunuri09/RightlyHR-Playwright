@@ -55,7 +55,8 @@ test.describe.serial('Load Entitlements', () => {
   test('02. selects employee, auto-populates details, and shows entitlement grid', async () => {
     await loadEntitlementsPage.selectEmployee(
       LOAD_ENTITLEMENTS_EMPLOYEE.search,
-      LOAD_ENTITLEMENTS_EMPLOYEE.optionLabel,
+      LOAD_ENTITLEMENTS_EMPLOYEE.employeeId,
+      LOAD_ENTITLEMENTS_EMPLOYEE.name,
     );
 
     await loadEntitlementsPage.expectEmployeeDetailsPopulated(GENERAL_LEAVE_ALLOCATION_BASE);

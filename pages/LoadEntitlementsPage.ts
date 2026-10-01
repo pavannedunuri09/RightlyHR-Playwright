@@ -3,7 +3,10 @@ import type { LeaveAllocationBaseFilters } from './LeaveAllocationPage';
 
 export const LOAD_ENTITLEMENTS_EMPLOYEE = {
   search: 'saii',
-  optionLabel: 'SD302262 - saii Pavan Dinesh Tejaa',
+  employeeId: 'SD302262',
+  name: 'Saii Pavan Dinesh Teja',
+  /** Full suggestion label as shown in the Employee Id autocomplete. */
+  optionLabel: 'SD302262 - Saii Pavan Dinesh Teja',
 };
 
 export type EntitlementRowExpectation = {
@@ -230,20 +233,57 @@ export class LoadEntitlementsPage {
     await this.loadEntitlementsButton.waitFor({ state: 'visible', timeout: 15000 });
   }
 
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private employeeOptionLocator(
+    employeeId: string,
+    employeeName: string,
+    optionLabel: string,
+  ): Locator {
+    const escapedId = this.escapeRegExp(employeeId);
+    const escapedName = this.escapeRegExp(employeeName);
+    const escapedLabel = this.escapeRegExp(optionLabel);
+    const namePrefix = this.escapeRegExp(employeeName.split(/\s+/).slice(0, 2).join(' '));
+    const idDashName = new RegExp(`${escapedId}\\s*-\\s*.*`, 'i');
+    const idAndName = this.page
+      .getByRole('option')
+      .filter({ hasText: new RegExp(escapedId, 'i') })
+      .filter({ hasText: new RegExp(namePrefix, 'i') });
+
+    const employeeFieldGroup = this.page
+      .locator('.form-label, label')
+      .filter({ hasText: /Employee Id/i })
+      .first()
+      .locator('xpath=ancestor::*[contains(@class,"col-")][1]');
+
+    return this.page
+      .getByText(idDashName)
+      .filter({ hasText: new RegExp(namePrefix, 'i') })
+      .or(employeeFieldGroup.getByText(idDashName))
+      .or(this.page.getByRole('option', { name: new RegExp(escapedLabel, 'i') }))
+      .or(this.page.getByRole('option', { name: new RegExp(escapedName, 'i') }))
+      .or(idAndName)
+      .or(this.page.getByRole('listitem').filter({ hasText: new RegExp(escapedLabel, 'i') }))
+      .or(this.page.getByRole('listitem').filter({ hasText: new RegExp(escapedName, 'i') }))
+      .or(this.page.locator('.p-select-option, .p-dropdown-item, [role="listbox"] [role="option"]').filter({
+        hasText: new RegExp(escapedId, 'i'),
+      }).filter({ hasText: new RegExp(escapedName.split(/\s+/)[0], 'i') }));
+  }
+
   async selectEmployee(
     searchText: string = LOAD_ENTITLEMENTS_EMPLOYEE.search,
-    optionLabel: string = LOAD_ENTITLEMENTS_EMPLOYEE.optionLabel,
+    employeeId: string = LOAD_ENTITLEMENTS_EMPLOYEE.employeeId,
+    employeeName: string = LOAD_ENTITLEMENTS_EMPLOYEE.name,
   ) {
     await this.employeeCombobox.click();
     await this.employeeSearchbox.waitFor({ state: 'visible', timeout: 5000 });
     await this.employeeSearchbox.fill(searchText);
     await this.page.waitForTimeout(800);
 
-    const escaped = optionLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const option = this.page
-      .getByRole('option', { name: new RegExp(escaped, 'i') })
-      .or(this.page.getByRole('listitem').filter({ hasText: new RegExp(escaped, 'i') }))
-      .or(this.page.getByText(new RegExp(escaped, 'i')));
+    const optionLabel = `${employeeId} - ${employeeName}`;
+    const option = this.employeeOptionLocator(employeeId, employeeName, optionLabel);
     await option.first().click({ timeout: 15000 });
     await this.page.waitForTimeout(1000);
   }

@@ -34,10 +34,26 @@ type RequestLeaveOptions = {
 export const MAX_LEAVE_PAST_DAYS = 100;
 export const MAX_LEAVE_FUTURE_DAYS = 100;
 
-const EMPLOYEE_NAME = 'saii Pavan Dinesh Tejaa';
+const EMPLOYEE_NAME = 'saii Pavan Dinesh Teja';
 
+export function daysRemainingInCurrentMonth(from = new Date()) {
+  const start = new Date(from);
+  start.setHours(0, 0, 0, 0);
+  const endOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  endOfMonth.setHours(0, 0, 0, 0);
+  return Math.round((endOfMonth.getTime() - start.getTime()) / 86400000);
+}
+
+/** Leave requests use dates from today through end of current month (past dates disallowed). */
 export function leaveDateRange() {
-  return { minOffset: -MAX_LEAVE_PAST_DAYS, maxOffset: MAX_LEAVE_FUTURE_DAYS };
+  const daysLeftInMonth = daysRemainingInCurrentMonth();
+  let maxOffset = Math.min(MAX_LEAVE_FUTURE_DAYS, daysLeftInMonth);
+  let minOffset = 1;
+  if (maxOffset < minOffset) {
+    minOffset = 0;
+    maxOffset = 0;
+  }
+  return { minOffset, maxOffset };
 }
 
 export function leaveDateFromOffset(daysOffset: number, preferWeekday = true): LeaveDateParts {
@@ -60,23 +76,7 @@ export function leaveDateFromOffset(daysOffset: number, preferWeekday = true): L
 
 export function weekendDateFromOffset(startOffset: number, jsDay: 0 | 6): LeaveDateParts | null {
   const { minOffset, maxOffset } = leaveDateRange();
-  for (let offset = startOffset; offset <= maxOffset; offset += 1) {
-    if (offset < minOffset) {
-      continue;
-    }
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + offset);
-    if (date.getDay() === jsDay) {
-      const input = [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, '0'),
-        String(date.getDate()).padStart(2, '0'),
-      ].join('-');
-      return datePartsFromInput(input);
-    }
-  }
-  for (let offset = startOffset - 1; offset >= minOffset; offset -= 1) {
+  for (let offset = Math.max(startOffset, minOffset); offset <= maxOffset; offset += 1) {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
     date.setDate(date.getDate() + offset);
@@ -108,24 +108,22 @@ function isWeekendInput(input: string) {
   return weekday === 0 || weekday === 6;
 }
 
-export function leaveOffsetCandidates(preferFuture = true, nearOffset?: number) {
+export function leaveOffsetCandidates(_preferFuture = true, nearOffset?: number) {
   const { minOffset, maxOffset } = leaveDateRange();
-  const future: number[] = [];
-  const past: number[] = [];
-  for (let offset = 1; offset <= maxOffset; offset += 1) {
-    future.push(offset);
+  const offsets: number[] = [];
+  for (let offset = minOffset; offset <= maxOffset; offset += 1) {
+    offsets.push(offset);
   }
-  for (let offset = -1; offset >= minOffset; offset -= 1) {
-    past.push(offset);
+  if (offsets.length === 0) {
+    throw new Error('No leave dates remaining in the current month');
   }
 
   if (nearOffset !== undefined) {
-    const offsets = [...future, ...past];
     offsets.sort((left, right) => Math.abs(left - nearOffset) - Math.abs(right - nearOffset));
     return offsets;
   }
 
-  return shuffle(preferFuture ? future : past);
+  return shuffle(offsets);
 }
 
 const DEFAULT_LEAVE_SESSIONS: LeaveSession[] = ['full', 'first', 'second'];
@@ -184,10 +182,11 @@ function claimLeaveSession(input: string, session: LeaveSession) {
 
 export function randomLeaveDate(preferFuture = true, exclude: Set<string> = new Set()): LeaveDateParts {
   const seen = new Set<string>();
+  const { maxOffset } = leaveDateRange();
   for (const offset of leaveOffsetCandidates(preferFuture)) {
     const candidate = leaveDateFromOffset(offset);
     const daysOut = daysFromToday(candidate.input);
-    if (daysOut < -MAX_LEAVE_PAST_DAYS || daysOut > MAX_LEAVE_FUTURE_DAYS) {
+    if (daysOut < 0 || daysOut > maxOffset) {
       continue;
     }
     if (isWeekendInput(candidate.input) || seen.has(candidate.input) || exclude.has(candidate.input)) {
@@ -199,18 +198,25 @@ export function randomLeaveDate(preferFuture = true, exclude: Set<string> = new 
     seen.add(candidate.input);
     return candidate;
   }
-  throw new Error(`Could not find a random weekday within ±${MAX_LEAVE_FUTURE_DAYS} days`);
+  throw new Error('Could not find a random weekday in the current month');
 }
 
 export function randomEndBeforeStartDates() {
-  const first = randomLeaveDate(true);
-  const second = randomLeaveDate(false, new Set([first.input]));
-  if (first.input === second.input) {
-    throw new Error('Could not pick two distinct leave dates');
+  const pool: LeaveDateParts[] = [];
+  for (const offset of leaveOffsetCandidates(true)) {
+    pool.push(leaveDateFromOffset(offset));
   }
-  return first.input > second.input
-    ? { start: first, end: second }
-    : { start: second, end: first };
+  pool.sort((left, right) => left.input.localeCompare(right.input));
+  if (pool.length < 2) {
+    throw new Error('Need at least two dates in the current month for end-before-start validation');
+  }
+  const end = pool[Math.floor(Math.random() * (pool.length - 1))];
+  const laterDates = pool.filter((date) => date.input > end.input);
+  const start = laterDates.length > 0 ? laterDates[laterDates.length - 1] : pool[pool.length - 1];
+  if (end.input >= start.input) {
+    throw new Error('Could not pick end date before start date within the current month');
+  }
+  return { start, end };
 }
 
 export class LeavesPage {
@@ -952,19 +958,12 @@ export class LeavesPage {
     const bookedState = new Map(booked);
     mergeClaimedInto(bookedState);
 
+    const { maxOffset } = leaveDateRange();
     for (const offset of leaveOffsetCandidates(preferFuture, options.nearOffset)) {
       const candidate = leaveDateFromOffset(offset);
       const daysOut = daysFromToday(candidate.input);
-      if (daysOut < -MAX_LEAVE_PAST_DAYS || daysOut > MAX_LEAVE_FUTURE_DAYS) {
+      if (daysOut < 0 || daysOut > maxOffset) {
         continue;
-      }
-      if (options.nearOffset === undefined) {
-        if (preferFuture && daysOut < 1) {
-          continue;
-        }
-        if (!preferFuture && daysOut > -1) {
-          continue;
-        }
       }
       if (isWeekendInput(candidate.input) || seen.has(candidate.input) || excludeInputs.has(candidate.input)) {
         continue;
@@ -980,9 +979,7 @@ export class LeavesPage {
     }
 
     if (found.length === 0) {
-      throw new Error(
-        `Could not find any available ${session} leave dates within ±${MAX_LEAVE_FUTURE_DAYS} days`,
-      );
+      throw new Error(`Could not find any available ${session} leave dates in the current month`);
     }
     return found;
   }
@@ -1005,8 +1002,12 @@ export class LeavesPage {
   async requestAvailablePastLeave(categoryNameOrOptions?: string | RequestLeaveOptions, session?: LeaveSession) {
     const options =
       typeof categoryNameOrOptions === 'string' || categoryNameOrOptions === undefined
-        ? this.normalizeRequestOptions(categoryNameOrOptions, false, session)
-        : { ...categoryNameOrOptions, preferFuture: false, session: session ?? categoryNameOrOptions.session };
+        ? this.normalizeRequestOptions(categoryNameOrOptions, true, session)
+        : {
+            ...categoryNameOrOptions,
+            preferFuture: true,
+            session: session ?? categoryNameOrOptions.session,
+          };
     return this.requestAvailableLeave(options);
   }
 
@@ -1023,10 +1024,11 @@ export class LeavesPage {
     categoryNameOrOptions?: string | RequestLeaveOptions,
     session: LeaveSession = 'full',
   ): Promise<CreatedLeaveRequest> {
-    const nearOffset = direction === 'past' ? -(MAX_LEAVE_PAST_DAYS - 1) : MAX_LEAVE_FUTURE_DAYS - 1;
-    const options = this.normalizeRequestOptions(categoryNameOrOptions, direction === 'future', session);
+    const { minOffset, maxOffset } = leaveDateRange();
+    const nearOffset = direction === 'past' ? minOffset : maxOffset;
+    const options = this.normalizeRequestOptions(categoryNameOrOptions, true, session);
     options.nearOffset = nearOffset;
-    options.preferFuture = direction === 'future';
+    options.preferFuture = true;
     return this.requestAvailableLeave(options);
   }
 

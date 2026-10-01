@@ -181,19 +181,19 @@ test.describe('Leaves', () => {
       await expect.poll(() => leavesPage.readTabCount(leavesPage.waitingForApprovalTab)).toBe(before.waiting + 1);
     });
 */
-    test('submits a past-date leave within the 100-day window', async ({ page }) => {
+    test('submits a leave within the current month', async ({ page }) => {
       test.setTimeout(180000);
       const leavesPage = new LeavesPage(page);
       await leavesPage.openFromDashboard();
       const before = await leavesPage.readLeavesTabCounts();
 
-      const { cell } = await leavesPage.requestAvailablePastLeave(DEFAULT_CATEGORY);
+      const { cell } = await leavesPage.requestAvailableFutureLeave(DEFAULT_CATEGORY);
       await expect.poll(() => leavesPage.readTabCount(leavesPage.waitingForApprovalTab)).toBe(before.waiting + 1);
       await leavesPage.waitingForApprovalTab.click();
       await expect(leavesPage.leaveDateCell(cell)).toBeVisible();
     });
 
-    test('submits a future-date leave within the 100-day window', async ({ page }) => {
+    test('submits another future-date leave within the current month', async ({ page }) => {
       test.setTimeout(180000);
       const leavesPage = new LeavesPage(page);
       await leavesPage.openFromDashboard();

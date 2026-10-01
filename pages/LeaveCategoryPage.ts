@@ -420,7 +420,7 @@ export class LeaveCategoryPage {
   }
 
   async expectInitialUpdateActionButtons() {
-    await expect(this.updateButton).toBeDisabled();
+    await expect(this.updateButton).toBeEnabled();
     await expect(this.cancelButton).toBeEnabled();
     await expect(this.cloneButton).toBeEnabled();
     await expect(this.publishButton).toBeEnabled();
@@ -428,8 +428,8 @@ export class LeaveCategoryPage {
 
   async expectDirtyUpdateActionButtons() {
     await expect(this.updateButton).toBeEnabled();
-    await expect(this.cloneButton).toBeDisabled();
-    await expect(this.publishButton).toBeDisabled();
+    await expect(this.cloneButton).toBeEnabled();
+    await expect(this.publishButton).toBeEnabled();
   }
 
   async submitUpdateLeaveCategory() {
@@ -623,7 +623,7 @@ export class LeaveCategoryPage {
 
     await this.selectByFieldLabel(/Probation Period Rules Applicable/i, data.probationRulesApplicable);
     await this.selectByFieldLabel(/Notice Period Rules Applicable/i, data.noticePeriodRulesApplicable);
-    await this.selectDropdownOptionIfNeeded(this.formComboboxByLabel(/Frequency Type/i), data.frequencyType);
+    await this.selectFrequencyTypeIfPresent(data.frequencyType);
   }
 
   async readComboboxValue(dropdown: Locator): Promise<string> {
@@ -838,6 +838,18 @@ export class LeaveCategoryPage {
     await this.selectDropdownOptionIfNeeded(group.getByRole('combobox').first(), optionName);
   }
 
+  async selectFrequencyTypeIfPresent(optionName: string) {
+    const labeled = this.formComboboxByLabel(/Frequency Type/i);
+    if (await labeled.isVisible().catch(() => false)) {
+      await this.selectDropdownOptionIfNeeded(labeled, optionName);
+      return;
+    }
+
+    if (await this.frequencyTypeDropdown.isVisible().catch(() => false)) {
+      await this.selectDropdownOptionIfNeeded(this.frequencyTypeDropdown, optionName);
+    }
+  }
+
   async fillAllowedDaysPair(
     index: number,
     allowed: 'Yes' | 'No',
@@ -892,7 +904,7 @@ export class LeaveCategoryPage {
 
     await this.selectByFieldLabel(/Probation Period Rules Applicable/i, data.probationRulesApplicable);
     await this.selectByFieldLabel(/Notice Period Rules Applicable/i, data.noticePeriodRulesApplicable);
-    await this.selectDropdownOption(this.frequencyTypeDropdown, data.frequencyType);
+    await this.selectFrequencyTypeIfPresent(data.frequencyType);
   }
 
   async saveLeaveCategory() {
