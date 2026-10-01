@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import type { LeaveAllocationBaseFilters } from './LeaveAllocationPage';
 
 export const LOAD_ENTITLEMENTS_EMPLOYEE = {
-  search: 'saii',
+  search: 'Swathi',
   optionLabel: 'SD302262 - saii Pavan Dinesh Tejaa',
 };
 

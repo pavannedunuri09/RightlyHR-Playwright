@@ -59,6 +59,43 @@ export class LoginPage {
     await this.passwordVisibilityToggle.click();
   }
 
+  /** HR / admin login for settings suites (Leave Category, Load Entitlements, etc.). */
+  async loginAsHrFromEnv() {
+    const email = (
+      process.env.HR_USERNAME
+      || process.env.LOGIN_EMAIL
+      || process.env.EMPLOYEE_EMAIL
+    )?.trim();
+    const password = (
+      process.env.HR_PASSWORD
+      || process.env.LOGIN_PASSWORD
+      || process.env.EMPLOYEE_PASSWORD
+    )?.trim();
+    if (!email || !password) {
+      throw new Error(
+        'Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD in .env for HR login',
+      );
+    }
+    await this.logoutOrClearSession();
+    await this.goto();
+    await this.login(email, password);
+    try {
+      await this.page.waitForURL(/\/dashboard\/emp/, {
+        timeout: 45000,
+        waitUntil: 'domcontentloaded',
+      });
+    } catch {
+      await this.logoutOrClearSession();
+      await this.goto();
+      await this.login(email, password);
+      await this.page.waitForURL(/\/dashboard\/emp/, {
+        timeout: 45000,
+        waitUntil: 'domcontentloaded',
+      });
+    }
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+  }
+
   async loginFromEnv() {
     const email = (process.env.EMPLOYEE_EMAIL || process.env.LOGIN_EMAIL)?.trim();
     const password = (process.env.EMPLOYEE_PASSWORD || process.env.LOGIN_PASSWORD)?.trim();

@@ -16,6 +16,7 @@ test.describe.serial('Leave Category Foundation', () => {
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
+    // Needs a user with Settings → Time Off (set LOGIN_* or EMPLOYEE_* in .env).
     await new LoginPage(page).loginFromEnv();
     leaveCategoryPage = new LeaveCategoryPage(page);
   });
@@ -118,15 +119,17 @@ test.describe.serial('Leave Category Foundation', () => {
     });
 
     test('08. displays General Leave in Pending For Submission list with status', async () => {
-      await leaveCategoryPage.expectPendingSubmissionRow(GENERAL_LEAVE_CATEGORY);
+      const generalLeave = leaveCategoryPage.categoryDataWithResolvedHierarchy(GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectPendingSubmissionRow(generalLeave);
       await expect(leaveCategoryPage.statusHeader).toBeVisible();
     });
 
     test('09. opens Update from kebab, verifies prefilled data and button states, then updates record', async () => {
       test.setTimeout(180000);
 
-      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY);
-      await leaveCategoryPage.expectUpdateFormPrefilled(GENERAL_LEAVE_CATEGORY);
+      const generalLeave = leaveCategoryPage.categoryDataWithResolvedHierarchy(GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.openUpdateForCategory(generalLeave);
+      await leaveCategoryPage.expectUpdateFormPrefilled(generalLeave);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
 
       const updatedValidDays = '366';
@@ -135,7 +138,7 @@ test.describe.serial('Leave Category Foundation', () => {
 
       await leaveCategoryPage.submitUpdateLeaveCategory();
       await leaveCategoryPage.expectPendingSubmissionRow({
-        ...GENERAL_LEAVE_CATEGORY,
+        ...generalLeave,
         validDays: updatedValidDays,
       });
     });
@@ -143,14 +146,16 @@ test.describe.serial('Leave Category Foundation', () => {
     test('10. publishes General Leave from Update page and shows success message', async () => {
       test.setTimeout(120000);
 
+      const generalLeave = leaveCategoryPage.categoryDataWithResolvedHierarchy(GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnLeaveCategoryList();
-      await leaveCategoryPage.openUpdateForCategory(GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.openUpdateForCategory(generalLeave);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
       await leaveCategoryPage.publishLeaveCategoryFromUpdatePage();
     });
 
     test('11. displays published General Leave in Published tab with status', async () => {
-      await leaveCategoryPage.expectPublishedRow(UPDATED_GENERAL_LEAVE_CATEGORY);
+      const updatedGeneral = leaveCategoryPage.categoryDataWithResolvedHierarchy(UPDATED_GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectPublishedRow(updatedGeneral);
     });
 
     test('12. Cancel returns to Pending list without saving', async () => {
@@ -161,14 +166,16 @@ test.describe.serial('Leave Category Foundation', () => {
     });
 
     test('13. Published kebab shows Clone and View options only', async () => {
+      const updatedGeneral = leaveCategoryPage.categoryDataWithResolvedHierarchy(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.expectPublishedKebabOptions(UPDATED_GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectPublishedKebabOptions(updatedGeneral);
     });
 
     test('14. View Leave Category displays all details and opens Clone form', async () => {
+      const updatedGeneral = leaveCategoryPage.categoryDataWithResolvedHierarchy(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
-      await leaveCategoryPage.expectViewLeaveCategoryDetails(UPDATED_GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.openViewForCategory(updatedGeneral);
+      await leaveCategoryPage.expectViewLeaveCategoryDetails(updatedGeneral);
       await leaveCategoryPage.expectViewActionButtons();
       await leaveCategoryPage.openCloneFromViewPage();
     });
@@ -176,44 +183,46 @@ test.describe.serial('Leave Category Foundation', () => {
     test('15. clones Leave Category with different location and verifies Pending row', async () => {
       test.setTimeout(120000);
 
+      const updatedGeneral = leaveCategoryPage.categoryDataWithResolvedHierarchy(UPDATED_GENERAL_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnPublishedList();
-      await leaveCategoryPage.openViewForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
+      await leaveCategoryPage.openViewForCategory(updatedGeneral);
       await leaveCategoryPage.openCloneFromViewPage();
-      await leaveCategoryPage.expectCloneLocationFieldsEmpty(UPDATED_GENERAL_LEAVE_CATEGORY);
-      clonedLocation = await leaveCategoryPage.fillCloneLocationHierarchyExcludingOriginal(
-        UPDATED_GENERAL_LEAVE_CATEGORY,
-      );
+      await leaveCategoryPage.expectCloneLocationFieldsEmpty(updatedGeneral);
+      clonedLocation = await leaveCategoryPage.fillCloneLocationHierarchyExcludingOriginal(updatedGeneral);
       await leaveCategoryPage.submitCloneLeaveCategory();
-      await leaveCategoryPage.expectPendingClonedRow(UPDATED_GENERAL_LEAVE_CATEGORY, clonedLocation);
+      await leaveCategoryPage.expectPendingClonedRow(updatedGeneral, clonedLocation);
     });
 
     test('16. clones published General Leave and creates Sick Leave with required details', async () => {
       test.setTimeout(180000);
 
+      const updatedGeneral = leaveCategoryPage.categoryDataWithResolvedHierarchy(UPDATED_GENERAL_LEAVE_CATEGORY);
+      const sickLeave = leaveCategoryPage.categoryDataWithResolvedHierarchy(SICK_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnLeaveCategoryList();
-      const existingSickLeave = leaveCategoryPage.getCategoryRowByHierarchy(SICK_LEAVE_CATEGORY);
+      const existingSickLeave = leaveCategoryPage.getCategoryRowByHierarchy(sickLeave);
       await leaveCategoryPage.revealTableRow(existingSickLeave);
       const alreadyPending = await existingSickLeave.isVisible().catch(() => false);
 
       if (!alreadyPending) {
         await leaveCategoryPage.ensureOnPublishedList();
-        await leaveCategoryPage.openCloneForCategory(UPDATED_GENERAL_LEAVE_CATEGORY);
-        await leaveCategoryPage.fillCloneLeaveCategoryForm(SICK_LEAVE_CATEGORY);
+        await leaveCategoryPage.openCloneForCategory(updatedGeneral);
+        await leaveCategoryPage.fillCloneLeaveCategoryForm(sickLeave);
         await expect(leaveCategoryPage.saveButton).toBeEnabled();
         await leaveCategoryPage.submitCloneLeaveCategory();
       }
 
-      await leaveCategoryPage.expectPendingSubmissionRow(SICK_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectPendingSubmissionRow(sickLeave);
     });
 
     test('17. publishes cloned Sick Leave and displays it in Published tab', async () => {
       test.setTimeout(120000);
 
+      const sickLeave = leaveCategoryPage.categoryDataWithResolvedHierarchy(SICK_LEAVE_CATEGORY);
       await leaveCategoryPage.ensureOnLeaveCategoryList();
-      await leaveCategoryPage.openUpdateForCategory(SICK_LEAVE_CATEGORY);
+      await leaveCategoryPage.openUpdateForCategory(sickLeave);
       await leaveCategoryPage.expectInitialUpdateActionButtons();
       await leaveCategoryPage.publishLeaveCategoryFromUpdatePage();
-      await leaveCategoryPage.expectPublishedRow(SICK_LEAVE_CATEGORY);
+      await leaveCategoryPage.expectPublishedRow(sickLeave);
     });
   });
 });

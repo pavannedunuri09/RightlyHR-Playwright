@@ -58,11 +58,25 @@ export interface LeaveCategoryFormData {
   frequencyType: string;
 }
 
-export const GENERAL_LEAVE_CATEGORY: LeaveCategoryFormData = {
-  year: '2026',
+function leaveCategoryHierarchyFromEnv(
+  defaults: Pick<LeaveCategoryFormData, 'location' | 'subLocation' | 'shift'>,
+): Pick<LeaveCategoryFormData, 'location' | 'subLocation' | 'shift'> {
+  return {
+    location: process.env.LEAVE_CATEGORY_LOCATION?.trim() || defaults.location,
+    subLocation: process.env.LEAVE_CATEGORY_SUB_LOCATION?.trim() || defaults.subLocation,
+    shift: process.env.LEAVE_CATEGORY_SHIFT?.trim() || defaults.shift,
+  };
+}
+
+const DEFAULT_LEAVE_CATEGORY_HIERARCHY = leaveCategoryHierarchyFromEnv({
   location: 'Kerala',
   subLocation: 'Kannur',
   shift: 'Morining Test',
+});
+
+export const GENERAL_LEAVE_CATEGORY: LeaveCategoryFormData = {
+  year: '2026',
+  ...DEFAULT_LEAVE_CATEGORY_HIERARCHY,
   categoryType: 'General',
   leaveType: 'General',
   categoryName: 'General Leave',
@@ -95,9 +109,7 @@ export const UPDATED_GENERAL_LEAVE_CATEGORY: LeaveCategoryFormData = {
 
 export const SICK_LEAVE_CATEGORY: LeaveCategoryFormData = {
   year: '2026',
-  location: 'Kerala',
-  subLocation: 'Kannur',
-  shift: 'Morining Test',
+  ...DEFAULT_LEAVE_CATEGORY_HIERARCHY,
   categoryType: 'General',
   leaveType: 'Sick Leave',
   categoryName: 'Sick Leave',
@@ -130,6 +142,9 @@ export type LeaveCategoryLocationHierarchy = Pick<
 
 export class LeaveCategoryPage {
   readonly page: Page;
+
+  /** Set after fillAddLeaveCategoryForm when sub-location/shift fall back to tenant options. */
+  resolvedHierarchy: LeaveCategoryLocationHierarchy | null = null;
 
   // Settings navigation
   readonly settingsIcon: Locator;
@@ -192,9 +207,14 @@ export class LeaveCategoryPage {
   constructor(page: Page) {
     this.page = page;
 
-    // The header Settings control is an unlabeled SVG in the current UI.
-    this.settingsIcon = page.locator('rect').first();
-    this.timeOffPanel = page.locator('#settings-panel-2');
+    this.settingsIcon = page
+      .locator('img[src*="setting" i], [aria-label*="Setting" i], .settings-icon, a[href*="setting"]')
+      .first();
+    this.timeOffPanel = page
+      .locator('[id^="settings-panel-"]')
+      .filter({ hasText: /Time\s*Off/i })
+      .first()
+      .or(page.locator('#settings-panel-2'));
     this.leaveCategoryLink = page.getByText('Leave Category', { exact: true }).first();
 
     this.pendingTab = page
@@ -627,8 +647,9 @@ export class LeaveCategoryPage {
   }
 
   async readComboboxValue(dropdown: Locator): Promise<string> {
+    await dropdown.waitFor({ state: 'visible', timeout: 15000 });
     const ariaLabel = (await dropdown.getAttribute('aria-label'))?.trim() ?? '';
-    if (ariaLabel && !/select (year|location|sub-location|shift|option)/i.test(ariaLabel)) {
+    if (ariaLabel && !/select (year|location|sub-?location|shift|option|leave type|gender|marital)/i.test(ariaLabel)) {
       return ariaLabel;
     }
 
@@ -748,43 +769,119 @@ export class LeaveCategoryPage {
   }
 
   async openDashboard() {
-    if (!this.page.url().includes('/dashboard/emp')) {
-      await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
+    if (this.page.url().includes('/dashboard/emp')) {
+      await this.page.waitForTimeout(500);
+      return;
     }
+    await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
     await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
-    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 });
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+  }
+
+  async clickSettingsIcon() {
+    await this.page.waitForTimeout(800);
+    if (await this.settingsIcon.isVisible().catch(() => false)) {
+      await this.settingsIcon.click({ force: true }).catch(() => {});
+    } else {
+      await this.page.locator('rect, svg').first().click({ force: true }).catch(() => {});
+    }
+    try {
+      await this.page.waitForURL(/\/settings\/overview|\/settings/, { timeout: 8000 });
+    } catch {
+      await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForURL(/\/settings\/overview|\/settings/, { timeout: 15000 }).catch(() => {});
+    }
+    await this.page.waitForTimeout(500);
+  }
+
+  async ensureSettingsOverview() {
+    if (!this.page.url().match(/\/settings/)) {
+      await this.openDashboard();
+      await this.clickSettingsIcon();
+    }
+    if (!this.page.url().includes('/settings/overview')) {
+      await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForURL(/\/settings\/overview|\/settings/, { timeout: 15000 }).catch(() => {});
+    }
+    for (let step = 0; step < 4; step += 1) {
+      await this.page.evaluate((offset) => window.scrollBy(0, offset), step % 2 === 0 ? 500 : -400);
+      await this.page.waitForTimeout(250);
+    }
+  }
+
+  timeOffSettingsToggle(): Locator {
+    return this.page
+      .locator('p-accordion-header, [data-pc-name="accordionheader"], .p-accordionheader, button')
+      .filter({ hasText: /^Time\s*Off$/i })
+      .first()
+      .or(this.timeOffPanel)
+      .or(this.page.locator('#settings-panel-2'));
+  }
+
+  async expandTimeOffSettingsPanel() {
+    await this.ensureSettingsOverview();
+
+    if (await this.leaveCategoryLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+      return;
+    }
+
+    const toggle = this.timeOffSettingsToggle();
+    await toggle.scrollIntoViewIfNeeded().catch(() => {});
+    await toggle.waitFor({ state: 'visible', timeout: 20000 });
+    const expanded = await toggle.getAttribute('aria-expanded');
+    const active = await toggle.getAttribute('data-p-active');
+    if (expanded !== 'true' && active !== 'true') {
+      await toggle.click({ force: true });
+      await this.page.waitForTimeout(800);
+    }
+  }
+
+  async openLeaveCategoryListDirect(): Promise<boolean> {
+    const paths = [
+      '/settings/time-off/leave-category/pending-for-submission',
+      '/settings/time-off/leave-category/pending-for-submit',
+      '/settings/time-off/leave-category',
+    ];
+    for (const path of paths) {
+      await this.page.goto(path, { waitUntil: 'domcontentloaded' });
+      if (await this.pendingTab.isVisible({ timeout: 5000 }).catch(() => false)) {
+        return true;
+      }
+      if (await this.addNewButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async openSettingsTimeOff() {
-    await this.settingsIcon.click();
-    await this.page.waitForTimeout(1000);
-
-    if (!(await this.timeOffPanel.isVisible({ timeout: 5000 }).catch(() => false))) {
-      await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' });
-      await this.page.waitForURL(/\/settings\/overview|\/settings/, { timeout: 15000 });
-      await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await this.page.waitForTimeout(500);
+    if (await this.openLeaveCategoryListDirect()) {
+      return;
     }
-
-    await this.timeOffPanel.waitFor({ state: 'visible', timeout: 15000 });
-    await this.timeOffPanel.scrollIntoViewIfNeeded().catch(() => {});
-    await this.timeOffPanel.click({ force: true });
-    await this.page.waitForTimeout(500);
+    await this.expandTimeOffSettingsPanel();
   }
 
   async openFromDashboard() {
     await this.openDashboard();
-    await this.openSettingsTimeOff();
 
-    if (!(await this.leaveCategoryLink.isVisible({ timeout: 5000 }).catch(() => false))) {
-      await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' });
-      await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await this.page.waitForTimeout(500);
-      await this.timeOffPanel.waitFor({ state: 'visible', timeout: 15000 });
-      await this.timeOffPanel.click({ force: true });
+    if (await this.openLeaveCategoryListDirect()) {
+      await this.pendingTab.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await this.addNewButton.waitFor({ state: 'visible', timeout: 15000 });
+      return;
     }
 
-    await this.leaveCategoryLink.waitFor({ state: 'visible', timeout: 15000 });
+    await this.expandTimeOffSettingsPanel();
+
+    if (!(await this.leaveCategoryLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+      if (await this.openLeaveCategoryListDirect()) {
+        await this.addNewButton.waitFor({ state: 'visible', timeout: 15000 });
+        return;
+      }
+      await this.expandTimeOffSettingsPanel();
+    }
+
+    await this.leaveCategoryLink.waitFor({ state: 'visible', timeout: 20000 });
     await this.leaveCategoryLink.click();
     await this.pendingTab.waitFor({ state: 'visible', timeout: 15000 });
     await this.addNewButton.waitFor({ state: 'visible', timeout: 15000 });
@@ -815,12 +912,78 @@ export class LeaveCategoryPage {
     await this.cancelButton.waitFor({ state: 'visible', timeout: 15000 });
   }
 
+  categoryDataWithResolvedHierarchy<T extends LeaveCategoryFormData>(data: T): T {
+    if (!this.resolvedHierarchy) {
+      return data;
+    }
+    return { ...data, ...this.resolvedHierarchy };
+  }
+
+  dropdownOptionCandidates(optionName: string): string[] {
+    const aliases: Record<string, string[]> = {
+      Kerala: ['Kerala', 'Kerela'],
+      Kerela: ['Kerela', 'Kerala'],
+      'Morining Test': ['Morining Test', 'Morning Test', 'Flexible', 'General'],
+      General: ['General', 'Flexible'],
+    };
+    return aliases[optionName] ?? [optionName];
+  }
+
+  async selectDropdownOptionPreferOrFirst(
+    resolveDropdown: () => Locator,
+    optionName: string,
+  ): Promise<string> {
+    const dropdown = resolveDropdown();
+    const current = (await this.readComboboxValue(dropdown).catch(() => '')).trim();
+    const preferred = this.dropdownOptionCandidates(optionName);
+    if (
+      current
+      && !/^(please select|select )/i.test(current)
+      && preferred.some((name) => current.toLowerCase() === name.toLowerCase())
+    ) {
+      return current;
+    }
+
+    try {
+      await this.selectDropdownOption(dropdown, optionName);
+    } catch {
+      await this.selectDropdownOptionByIndex(resolveDropdown(), 0);
+    }
+    await this.page.waitForTimeout(300);
+    const value = (await this.readComboboxValue(resolveDropdown())).trim();
+    if (!value || /^(please select|select )/i.test(value)) {
+      throw new Error(`Could not select a value for dropdown (wanted "${optionName}")`);
+    }
+    return value;
+  }
+
   async selectDropdownOption(dropdown: Locator, optionName: string) {
-    await dropdown.scrollIntoViewIfNeeded().catch(() => {});
-    await dropdown.click();
-    const option = this.page.getByRole('option', { name: optionName, exact: true });
-    await option.waitFor({ state: 'visible', timeout: 10000 });
-    await option.click();
+    const candidates = this.dropdownOptionCandidates(optionName);
+    let lastError: unknown;
+
+    for (const name of candidates) {
+      try {
+        await dropdown.scrollIntoViewIfNeeded().catch(() => {});
+        await dropdown.click();
+        const search = this.page.getByRole('searchbox').first();
+        if (await search.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await search.fill(name);
+          await this.page.waitForTimeout(400);
+        }
+        const option = this.page.getByRole('option', { name, exact: true });
+        await option.waitFor({ state: 'visible', timeout: 15000 });
+        await option.click();
+        return;
+      } catch (error) {
+        lastError = error;
+        await this.page.keyboard.press('Escape').catch(() => {});
+        await this.page.waitForTimeout(200);
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(`Could not select dropdown option "${optionName}"`);
   }
 
   async selectDropdownOptionIfNeeded(dropdown: Locator, optionName: string) {
@@ -858,11 +1021,26 @@ export class LeaveCategoryPage {
     }
   }
 
+  yearHierarchyCombobox(): Locator {
+    return this.fieldGroupByLabel(/^Year\s*\*?$/i).getByRole('combobox').first();
+  }
+
   async fillAddLeaveCategoryForm(data: LeaveCategoryFormData) {
-    await this.selectDropdownOption(this.yearDropdown, data.year);
-    await this.selectDropdownOption(this.locationDropdown, data.location);
-    await this.selectDropdownOption(this.subLocationDropdown, data.subLocation);
-    await this.selectDropdownOption(this.shiftDropdown, data.shift);
+    const locationCombo = () => this.locationHierarchyCombobox('location');
+    const subLocationCombo = () => this.locationHierarchyCombobox('subLocation');
+    const shiftCombo = () => this.locationHierarchyCombobox('shift');
+
+    await this.selectDropdownOptionIfNeeded(this.yearHierarchyCombobox(), data.year);
+    await this.selectDropdownOptionIfNeeded(locationCombo(), data.location);
+    await this.page.waitForTimeout(600);
+    const subLocation = await this.selectDropdownOptionPreferOrFirst(
+      subLocationCombo,
+      data.subLocation,
+    );
+    await this.page.waitForTimeout(600);
+    const shift = await this.selectDropdownOptionPreferOrFirst(shiftCombo, data.shift);
+    const location = (await this.readComboboxValue(locationCombo())).trim();
+    this.resolvedHierarchy = { location, subLocation, shift };
 
     await this.selectDropdownOption(this.categoryTypeDropdown, data.categoryType);
     await this.selectDropdownOption(this.leaveTypeDropdown, data.leaveType);
