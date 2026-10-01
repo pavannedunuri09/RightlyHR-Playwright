@@ -58,9 +58,9 @@ export default defineConfig({
     launchOptions: {
       slowMo: process.env.CI ? 0 : (process.env.SLOWMO ? Number(process.env.SLOWMO) : 1500),
     },
-    trace: 'retain-on-failure',
+    trace: { mode: 'on', retainOnFailure: true },
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: 'on',
     actionTimeout: 15000,
 
     navigationTimeout: 45000,
