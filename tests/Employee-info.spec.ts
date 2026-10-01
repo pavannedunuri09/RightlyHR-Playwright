@@ -1,24 +1,24 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
+import { EmployeeInfoPage } from '../pages/Employee-infopage';
+
 //tc01 - Open Employee Info
 test('TC01 - Open Employee Info', async ({ page }) => {
   const loginPage = new LoginPage(page);
+  const employeeInfoPage = new EmployeeInfoPage(page);
 
   await loginPage.loginFromEnv();
 
-  await page.goto(
-    '/employee-management/active/employees',
-    { waitUntil: 'domcontentloaded' }
-  );
-
-  await page
-    .getByText('Arpita Bhanja', { exact: true })
-    .first()
-    .click();
-
-  await page.locator('div:nth-child(2) > a').click();
+  const employeeName = await employeeInfoPage.openRandomEmployeePersonalBasicInfo();
 
   await expect(page).toHaveURL(/personal[-/]?info/i);
+  await expect(page.getByText('Personal', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Basic Info', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Please enter employee ID' })).toBeVisible();
+
+  console.log(
+    `TC01 PASSED - Opened ${employeeName} from ${employeeInfoPage.selectedListType} employees personal basic info`,
+  );
 });
 //tc02 - Verify Basic Info fields
 test('TC02 - Verify Basic Info fields', async ({ page }) => {

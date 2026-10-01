@@ -60,8 +60,8 @@ export class LoginPage {
   }
 
   async loginFromEnv() {
-    const email = (process.env.EMPLOYEE_EMAIL || process.env.LOGIN_EMAIL)?.trim();
-    const password = (process.env.EMPLOYEE_PASSWORD || process.env.LOGIN_PASSWORD)?.trim();
+    const email = (process.env.LOGIN_EMAIL || process.env.EMPLOYEE_EMAIL)?.trim();
+    const password = (process.env.LOGIN_PASSWORD || process.env.EMPLOYEE_PASSWORD)?.trim();
     if (!email || !password) {
       throw new Error('Set EMPLOYEE_EMAIL / LOGIN_EMAIL and EMPLOYEE_PASSWORD / LOGIN_PASSWORD in .env');
     }

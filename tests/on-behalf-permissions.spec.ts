@@ -48,7 +48,7 @@ test.describe('On Behalf Of — Permission Flow', () => {
 
   test.afterAll(async () => {
     if (sharedPage) {
-      await sharedPage.close().catch(() => {});
+      await sharedPage.close().catch(() => { });
     }
   });
 
