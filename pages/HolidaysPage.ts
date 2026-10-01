@@ -235,18 +235,96 @@ export class HolidaysPage {
     }
   }
 
+  private isOnDashboardHome() {
+    try {
+      const path = new URL(this.page.url()).pathname.replace(/\/$/, '') || '/';
+      return path === '/' || path.includes('/dashboard');
+    } catch {
+      return false;
+    }
+  }
+
+  private async isDashboardReady() {
+    if (/\/login/i.test(this.page.url())) {
+      return false;
+    }
+
+    const welcome = this.page.getByText('Have a nice day at work!');
+    if (await welcome.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return true;
+    }
+
+    const sidenav = this.page.locator('#sidenav-main-drop');
+    if (await sidenav.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return true;
+    }
+
+    const dashboardNav = sidenav.getByText('Dashboard', { exact: true });
+    if (await dashboardNav.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return true;
+    }
+
+    return this.settingsIcon.isVisible({ timeout: 1000 }).catch(() => false);
+  }
+
+  private async clickDashboardNavIfVisible() {
+    const dashboardNav = this.page.locator('#sidenav-main-drop').getByText('Dashboard', { exact: true });
+    if (await dashboardNav.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await dashboardNav.click();
+      await this.page.waitForLoadState('domcontentloaded');
+      await this.page.waitForTimeout(1000);
+      return true;
+    }
+    return false;
+  }
+
+  private async waitForDashboardReady() {
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      if (await this.isDashboardReady()) {
+        return;
+      }
+      await this.page.waitForTimeout(500);
+    }
+
+    throw new Error(`Dashboard not ready. Current URL: ${this.page.url()}`);
+  }
+
   /**
    * Navigate to Dashboard and confirm default dashboard page without reloading if already there
    */
   async openDashboard() {
-    if (this.page.url().includes('/dashboard/emp')) {
-      await this.page.waitForTimeout(500);
+    if (await this.isDashboardReady()) {
       return;
     }
+
+    await this.clickDashboardNavIfVisible();
+    if (await this.isDashboardReady()) {
+      return;
+    }
+
+    if (this.isOnDashboardHome()) {
+      await this.clickDashboardNavIfVisible();
+      if (await this.isDashboardReady()) {
+        return;
+      }
+    }
+
     await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
-    // await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
-    // await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-    // await this.page.waitForTimeout(500);
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+
+    if (!(await this.isDashboardReady())) {
+      await this.clickDashboardNavIfVisible();
+    }
+
+    if (!(await this.isDashboardReady()) && /\/$/.test(new URL(this.page.url()).pathname.replace(/\/$/, '') || '/')) {
+      await this.page.goto('/dashboard/emp', { waitUntil: 'networkidle' }).catch(() =>
+        this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' }),
+      );
+      await this.clickDashboardNavIfVisible();
+    }
+
+    await this.waitForDashboardReady();
   }
 
   /**
@@ -254,9 +332,11 @@ export class HolidaysPage {
    */
   async clickSettingsIcon() {
     await this.page.waitForTimeout(800);
-    const settingsBtn = this.page.locator('img[src*="setting" i], [aria-label*="Setting" i], .settings-icon, a[href*="setting"], button[aria-label*="setting" i], rect, svg, path').first();
-    if (await settingsBtn.isVisible().catch(() => false)) {
-      await settingsBtn.click({ force: true }).catch(() => {});
+    const settingsBtn = this.settingsIcon
+      .or(this.page.locator('a[href*="settings/overview" i], a[href*="/settings" i]').first())
+      .or(this.page.getByRole('link', { name: /settings/i }));
+    if (await settingsBtn.first().isVisible().catch(() => false)) {
+      await settingsBtn.first().click({ force: true }).catch(() => {});
     }
     try {
       await this.page.waitForURL(/\/settings\/overview|\/settings/, { timeout: 5000 });
@@ -283,7 +363,7 @@ export class HolidaysPage {
       await this.page.waitForTimeout(500);
       return;
     }
-    if (this.page.url().includes('/dashboard/emp')) {
+    if (this.isOnDashboardHome()) {
       await this.clickSettingsIcon();
     } else {
       await this.page.goto('/settings/overview', { waitUntil: 'domcontentloaded' });

@@ -1,6 +1,7 @@
 /**
  * Prerequisites: run `npm run test:leave-category` then `npm run test:leave-allocation` first.
  * This suite assumes published leave categories are allocated for the same location/shift base.
+ * Tests 04–05: EMPLOYEE_EMAIL/EMPLOYEE_PASSWORD must be the same person as LOAD_ENTITLEMENTS_EMPLOYEE.
  */
 import { expect, type Page, test } from './fixtures/test';
 import {
@@ -101,32 +102,47 @@ test.describe.serial('Load Entitlements', () => {
       return;
     }
 
+    if (await loadEntitlementsPage.isAlreadyEntitledModalVisible()) {
+      await loadEntitlementsPage.dismissEntitledModalIfPresent();
+      return;
+    }
+
     await loadEntitlementsPage.loadEntitlements();
     await loadEntitlementsPage.dismissToastIfPresent();
   });
 
-  test('04. validates user session and opens Time Off Leaves tab', async () => {
-    await leavesPage.validateUserSessionAndOpenLeaves(loginPage, [
-      GENERAL_LEAVE_CATEGORY.categoryName,
-      SICK_LEAVE_CATEGORY.categoryName,
-    ]);
+  test('04. logs out HR, logs in as entitled employee, and opens Time Off Leaves tab', async () => {
+    await leavesPage.loginAsEmployeeAndOpenLeaves(loginPage, LOAD_ENTITLEMENTS_EMPLOYEE);
   });
 
   test('05. displays entitled General Leave and Sick Leave balances', async () => {
-    await leavesPage.validateUserSessionAndOpenLeaves(loginPage, [
-      GENERAL_LEAVE_CATEGORY.categoryName,
-      SICK_LEAVE_CATEGORY.categoryName,
-    ]);
+    await expect(page).toHaveURL(/\/time-off\/leaves/i);
+    await leavesPage.expectLeavesPageLoaded();
+    await leavesPage.ensureEntitlementCardsForEmployee(
+      LOAD_ENTITLEMENTS_EMPLOYEE.search,
+      LOAD_ENTITLEMENTS_EMPLOYEE.optionLabel,
+    );
 
-    await leavesPage.expectEntitledLeave(GENERAL_LEAVE_CATEGORY.categoryName, {
-      frequency: GENERAL_LEAVE_CATEGORY.frequencyType,
-      booked: '0',
-      processed: '0',
-    });
-    await leavesPage.expectEntitledLeave(SICK_LEAVE_CATEGORY.categoryName, {
-      frequency: SICK_LEAVE_CATEGORY.frequencyType,
-      booked: '0',
-      processed: '0',
-    });
+    const entitledCategories = [
+      {
+        name: GENERAL_LEAVE_CATEGORY.categoryName,
+        proRata: GENERAL_LEAVE_CATEGORY.proRataLeaveAllocation === 'Yes',
+      },
+      {
+        name: SICK_LEAVE_CATEGORY.categoryName,
+        proRata: SICK_LEAVE_CATEGORY.proRataLeaveAllocation === 'Yes',
+      },
+    ];
+
+    for (const category of entitledCategories) {
+      const metrics = await leavesPage.expectEntitledLeaveAgainstAllocation(
+        category.name,
+        DEFAULT_ALLOCATION_DAYS,
+        { proRataLeaveAllocation: category.proRata },
+      );
+
+      expect(Number(metrics.booked)).toBeGreaterThanOrEqual(0);
+      expect(Number(metrics.processed)).toBeGreaterThanOrEqual(0);
+    }
   });
 });

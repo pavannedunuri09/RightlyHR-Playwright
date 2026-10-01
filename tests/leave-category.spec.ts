@@ -18,6 +18,7 @@ test.describe.serial('Leave Category Foundation', () => {
     page = await browser.newPage();
     await new LoginPage(page).loginFromEnv();
     leaveCategoryPage = new LeaveCategoryPage(page);
+    await leaveCategoryPage.openDashboard();
   });
 
   test.afterAll(async () => {

@@ -63,6 +63,15 @@ export class LoginPage {
     return { email, password };
   }
 
+  employeeCredentialsFromEnv() {
+    const email = (
+      process.env.EMPLOYEE_EMAIL
+      || process.env.EMPLOYEE_USERNAME
+    )?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+    return { email, password };
+  }
+
   private async waitForAuthenticated() {
     await this.page.waitForURL(
       (url) => !url.pathname.includes('/login'),
@@ -89,7 +98,7 @@ export class LoginPage {
   }
 
   async loginFromEnv() {
-    const { email, password } = this.credentialsFromEnv();
+    const { email, password } = this.employeeCredentialsFromEnv();
     if (!email || !password) {
       throw new Error(
         'Set HR_USERNAME/HR_PASSWORD or LOGIN_EMAIL/LOGIN_PASSWORD (or EMPLOYEE_EMAIL/EMPLOYEE_PASSWORD) in .env',
@@ -123,6 +132,41 @@ export class LoginPage {
       sessionStorage.clear();
     }).catch(() => {});
     await this.loginFromEnv();
+  }
+
+  /**
+   * End HR (or any) session and log in as the entitled employee (EMPLOYEE_* env only).
+   */
+  async logoutAndLoginAsEmployeeFromEnv() {
+    const { email, password } = this.employeeCredentialsFromEnv();
+    if (!email || !password) {
+      throw new Error(
+        'Set EMPLOYEE_EMAIL (or EMPLOYEE_USERNAME) and EMPLOYEE_PASSWORD in .env for entitled employee login',
+      );
+    }
+
+    if (!/\/login/i.test(this.page.url())) {
+      try {
+        await this.logout();
+        await this.page.waitForURL(/\/login/i, { timeout: 20000 });
+      } catch {
+        await this.logoutOrClearSession();
+      }
+    }
+
+    await this.goto();
+    await this.login(email, password);
+
+    try {
+      await this.waitForAuthenticated();
+    } catch (error) {
+      if (this.page.isClosed()) {
+        throw new Error(`Browser page closed during employee login: ${error}`);
+      }
+      await this.goto();
+      await this.login(email, password);
+      await this.waitForAuthenticated();
+    }
   }
 
   async logout() {

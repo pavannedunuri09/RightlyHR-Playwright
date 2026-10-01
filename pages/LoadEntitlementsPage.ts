@@ -2,8 +2,8 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import type { LeaveAllocationBaseFilters } from './LeaveAllocationPage';
 
 export const LOAD_ENTITLEMENTS_EMPLOYEE = {
-  search: 'saii',
-  optionLabel: 'SD302262 - saii Pavan Dinesh Tejaa',
+  search: 'sai pavan',
+  optionLabel: 'SD302262 - sai Pavan teja',
 };
 
 export type EntitlementRowExpectation = {
@@ -186,9 +186,9 @@ export class LoadEntitlementsPage {
 
   async openDashboard() {
     if (!this.page.url().includes('/dashboard/emp')) {
-      await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
+      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     }
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await this.page.waitForURL(/\/dashboard$/, { timeout: 30000 });
     await this.page
       .getByText('Have a nice day at work!')
       .waitFor({ state: 'visible', timeout: 15000 });
@@ -333,7 +333,39 @@ export class LoadEntitlementsPage {
     }
   }
 
+  async dismissEntitledModalIfPresent() {
+    const modal = this.page.locator('#entitled.modal.show, #entitled.modal.fade.show');
+    if (!(await modal.isVisible({ timeout: 2000 }).catch(() => false))) {
+      return false;
+    }
+
+    const okButton = modal.getByRole('button', { name: /^OK$/i });
+    if (await okButton.isVisible().catch(() => false)) {
+      await okButton.click();
+    } else {
+      const closeButton = modal.getByRole('button').first();
+      await closeButton.click().catch(() => {});
+    }
+
+    await modal.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    return true;
+  }
+
+  async isAlreadyEntitledModalVisible() {
+    const modal = this.page.locator('#entitled.modal.show, #entitled.modal.fade.show');
+    if (!(await modal.isVisible({ timeout: 1000 }).catch(() => false))) {
+      return false;
+    }
+    return modal.getByText(/already entitled/i).isVisible().catch(() => false);
+  }
+
   async loadEntitlements() {
+    if (await this.isAlreadyEntitledModalVisible()) {
+      await this.dismissEntitledModalIfPresent();
+      return;
+    }
+
+    await this.dismissEntitledModalIfPresent();
     await this.loadEntitlementsButton.click();
 
     if (await this.confirmYesButton.isVisible({ timeout: 3000 }).catch(() => false)) {

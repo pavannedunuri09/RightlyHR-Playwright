@@ -16,7 +16,7 @@ export const GENERAL_LEAVE_ALLOCATION_BASE: LeaveAllocationBaseFilters = {
   shift: GENERAL_LEAVE_CATEGORY.shift,
 };
 
-export const DEFAULT_ALLOCATION_DAYS = '12';
+export const DEFAULT_ALLOCATION_DAYS = '30';
 
 const PLACEHOLDER_CATEGORY_PATTERN = /^select\s+category/i;
 
@@ -81,9 +81,9 @@ export class LeaveAllocationPage {
 
   async openDashboard() {
     if (!this.page.url().includes('/dashboard/emp')) {
-      await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
+      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     }
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await this.page.waitForURL(/\/dashboard$/, { timeout: 30000 });
     await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 });
   }
 

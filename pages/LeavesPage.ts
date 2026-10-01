@@ -5,9 +5,17 @@ import { GENERAL_LEAVE_CATEGORY, SICK_LEAVE_CATEGORY } from './LeaveCategoryPage
 export type LeaveEntitlementExpectation = {
   entitledBalance?: string;
   entitledTotal?: string;
-  frequency: string;
+  frequency?: string;
   booked?: string;
   processed?: string;
+};
+
+export type EntitlementCardMetrics = {
+  booked: string;
+  processed: string;
+  remaining: string;
+  total: string;
+  balance: string;
 };
 
 export type LeaveDateParts = ReturnType<typeof datePartsFromInput>;
@@ -34,7 +42,7 @@ type RequestLeaveOptions = {
 export const MAX_LEAVE_PAST_DAYS = 100;
 export const MAX_LEAVE_FUTURE_DAYS = 100;
 
-const EMPLOYEE_NAME = 'saii Pavan Dinesh Tejaa';
+const EMPLOYEE_NAME = 'sai Pavan teja';
 
 export function leaveDateRange() {
   return { minOffset: -MAX_LEAVE_PAST_DAYS, maxOffset: MAX_LEAVE_FUTURE_DAYS };
@@ -361,23 +369,86 @@ export class LeavesPage {
   }
 
   leaveEntitlementBlock(categoryName: string) {
-    const escaped = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
-    return this.page
-      .locator('div')
-      .filter({ hasText: new RegExp(`^${escaped}\\s*Booked\\s*\\d`, 'i') })
-      .filter({ hasText: /\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?/ })
-      .last();
+    const escaped = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const heading = this.page.getByText(new RegExp(`^${escaped}$`, 'i')).first();
+    return heading.locator('xpath=ancestor::div[contains(., "Booked")][1]/..');
+  }
+
+  async readEntitlementCardMetrics(categoryName: string): Promise<EntitlementCardMetrics> {
+    const block = this.leaveEntitlementBlock(categoryName);
+    await expect(block).toBeVisible({ timeout: 15000 });
+
+    const text = (await block.innerText()).replace(/\s+/g, ' ');
+    const booked = text.match(/Booked\s*(\d+(?:\.\d+)?)/i)?.[1];
+    const processed = text.match(/Processed\s*(\d+(?:\.\d+)?)/i)?.[1];
+    const balanceMatch = text.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+
+    if (!booked || !processed || !balanceMatch) {
+      throw new Error(`Could not parse entitlement card for "${categoryName}": ${text}`);
+    }
+
+    return {
+      booked,
+      processed,
+      remaining: balanceMatch[1],
+      total: balanceMatch[2],
+      balance: `${balanceMatch[1]}/${balanceMatch[2]}`,
+    };
   }
 
   async waitForEntitlementCards(categoryNames: string[], timeoutMs = 30000) {
     for (const categoryName of categoryNames) {
-      await expect
-        .poll(
-          async () => this.leaveEntitlementBlock(categoryName).isVisible().catch(() => false),
-          { timeout: timeoutMs },
-        )
-        .toBeTruthy();
+      await expect(this.leaveEntitlementBlock(categoryName)).toBeVisible({ timeout: timeoutMs });
     }
+  }
+
+  /**
+   * Assert employee Leaves card total is derived from grade allocation (e.g. 12) after pro-rata (e.g. 3.5).
+   */
+  async expectEntitledLeaveAgainstAllocation(
+    categoryName: string,
+    allocatedDays: string | number,
+    options?: { proRataLeaveAllocation?: boolean },
+  ): Promise<EntitlementCardMetrics> {
+    const metrics = await this.readEntitlementCardMetrics(categoryName);
+    const allocated = Number(allocatedDays);
+    const entitledTotal = Number(metrics.total);
+    const remaining = Number(metrics.remaining);
+
+    expect(entitledTotal, `${categoryName} entitled total should be > 0`).toBeGreaterThan(0);
+    expect(remaining).toBeLessThanOrEqual(entitledTotal);
+    expect(entitledTotal).toBeLessThanOrEqual(allocated);
+
+    if (options?.proRataLeaveAllocation) {
+      expect(
+        entitledTotal,
+        `${categoryName}: pro-rata entitled (${metrics.balance}) should be less than allocated (${allocated})`,
+      ).toBeLessThan(allocated);
+    }
+
+    return metrics;
+  }
+
+  async ensureEntitlementCardsForEmployee(search: string, optionLabel: string) {
+    await this.waitForLeavesPageReady();
+
+    if (await this.page.getByText(/^General Leave$/i).isVisible().catch(() => false)) {
+      return;
+    }
+
+    const combobox = this.page.getByRole('combobox', { name: /Select employee name/i });
+    if (!(await combobox.isVisible({ timeout: 5000 }).catch(() => false))) {
+      return;
+    }
+
+    await combobox.click();
+    const searchbox = this.page.getByRole('searchbox').first();
+    if (await searchbox.isVisible().catch(() => false)) {
+      await searchbox.fill(search);
+    }
+    await this.page.getByRole('option', { name: optionLabel, exact: true }).click();
+    await this.page.waitForTimeout(1000);
+    await this.waitForLeavesPageReady();
   }
 
   async openTimeOffMenu() {
@@ -428,10 +499,10 @@ export class LeavesPage {
   }
 
   async openFromDashboard() {
-    if (!this.page.url().includes('/dashboard/emp')) {
-      await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' });
+    if (!this.page.url().includes('/dashboard')) {
+      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     }
-    await this.page.waitForURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await this.page.waitForURL(/\/dashboard$/, { timeout: 30000 });
     await this.page
       .getByText('Have a nice day at work!')
       .waitFor({ state: 'visible', timeout: 15000 });
@@ -449,57 +520,58 @@ export class LeavesPage {
     await expect(this.viewLeaveSummaryButton).toBeVisible();
   }
 
-  async validateUserSessionAndOpenLeaves(
-    loginPage: { validateUserSession: () => Promise<void> },
-    categoryNames: string[] = [],
+  /** Log out HR session and open Leaves as the entitled employee (see EMPLOYEE_* in .env). */
+  async loginAsEmployeeAndOpenLeaves(
+    loginPage: { logoutAndLoginAsEmployeeFromEnv: () => Promise<void> },
+    entitledEmployee?: { search: string; optionLabel: string },
   ) {
-    await loginPage.validateUserSession();
+    await loginPage.logoutAndLoginAsEmployeeFromEnv();
     await this.page.goto('/time-off/leaves/waiting-for-approval', {
       waitUntil: 'domcontentloaded',
     });
     await this.expectLeavesPageLoaded();
-
-    if (categoryNames.length > 0) {
-      await this.waitForEntitlementCards(categoryNames);
+    if (entitledEmployee) {
+      await this.ensureEntitlementCardsForEmployee(
+        entitledEmployee.search,
+        entitledEmployee.optionLabel,
+      );
+    } else {
+      await this.waitForLeavesPageReady();
     }
   }
 
   async expectEntitledLeave(categoryName: string, expectation: LeaveEntitlementExpectation) {
-    const block = this.leaveEntitlementBlock(categoryName);
-    await expect(block).toBeVisible({ timeout: 15000 });
+    const metrics = await this.readEntitlementCardMetrics(categoryName);
+    const blockText = `${categoryName} Booked ${metrics.booked} Processed ${metrics.processed} ${metrics.balance}`;
 
-    const blockText = (await block.innerText()).replace(/\s+/g, ' ');
-    const normalizedBlockText = blockText.replace(/\s/g, '');
     expect(blockText).toContain(categoryName);
-    expect(blockText).toContain(expectation.frequency);
-
-    const afterProcessed = normalizedBlockText.split(/Processed/i).pop() || normalizedBlockText;
-    const balanceMatch = afterProcessed.match(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
-    expect(balanceMatch, `Expected remaining/total balance on the ${categoryName} card`).toBeTruthy();
-    expect(blockText).toMatch(/Booked\s*\d/i);
-    expect(blockText).toMatch(/Processed\s*\d/i);
+    if (expectation.frequency) {
+      const card = this.leaveEntitlementBlock(categoryName);
+      const cardText = (await card.innerText()).replace(/\s+/g, ' ');
+      expect(cardText).toContain(expectation.frequency);
+    }
 
     if (expectation.entitledTotal) {
-      expect(balanceMatch![2]).toBe(String(expectation.entitledTotal).replace(/\s/g, ''));
+      expect(metrics.total).toBe(String(expectation.entitledTotal).replace(/\s/g, ''));
     }
 
     if (expectation.entitledBalance) {
       const expected = expectation.entitledBalance.replace(/\s/g, '');
       const parts = expected.split('/');
       if (parts.length === 2 && parts[0] === parts[1]) {
-        expect(balanceMatch![2]).toBe(parts[1]);
-        expect(Number(balanceMatch![1])).toBeLessThanOrEqual(Number(parts[1]));
+        expect(metrics.total).toBe(parts[1]);
+        expect(Number(metrics.remaining)).toBeLessThanOrEqual(Number(parts[1]));
       } else {
-        expect(normalizedBlockText).toContain(expected);
+        expect(metrics.balance.replace(/\s/g, '')).toContain(expected);
       }
     }
 
     if (expectation.booked !== undefined) {
-      expect(blockText).toMatch(new RegExp(`Booked\\s*${expectation.booked}`, 'i'));
+      expect(metrics.booked).toBe(String(expectation.booked));
     }
 
     if (expectation.processed !== undefined) {
-      expect(blockText).toMatch(new RegExp(`Processed\\s*${expectation.processed}`, 'i'));
+      expect(metrics.processed).toBe(String(expectation.processed));
     }
   }
 

@@ -19,9 +19,9 @@ const TAB_POLL = { timeout: 15000 };
 
 test.describe('Leaves', () => {
   test.beforeEach(async ({ page }) => {
-    const email = process.env.LOGIN_EMAIL?.trim();
-    const password = process.env.LOGIN_PASSWORD?.trim();
-    test.skip(!email || !password, 'Set LOGIN_EMAIL and LOGIN_PASSWORD in .env');
+    const email = process.env.EMPLOYEE_EMAIL?.trim();
+    const password = process.env.EMPLOYEE_PASSWORD?.trim();
+    test.skip(!email || !password, 'Set EMPLOYEE_PASSWORD and EMPLOYEE_PASSWORD in .env');
 
     await new LoginPage(page).loginFromEnv();
   });
