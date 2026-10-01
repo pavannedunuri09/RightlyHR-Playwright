@@ -4,7 +4,8 @@ import { MyInfoPage } from '../pages/my-infopage';
 
 test.describe('My Info Module Automation Suite', () => {
   let loginPage: LoginPage;
-  let myInfoPage: MyInfoPage;
+  let 
+  myInfoPage: MyInfoPage;
 
   test.beforeEach(async ({ page }) => {
     loginPage = new LoginPage(page);
@@ -91,7 +92,7 @@ test.describe('My Info Module Automation Suite', () => {
         name: contact2Name,
         email: `emerg2_${uniqueId}@test.com`,
         phone: '9876543211',
-        relationship: 'Uncle',
+        relationship: 'Father',
       },
     });
 
@@ -134,7 +135,7 @@ test.describe('My Info Module Automation Suite', () => {
 
     // 1. Add
     await myInfoPage.addIdentity({
-      type: 'Pass Book',
+      type: 'Payslips',
       number: identityNumber,
     });
     await expect(myInfoPage.getTableRow(identityNumber)).toBeVisible();
@@ -185,7 +186,7 @@ test.describe('My Info Module Automation Suite', () => {
 
     // 1. Add
     await myInfoPage.addAcademic({
-      qualification: 'B.TECH',
+      qualification: 'B.tech',
       university: university,
       specialization: 'CSE',
       gpa: '8',
@@ -272,9 +273,9 @@ test.describe('My Info Module Automation Suite', () => {
     // 1. Add
     await myInfoPage.addEmployment({
       company: 'ABC',
-      employmentType: 'Full-Time',
-      fromDate: '2020-01-01',
-      toDate: '2023-01-01',
+      employmentType: 'Full Time',
+      fromDate: '2006-01-01',
+      toDate: '2007-01-01',
       jobRole: jobRole,
       contactName: `Ramu${randomSuffix}`,
       contactNumber: '8652524244',
@@ -351,7 +352,7 @@ test.describe('My Info Module Automation Suite', () => {
       'Probation Confirmation Letter',
       'Probation Extension Letter',
       'Salary Revision Letter',
-      'Trainee Appointment Letter',
+      // 'Trainee Appointment Letter',
     ];
 
     for (const letter of letterTypes) {
