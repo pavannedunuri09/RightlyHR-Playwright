@@ -35,6 +35,7 @@
     "test:permissions": "playwright test --project=21-permissions --headed --workers=1 --no-deps",
     "test:regularization": "playwright test --project=22-regularization --headed --workers=1 --no-deps",
     "test:on-behalf-permissions": "playwright test --project=23-onbehalf-permissions --headed --workers=1 --no-deps",
+    "test:settings": "playwright test --project=33-settings --headed --workers=1 --no-deps",
     "report": "playwright show-report"
   },
   "keywords": [],

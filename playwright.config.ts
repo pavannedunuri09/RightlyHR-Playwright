@@ -272,6 +272,13 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
 },
+{
+  name: '33-settings',
+  testMatch: /(?:^|[\\/])settings\.spec\.ts$/,
+  use: {
+    ...devices['Desktop Chrome'],
+  },
+},
 
     // Uncomment when needed
     // {
