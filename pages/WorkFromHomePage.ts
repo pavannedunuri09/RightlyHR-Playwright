@@ -8,7 +8,8 @@ export class WorkFromHomePage {
   readonly timeOffRemoteLoginTab: Locator;
   readonly wfhNav: Locator;
   readonly requestWfhButton: Locator;
-  readonly workedDateInput: Locator;
+  readonly startDateInput: Locator;
+  readonly endDateInput: Locator;
   readonly halfDayRadio: Locator;
   readonly fullDayRadio: Locator;
   readonly firstHalfRadio: Locator;
@@ -53,7 +54,8 @@ export class WorkFromHomePage {
     this.timeOffRemoteLoginTab = page.locator('app-time-off-tabs').locator('.grid-item').filter({ hasText: /Remote\s?Login/i });
     this.wfhNav = this.timeOffWfhTab;
     this.requestWfhButton = page.getByRole('button', { name: 'Request WFH', exact: true });
-    this.workedDateInput = page.getByRole('textbox', { name: /Worked Date \*/ });
+    this.startDateInput = page.getByRole('dialog').getByRole('textbox', { name: /Start Date\s*\*/i });
+    this.endDateInput = page.getByRole('dialog').getByRole('textbox', { name: /End Date\s*\*/i });
     this.halfDayRadio = page.getByRole('radio', { name: 'Half Day' });
     this.fullDayRadio = page.getByRole('dialog').getByRole('radio', { name: 'Full Day' });
     this.firstHalfRadio = page.getByRole('dialog').getByRole('radio', { name: /First Half/i });
@@ -138,7 +140,7 @@ export class WorkFromHomePage {
     await this.requestWfhButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.fillWorkedDate(startDate);
+    await this.fillRequestDates(startDate, endDate);
     await this.halfDayRadio.check();
     await this.reasonInput.fill(reason);
     await this.requestButton.click();
@@ -149,17 +151,21 @@ export class WorkFromHomePage {
     await this.requestWfhButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.fillWorkedDate(startDate);
+    await this.fillRequestDates(startDate);
     await this.selectAvailing(session);
     await this.reasonInput.fill(reason);
     return dialog;
   }
 
-  async fillWorkedDate(workedDate: string) {
-    await this.workedDateInput.waitFor({ state: 'visible', timeout: 15000 });
-    await this.workedDateInput.click();
-    await this.workedDateInput.fill(workedDate);
-    await this.workedDateInput.blur();
+  async fillRequestDates(startDate: string, endDate = startDate) {
+    await this.startDateInput.waitFor({ state: 'visible', timeout: 15000 });
+    await this.startDateInput.click();
+    await this.startDateInput.fill(startDate);
+    await this.startDateInput.press('Tab');
+    await this.endDateInput.waitFor({ state: 'visible', timeout: 15000 });
+    await this.endDateInput.click();
+    await this.endDateInput.fill(endDate);
+    await this.endDateInput.press('Tab');
   }
 
   async openFilledRequestForm() {
@@ -167,7 +173,7 @@ export class WorkFromHomePage {
     await this.requestWfhButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.fillWorkedDate(date.input);
+    await this.fillRequestDates(date.input);
     await this.halfDayRadio.check();
     await this.reasonInput.fill(`Cancel WFH ${date.input}`);
     return date;
@@ -267,7 +273,7 @@ export class WorkFromHomePage {
     await this.requestWfhButton.click();
     const dialog = this.page.getByRole('dialog');
     await dialog.waitFor({ state: 'visible', timeout: 15000 });
-    await this.fillWorkedDate(startDate);
+    await this.fillRequestDates(startDate, endDate);
     await this.selectHalfDaySession(session);
     await this.reasonInput.fill(reason);
 

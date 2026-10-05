@@ -200,7 +200,8 @@ test.describe('Work from Home', () => {
       await wfhPage.cancelConfirmNo.click();
       await expect(wfhPage.cancelConfirmMessage).toBeHidden();
       await expect(wfhPage.requestButton).toBeVisible();
-      await expect(wfhPage.workedDateInput).toBeVisible();
+      await expect(wfhPage.startDateInput).toBeVisible();
+      await expect(wfhPage.endDateInput).toBeVisible();
       await expect(wfhPage.reasonInput).toBeVisible();
 
       await wfhPage.clickRequestFormCancel();
