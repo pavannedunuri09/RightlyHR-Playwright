@@ -42,6 +42,12 @@ export class YopmailPage {
     await this.gotoInbox({ soft: true }).catch((error) => {
       console.log(`Yopmail open inbox soft-failed: ${error}`);
     });
+
+    if (this.mailbox && !(await this.inboxReady())) {
+      await this.gotoInbox({ soft: false }).catch((error) => {
+        console.log(`Yopmail open inbox retry failed: ${error}`);
+      });
+    }
   }
 
   async waitForMailSubject(fullName: string, timeoutMs = 180000, email?: string) {
@@ -969,7 +975,7 @@ export class YopmailPage {
         await this.handleCaptchaIfVisible(captchaTimeoutMs);
         return;
       }
-      if (options?.soft) {
+      if (options?.soft && !this.mailbox) {
         await this.handleCaptchaIfVisible(captchaTimeoutMs);
         console.log('Yopmail soft-open on existing tab; waiting for inbox.');
         return;
@@ -1042,7 +1048,17 @@ export class YopmailPage {
       if (await refresh.isVisible({ timeout: 3000 }).catch(() => false)) {
         const clicked = await refresh.click({ timeout: 5000 }).then(() => true).catch(() => false);
         if (!clicked) {
-          console.log('Yopmail refresh button blocked; skipping page reload.');
+          console.log('Yopmail refresh button blocked; reloading inbox URL.');
+          if (this.mailbox) {
+            await this.page
+              .goto(`https://yopmail.com/en/?login=${encodeURIComponent(this.mailbox)}`, {
+                waitUntil: 'domcontentloaded',
+              })
+              .catch(() => {});
+          } else {
+            await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+          }
+          await sleep(2500);
           return;
         }
         await this.handleCaptchaIfVisible(CAPTCHA_WAIT_MS);
@@ -1115,8 +1131,7 @@ export class YopmailPage {
       return false;
     }
 
-    console.log('Yopmail CAPTCHA resolved; pausing debugger then reading mail credentials.');
-    debugger;
+    console.log('Yopmail CAPTCHA resolved; continuing to read mail.');
     if (headed) {
       await this.page.pause();
     }

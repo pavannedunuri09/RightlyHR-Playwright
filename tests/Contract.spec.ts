@@ -7,6 +7,7 @@ import { createOnboardingFiles } from './fixtures/onboardingFiles';
 test.describe.serial(
     'Contract Flow - Part 1',
     () => {
+        test.describe.configure({ timeout: 180_000 });
 
         let hrPage: Page;
         let yopmailPage: Page;
@@ -227,7 +228,7 @@ test.describe.serial(
             async () => {
 
                 yopmailPage =
-                    await contract.openYopmail();
+                    await contract.openYopmail(employee.email);
 
                 await expect(
                     yopmailPage
@@ -248,10 +249,12 @@ test.describe.serial(
         test(
             'TC09 - HR should navigate to prospective employee Yopmail inbox',
             async () => {
+                test.setTimeout(180_000);
 
-                await contract.openYopmailInbox(
+                yopmailPage = await contract.openYopmailInbox(
                     yopmailPage,
-                    employee.email
+                    employee.email,
+                    employee.fullName,
                 );
 
                 console.log(
@@ -573,18 +576,16 @@ test.describe.serial(
             async () => {
                 await hrPage.bringToFront();
 
-                if (!yopmailPage) {
-                    yopmailPage = await contract.openYopmail();
-                }
-
-                await contract.openYopmailInbox(
+                yopmailPage = await contract.ensureYopmailPage(
                     yopmailPage,
-                    employee.email
+                    employee.email,
                 );
 
                 const credentials =
                     await contract.getContractOfferCredentials(
-                        yopmailPage
+                        yopmailPage,
+                        undefined,
+                        employee.email,
                     );
 
                 onboardingUsername = credentials.username;
@@ -720,9 +721,10 @@ test.describe.serial(
             async () => {
                 test.setTimeout(180000);
 
-                if (!yopmailPage) {
-                    yopmailPage = await contract.openYopmail();
-                }
+                yopmailPage = await contract.ensureYopmailPage(
+                    yopmailPage,
+                    employee.email,
+                );
 
                 await yopmailPage.bringToFront();
                 const credentials =
@@ -916,9 +918,10 @@ test.describe.serial(
             async () => {
                 test.setTimeout(180000);
 
-                if (!yopmailPage) {
-                    yopmailPage = await contract.openYopmail();
-                }
+                yopmailPage = await contract.ensureYopmailPage(
+                    yopmailPage,
+                    employee.email,
+                );
 
                 const portal = await contract.openPreOnboardingFromLatestMail(
                     yopmailPage,

@@ -225,7 +225,7 @@ export class Contract {
         await this.page.getByText('Fresher', { exact: true }).click();
 
         await this.selectLocationInDialog('Hyderabad');
-        await this.selectSublocation('Jai Hind Enclave Building');
+        await this.selectSublocation('Jai Hind Enclave building');
     }
 
     async clickAdd() {
@@ -322,7 +322,10 @@ export class Contract {
             .getByRole('button', { name: 'dropdown trigger' })
             .click();
 
-        await this.page.locator('span').filter({ hasText: label }).click();
+        const option = this.page.getByRole('listbox').last()
+            .getByRole('option', { name: new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') })
+            .first();
+        await option.click();
     }
 
     private async selectFirstOpenOption() {
@@ -373,7 +376,7 @@ export class Contract {
     // TC08
     // --------------------------------------------------
 
-    async openYopmail() {
+    async openYopmail(email?: string) {
 
         const browser = this.page.context().browser();
         if (!browser) {
@@ -390,7 +393,26 @@ export class Contract {
             'domcontentloaded'
         );
 
+        if (email) {
+            const yopmail = new YopmailPage(yopmailPage);
+            await yopmail.openInbox(email);
+        }
+
         return yopmailPage;
+    }
+
+    async ensureYopmailPage(
+        yopmailPage: Page | undefined,
+        email: string,
+    ): Promise<Page> {
+        let page = yopmailPage;
+        if (!page || page.isClosed()) {
+            page = await this.openYopmail(email);
+            return page;
+        }
+        const yopmail = new YopmailPage(page);
+        await yopmail.openInbox(email);
+        return page;
     }
 
     // --------------------------------------------------
@@ -398,19 +420,27 @@ export class Contract {
     // --------------------------------------------------
 
     async openYopmailInbox(
-        yopmailPage: Page,
-        emailName: string
-    ) {
-        const yopmail = new YopmailPage(yopmailPage);
-        await yopmail.openInbox(emailName);
+        yopmailPage: Page | undefined,
+        emailName: string,
+        employeeFullName?: string,
+    ): Promise<Page> {
+        const page = await this.ensureYopmailPage(yopmailPage, emailName);
+        const yopmail = new YopmailPage(page);
+        const mailName = this.createdEmployeeName || employeeFullName || '';
+        if (!mailName) {
+            throw new Error(
+                'Contract employee name is not set; run TC05–TC07 before opening Yopmail inbox',
+            );
+        }
         await yopmail.waitForMailSubject(
-            this.createdEmployeeName,
+            mailName,
             120000,
             emailName
         );
         await yopmail.openMatchingMailInViewer(
             /Request for Documents Upload|Request for Documents/i
         );
+        return page;
     }
 
     // --------------------------------------------------
@@ -601,11 +631,18 @@ export class Contract {
     // --------------------------------------------------
 
     private getPreonboardingUrl() {
+        const fromEnv =
+            process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
+            process.env.PRE_ONBOARDING_URL?.trim() ||
+            process.env.RightlyHR_PRE_ONBOARDING_URL?.trim();
+        if (fromEnv) {
+            return fromEnv.replace(/\/$/, '');
+        }
         const base = process.env.BASE_URL || '';
         if (/snad/i.test(base)) {
-            return 'https://preonboardingqasnad.onpremise.cluster.rightlyhr.com/';
+            return 'https://preonboardingqasnad.onpremise.cluster.rightlyhr.com';
         }
-        return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com/';
+        return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
     }
 
     async fillPersonalDetails(
@@ -613,22 +650,11 @@ export class Contract {
         firstName: string,
         lastName: string,
     ) {
-        const goToApplicationButton = onboardingPage.getByRole('button', { name: 'Go to Application' });
-        if (await goToApplicationButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-            await goToApplicationButton.click();
-            await onboardingPage.waitForTimeout(1500);
-        }
-
-        if (!/preonboarding/i.test(onboardingPage.url())) {
-            await onboardingPage.goto(this.getPreonboardingUrl(), { waitUntil: 'domcontentloaded' });
-            await onboardingPage.waitForTimeout(1500);
-        }
+        await onboardingPage.bringToFront();
 
         const application = new OnboardingApplicationPage(onboardingPage);
         await application.preparePersonalDetailsAndOpenDocuments(firstName, lastName);
-
-        await onboardingPage.getByRole('row', { name: /Requested|Resume/ }).first()
-            .waitFor({ state: 'visible', timeout: 20000 });
+        await application.waitForDocumentsPage(25000);
     }
 
     // --------------------------------------------------
@@ -641,7 +667,9 @@ export class Contract {
         // Per-document random files so each upload uses a unique file name/content.
         const perDocFiles: Record<string, string> = {
             Aadhar: this.createRandomUploadFile('Aadhar', 'png'),
+            Aadhaar: this.createRandomUploadFile('Aadhaar', 'png'),
             'Driving LIcense': this.createRandomUploadFile('DrivingLicense', 'png'),
+            'Bank letter': this.createRandomUploadFile('BankLetter', 'png'),
             Resume: pdfPath,
             PAN: this.createRandomUploadFile('PAN', 'png'),
         };
@@ -1234,6 +1262,11 @@ export class Contract {
         previousPassword?: string,
         email?: string,
     ): Promise<{ username: string; password: string; loginUrl?: string }> {
+        if (yopmailPage.isClosed()) {
+            throw new Error(
+                'Yopmail tab is closed; reopen with openYopmail() before fetching offer credentials',
+            );
+        }
         await yopmailPage.bringToFront();
         const yopmail = new YopmailPage(yopmailPage);
         if (email) {

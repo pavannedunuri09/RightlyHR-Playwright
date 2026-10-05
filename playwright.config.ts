@@ -55,8 +55,9 @@ export default defineConfig({
     ['html', { open: 'never' }],
   ],
 
+  
   use: {
-    baseURL,
+    baseURL: process.env.RightlyHR_URL?.trim() || baseURL,
     headless: process.env.HEADLESS === 'true',
     //  || !!process.env.CI,
     launchOptions: {
@@ -164,6 +165,7 @@ export default defineConfig({
       name: '11-contract',
       testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
+      timeout: 180_000,
     },
      /*{
        name:'30-my-info',
