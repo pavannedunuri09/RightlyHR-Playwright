@@ -73,14 +73,11 @@ export async function resolveProspectiveTraineeForDocuments(
   await trainees.openTraineesList();
 
   if (saved) {
-    await trainees.searchTrainee(saved.email);
-    const row = trainees.traineeRow(saved.email);
-    if (await row.isVisible({ timeout: 8000 }).catch(() => false)) {
-      const fromRow = await trainees.readTraineeFromRow(row);
-      const details = withOfferDefaults({ ...saved, ...fromRow, email: resolveTraineeEmail(saved) });
-      saveLastTrainee(details);
-      console.log(`Reusing saved prospective trainee ${details.email}`);
-      return details;
+    const loaded = await tryLoadSavedTraineeFromList(trainees, saved);
+    if (loaded) {
+      saveLastTrainee(loaded);
+      console.log(`Reusing saved prospective trainee ${loaded.email}`);
+      return loaded;
     }
     console.log(`Saved trainee ${saved.email} is not in prospective list; creating a new trainee for Test-03`);
   } else {
@@ -107,7 +104,7 @@ export async function tryLoadSavedTraineeFromList(
   );
 
   for (const query of searches) {
-    await trainees.searchTrainee(query);
+    await trainees.searchTraineeUntilRowVisible(query, 12000);
 
     const rowCandidates = [saved.email, saved.username, saved.employeeId].filter(
       (value): value is string => !!value,
@@ -124,9 +121,8 @@ export async function tryLoadSavedTraineeFromList(
 
     let row: Awaited<ReturnType<typeof trainees.traineeRow>> | null = null;
     for (const candidate of rowCandidates) {
-      const match = trainees.traineeRow(candidate);
-      if (await match.isVisible({ timeout: 3000 }).catch(() => false)) {
-        row = match;
+      if (await trainees.waitForTraineeRowVisible(candidate, 4000)) {
+        row = trainees.traineeRow(candidate);
         break;
       }
     }

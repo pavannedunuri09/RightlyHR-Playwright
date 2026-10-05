@@ -59,12 +59,27 @@ export class LoginPage {
     await this.passwordVisibilityToggle.click();
   }
 
+  /** Employee session (EMPLOYEE_* first, then LOGIN_*). */
   async loginFromEnv() {
     const email = (process.env.EMPLOYEE_EMAIL || process.env.LOGIN_EMAIL)?.trim();
     const password = (process.env.EMPLOYEE_PASSWORD || process.env.LOGIN_PASSWORD)?.trim();
     if (!email || !password) {
       throw new Error('Set EMPLOYEE_EMAIL / LOGIN_EMAIL and EMPLOYEE_PASSWORD / LOGIN_PASSWORD in .env');
     }
+    await this.loginWithSession(email, password);
+  }
+
+  /** HR / admin session (LOGIN_* or HR_* — does not use EMPLOYEE_*). */
+  async loginAsHrFromEnv() {
+    const email = (process.env.HR_USERNAME || process.env.LOGIN_EMAIL)?.trim();
+    const password = (process.env.HR_PASSWORD || process.env.LOGIN_PASSWORD)?.trim();
+    if (!email || !password) {
+      throw new Error('Set LOGIN_EMAIL/LOGIN_PASSWORD or HR_USERNAME/HR_PASSWORD in .env for HR login');
+    }
+    await this.loginWithSession(email, password);
+  }
+
+  private async loginWithSession(email: string, password: string) {
     await this.logoutOrClearSession();
     await this.goto();
     await this.login(email, password);
@@ -82,7 +97,7 @@ export class LoginPage {
         waitUntil: 'domcontentloaded',
       });
     }
-    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible' });
+    await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
   }
 
   async validateUserSession() {

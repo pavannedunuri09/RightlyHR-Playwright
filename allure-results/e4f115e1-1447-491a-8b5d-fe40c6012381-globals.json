@@ -1,0 +1,1 @@
+{"attachments":[],"errors":[{"message":"beforeEach hook failed: Test timeout of 120000ms exceeded while running \"beforeEach\" hook.","trace":"Test timeout of 120000ms exceeded while running \"beforeEach\" hook.\n    at D:\\RightlyHR-Playwright\\RightlyHR-Playwright\\tests\\my-info.spec.ts:10:8","timestamp":1790867675347}]}

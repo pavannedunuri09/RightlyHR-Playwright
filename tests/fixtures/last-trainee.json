@@ -1,18 +1,6 @@
 {
-  "middleName": "",
-  "designation": "Front End Developer",
-  "firstName": "Karthik",
-  "lastName": "Patel",
-  "email": "karthik.patel.bjy@yopmail.com",
-  "employeeId": "16034",
-  "salutation": "Mr.",
-  "gender": "Male",
-  "username": "karthik.patel.bjy@yopmail.com",
-  "password": "Eq3k%CIt",
-  "addressLine1": "Road no.48",
-  "addressLine2": "Sector 48",
-  "city": "Bengaluru",
-  "state": "Karnataka",
-  "country": "India",
-  "pincode": "560001"
+  "firstName": "Nandini",
+  "lastName": "Joshi",
+  "email": "nandini.joshi.sfy@yopmail.com",
+  "designation": "Front End Developer"
 }
