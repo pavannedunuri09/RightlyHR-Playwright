@@ -1,10 +1,10 @@
 import fs from 'fs';
 import { expect, type Locator, type Page } from '@playwright/test';
-
-const FEMALE_NAMES = new Set([
-  'Kavya', 'Meera', 'Sneha', 'Pooja', 'Anjali', 'Divya', 'Isha', 'Neha', 'Shreya', 'Nandini',
-  'Sindhuja', 'Priya', 'Ananya', 'Lakshmi', 'Aishwarya',
-]);
+import {
+  genderSalutationForFirstName,
+  randomDocumentNumber,
+  randomMobile,
+} from '../tests/fixtures/randomTestData';
 
 const CITIES = [
   { city: 'Hyderabad', state: 'Telangana', zip: '500012' },
@@ -50,10 +50,10 @@ export class OnboardingApplicationPage {
     this.nameError = page.getByText(/only alphabets|should not contain|invalid|valid first name|valid last name|numbers|special|not allowed|alphabet/i);
     this.mobileInput = page.getByRole('textbox', { name: /Please enter your mobile/i });
     this.mobileError = page.getByText(/invalid.*mobile|10 digit|mobile.*valid|enter a valid|valid mobile/i);
-    this.genderCombobox = page.locator('#gender');
+    this.genderCombobox = page.locator('#gender').or(page.locator('p-select[formcontrolname="gender"]'));
     this.salutationCombobox = page.locator('#salutation').or(page.locator('p-select[formcontrolname="salutation"]'));
     this.dobInput = page.getByRole('textbox', { name: 'Date Of Birth *' });
-    this.bloodGroupCombobox = page.locator('#bloodGroup');
+    this.bloodGroupCombobox = page.locator('#bloodGroup').or(page.locator('p-select[formcontrolname="bloodGroup"]'));
     this.addressLine1 = page.getByRole('textbox', { name: 'Address Line 1*' }).first();
     this.addressLine2 = page.getByRole('textbox', { name: 'Address Line 2*' }).first();
     this.cityInput = page.getByRole('textbox', { name: 'City*' }).first();
@@ -94,15 +94,32 @@ export class OnboardingApplicationPage {
 
   private async selectComboboxOption(field: Locator, optionName: string) {
     const combobox = field.getByRole('combobox');
-    await this.openComboboxField(field);
-    const controlsId = await combobox.getAttribute('aria-controls');
-    const panel = controlsId
-      ? this.page.locator(`#${controlsId}`)
-      : this.page.locator('.p-select-overlay').last();
-    await expect(panel).toBeVisible({ timeout: 5000 });
-    await panel.getByRole('option', { name: optionName, exact: true }).first().click();
-    await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
-    await expect(field).toContainText(optionName, { timeout: 5000 });
+    const escaped = optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.openComboboxField(field);
+      const controlsId = await combobox.getAttribute('aria-controls');
+      const panel = controlsId
+        ? this.page.locator(`#${controlsId}`)
+        : this.page.locator('.p-select-overlay').last();
+      await expect(panel).toBeVisible({ timeout: 5000 });
+
+      const option = panel.getByRole('option', { name: optionName, exact: true })
+        .or(panel.getByRole('option', { name: new RegExp(`^\\s*${escaped}\\s*$`, 'i') }))
+        .or(panel.locator('[role="option"]').filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`, 'i') }))
+        .or(this.page.getByRole('option', { name: optionName, exact: true }))
+        .or(this.page.getByRole('option', { name: new RegExp(`^\\s*${escaped}\\s*$`, 'i') }));
+      await option.first().click();
+      await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(300);
+
+      const selectedText = ((await field.innerText().catch(() => '')) || '').trim();
+      if (new RegExp(escaped, 'i').test(selectedText)) {
+        return;
+      }
+    }
+
+    await expect(field).toContainText(new RegExp(escaped, 'i'), { timeout: 5000 });
   }
 
   private async selectMobileCountryCode() {
@@ -117,12 +134,92 @@ export class OnboardingApplicationPage {
     await this.page.locator('lib-country-list').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }
 
-  async isPersonalFormEditable() {
-    const genderInput = this.genderCombobox.getByRole('combobox');
-    if (!(await genderInput.isVisible({ timeout: 5000 }).catch(() => false))) {
+  private async isComboboxFieldEditable(field: Locator): Promise<boolean> {
+    if (!(await field.isVisible({ timeout: 5000 }).catch(() => false))) {
       return false;
     }
-    return genderInput.isEnabled().catch(() => false);
+    const className = (await field.getAttribute('class')) ?? '';
+    if (/p-disabled/.test(className)) {
+      return false;
+    }
+    const trigger = field.getByRole('button', { name: 'dropdown trigger' });
+    if (await trigger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return trigger.isEnabled().catch(() => true);
+    }
+    const combobox = field.getByRole('combobox');
+    return combobox.isEnabled().catch(() => true);
+  }
+
+  private async isGenderOrSalutationUnset(): Promise<boolean> {
+    const genderText = ((await this.genderCombobox.innerText().catch(() => '')) || '').trim();
+    const salutationText = ((await this.salutationCombobox.innerText().catch(() => '')) || '').trim();
+    const genderUnset = /please select|^gender\*?$/i.test(genderText) || !/\b(male|female)\b/i.test(genderText);
+    const salutationUnset = /please select|^salutation\*?$/i.test(salutationText) || !/\b(Mr\.|Miss\.|Mrs\.|Ms\.)/i.test(salutationText);
+    return genderUnset || salutationUnset;
+  }
+
+  async isPersonalFormEditable() {
+    if (!(await this.genderCombobox.isVisible({ timeout: 3000 }).catch(() => false))) {
+      if (await this.firstNameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+        return this.firstNameInput.isEnabled().catch(() => false);
+      }
+      return false;
+    }
+    if (await this.isGenderOrSalutationUnset()) {
+      return true;
+    }
+    if (await this.isComboboxFieldEditable(this.genderCombobox)) {
+      return true;
+    }
+    if (await this.firstNameInput.isEnabled().catch(() => false)) {
+      return true;
+    }
+    if (await this.mobileInput.isEnabled().catch(() => false)) {
+      return true;
+    }
+    return false;
+  }
+
+  private async shouldFillPersonalDetails(): Promise<boolean> {
+    if (await this.isGenderOrSalutationUnset()) {
+      return true;
+    }
+    const mobile = ((await this.mobileInput.inputValue().catch(() => '')) || '').replace(/\s/g, '');
+    if (mobile.length < 10) {
+      return true;
+    }
+    const dob = (await this.dobInput.inputValue().catch(() => '')) || '';
+    if (!dob.trim()) {
+      return true;
+    }
+    if (await this.firstNameInput.isEnabled().catch(() => false)) {
+      return true;
+    }
+    if (await this.isComboboxFieldEditable(this.genderCombobox)) {
+      return true;
+    }
+    return false;
+  }
+
+  async ensureOnApplicationPersonalStep() {
+    const goToApplication = this.page.getByRole('button', { name: 'Go to Application' });
+    if (await goToApplication.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await goToApplication.click();
+      await this.page.waitForTimeout(1500);
+    }
+
+    const personalNav = this.page.getByRole('link', { name: /^Personal$/i })
+      .or(this.page.getByText(/^Personal$/i))
+      .or(this.page.getByText(/Personal Details/i))
+      .first();
+    if (await personalNav.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (!(await this.genderCombobox.isVisible({ timeout: 2000 }).catch(() => false))) {
+        await personalNav.click();
+        await this.page.waitForTimeout(800);
+      }
+    }
+
+    await this.firstNameInput.or(this.genderCombobox).first().waitFor({ state: 'visible', timeout: 25000 });
   }
 
   async preparePersonalDetailsAndOpenDocuments(
@@ -130,17 +227,17 @@ export class OnboardingApplicationPage {
     lastName: string,
     options?: { runValidations?: boolean },
   ) {
+    await this.ensureOnApplicationPersonalStep();
+
     if (await this.isOnDocumentsPage()) {
       console.log('Already on documents page');
       return null;
     }
 
-    await this.page.waitForTimeout(1500);
-    if (await this.isOnDocumentsPage()) {
-      return null;
-    }
+    await this.page.waitForTimeout(800);
 
-    if (await this.isPersonalFormEditable()) {
+    const needsFill = await this.shouldFillPersonalDetails();
+    if (needsFill || (await this.isPersonalFormEditable())) {
       await this.expectPersonalForm();
       if (options?.runValidations) {
         await this.expectInvalidNameRejected(firstName);
@@ -191,19 +288,18 @@ export class OnboardingApplicationPage {
   }
 
   static expectedPersonalDefaults(firstName: string) {
-    const female = FEMALE_NAMES.has(firstName);
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
     return {
-      gender: female ? 'Female' : 'Male',
-      salutation: female ? 'Miss.' : 'Mr.',
+      gender,
+      salutation,
       middleName: '',
       designation: 'Front End Developer',
     };
   }
 
   async fillMandatoryIndianDetails(firstName: string, lastName: string) {
-    const female = FEMALE_NAMES.has(firstName);
     const place = CITIES[Math.floor(Math.random() * CITIES.length)];
-    const mobile = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const mobile = randomMobile();
     const plot = Math.floor(Math.random() * 80) + 10;
     const details = {
       ...OnboardingApplicationPage.expectedPersonalDefaults(firstName),
@@ -222,13 +318,18 @@ export class OnboardingApplicationPage {
       await this.lastNameInput.fill(lastName);
     }
 
-    const salutation = female ? 'Miss.' : 'Mr.';
-    const gender = female ? 'Female' : 'Male';
+    const { gender, salutation } = genderSalutationForFirstName(firstName);
 
-    await this.selectComboboxOption(this.genderCombobox, gender);
+    const genderText = ((await this.genderCombobox.innerText().catch(() => '')) || '').trim();
+    if (!new RegExp(`\\b${gender}\\b`, 'i').test(genderText)) {
+      await this.selectComboboxOption(this.genderCombobox, gender);
+      await expect(this.genderCombobox).toContainText(new RegExp(gender, 'i'), { timeout: 5000 });
+    }
+
     const salutationText = ((await this.salutationCombobox.innerText().catch(() => '')) || '').trim();
     if (!salutationText.includes(salutation)) {
       await this.selectComboboxOption(this.salutationCombobox, salutation);
+      await expect(this.salutationCombobox).toContainText(salutation, { timeout: 5000 });
     }
 
     await this.selectMobileCountryCode();
@@ -258,10 +359,15 @@ export class OnboardingApplicationPage {
     return details;
   }
 
+  async waitForDocumentsPage(timeout = 30000) {
+    const rows = this.documentTableRows();
+    await expect(rows.first()).toBeVisible({ timeout });
+  }
+
   async goToDocuments() {
     await expect(this.nextButton).toBeEnabled({ timeout: 30000 });
     await this.nextButton.click();
-    await this.page.getByRole('row', { name: /Resume/ }).waitFor({ state: 'visible', timeout: 20000 });
+    await this.waitForDocumentsPage(30000);
   }
 
   async goToDocumentsIfNeeded() {
@@ -269,19 +375,26 @@ export class OnboardingApplicationPage {
       return;
     }
 
-    const documentsTab = this.page.getByText(/^Documents$/).first();
+    const documentsTab = this.page.getByRole('link', { name: /^Documents$/i })
+      .or(this.page.getByText(/^Documents$/i))
+      .first();
     if (await documentsTab.isVisible().catch(() => false)) {
       await documentsTab.click();
+      await this.page.waitForTimeout(800);
+      if (await this.isOnDocumentsPage()) {
+        return;
+      }
     }
 
     if (await this.nextButton.isVisible().catch(() => false)) {
       const enabled = await this.nextButton.isEnabled().catch(() => false);
       if (enabled) {
         await this.nextButton.click();
+        await this.page.waitForTimeout(1000);
       }
     }
 
-    await this.page.getByRole('row', { name: /Resume/ }).waitFor({ state: 'visible', timeout: 20000 });
+    await this.waitForDocumentsPage(30000);
   }
 
   async expectInvalidFileTypeRejected(filePath: string, documentName = 'Resume') {
@@ -305,7 +418,13 @@ export class OnboardingApplicationPage {
   }
 
   async isOnDocumentsPage() {
-    return this.page.getByRole('row', { name: /Resume/ }).isVisible({ timeout: 8000 }).catch(() => false);
+    const rows = this.documentTableRows();
+    const count = await rows.count().catch(() => 0);
+    if (count > 0) {
+      return rows.first().isVisible({ timeout: 3000 }).catch(() => false);
+    }
+    return this.page.getByRole('row', { name: /Resume|Aadha|Aadhar|PAN|Upload/i }).first()
+      .isVisible({ timeout: 3000 }).catch(() => false);
   }
 
   async firstDocumentNeedingUpload() {
@@ -349,7 +468,7 @@ export class OnboardingApplicationPage {
         name,
         this.filePathForDocument(name, pdfPath, imagePath),
         this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
+        this.alternateFilePathForDocument(name, imagePath, pdfPath),
       );
       uploaded += 1;
     }
@@ -358,31 +477,58 @@ export class OnboardingApplicationPage {
     }
   }
 
-  async uploadMissingDocuments(pdfPath: string, imagePath: string) {
+  async uploadMissingDocuments(
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
     await this.goToDocumentsIfNeeded();
-    const documentNames = await this.listDocumentNames();
-    console.log(`Documents on page: ${documentNames.join(', ') || '(none found)'}`);
-    if (!documentNames.length) {
-      throw new Error('No onboarding document rows found on the documents page');
-    }
 
-    for (const name of documentNames) {
-      const status = await this.getDocumentRowStatus(name);
-      console.log(`${name} status before upload: ${status ?? '(row not found)'}`);
-      if (status && this.isDocumentComplete(status)) {
-        console.log(`${name} already uploaded, reusing it`);
-        continue;
+    for (let pass = 0; pass < 3; pass++) {
+      const documentNames = await this.listDocumentNames();
+      console.log(`Documents on page (pass ${pass + 1}): ${documentNames.join(', ') || '(none found)'}`);
+      if (!documentNames.length) {
+        throw new Error('No onboarding document rows found on the documents page');
       }
-      await this.uploadDocument(
-        name,
-        this.filePathForDocument(name, pdfPath, imagePath),
-        this.documentNumberForDocument(name),
-        this.alternateFilePathForDocument(name, imagePath),
-      );
+
+      let uploadedThisPass = 0;
+      for (const name of documentNames) {
+        const status = await this.getDocumentRowStatus(name);
+        console.log(`${name} status before upload: ${status ?? '(row not found)'}`);
+        if (status && this.isDocumentComplete(status)) {
+          console.log(`${name} already uploaded, reusing it`);
+          continue;
+        }
+        await this.uploadDocument(
+          name,
+          this.resolveFilePathForDocument(name, pdfPath, imagePath, perDocFiles),
+          this.documentNumberForDocument(name),
+          this.alternateFilePathForDocument(name, imagePath, pdfPath),
+        );
+        uploadedThisPass += 1;
+      }
+
+      await this.closeUploadDialog();
+      await this.page.waitForTimeout(800);
+
+      const rows = this.documentTableRows();
+      let allComplete = true;
+      const rowCount = await rows.count();
+      for (let i = 0; i < rowCount; i++) {
+        const text = (await rows.nth(i).innerText()).replace(/\s+/g, ' ').trim();
+        if (!this.isDocumentComplete(text)) {
+          allComplete = false;
+          break;
+        }
+      }
+      if (allComplete) {
+        return;
+      }
+      if (uploadedThisPass === 0) {
+        break;
+      }
     }
 
-    await this.closeUploadDialog();
-    await this.page.waitForTimeout(500);
     await this.assertDocumentsComplete();
   }
 
@@ -438,8 +584,16 @@ export class OnboardingApplicationPage {
   }
 
   private extractDocumentName(rowText: string) {
-    const match = rowText.match(/^([A-Za-z][A-Za-z\s]*?)\*/);
-    return match?.[1]?.trim() ?? null;
+    const normalized = rowText.replace(/\s+/g, ' ').trim();
+    const withStar = normalized.match(/^([A-Za-z][A-Za-z0-9\s]*?)\*/);
+    if (withStar?.[1]) {
+      return withStar[1].trim();
+    }
+    const beforeStatus = normalized.match(/^([A-Za-z][A-Za-z0-9\s]+?)\s+-\s+-/);
+    if (beforeStatus?.[1]) {
+      return beforeStatus[1].trim();
+    }
+    return null;
   }
 
   private async listDocumentNames() {
@@ -452,7 +606,7 @@ export class OnboardingApplicationPage {
       await row.scrollIntoViewIfNeeded().catch(() => {});
       const text = (await row.innerText()).replace(/\s+/g, ' ').trim();
       const name = this.extractDocumentName(text);
-      if (name) {
+      if (name && !names.includes(name)) {
         names.push(name);
       }
     }
@@ -460,22 +614,45 @@ export class OnboardingApplicationPage {
   }
 
   private filePathForDocument(documentName: string, pdfPath: string, imagePath: string) {
-    return /pan/i.test(documentName) ? imagePath : pdfPath;
+    if (/resume/i.test(documentName)) {
+      return pdfPath;
+    }
+    return imagePath;
+  }
+
+  private resolveFilePathForDocument(
+    documentName: string,
+    pdfPath: string,
+    imagePath: string,
+    perDocFiles?: Record<string, string>,
+  ) {
+    if (perDocFiles) {
+      const direct = perDocFiles[documentName];
+      if (direct) {
+        return direct;
+      }
+      const matchedKey = Object.keys(perDocFiles).find((key) =>
+        new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(documentName),
+      );
+      if (matchedKey && perDocFiles[matchedKey]) {
+        return perDocFiles[matchedKey];
+      }
+    }
+    return this.filePathForDocument(documentName, pdfPath, imagePath);
   }
 
   private documentNumberForDocument(documentName: string) {
-    if (/pan/i.test(documentName)) {
-      return randomPan();
-    }
-    if (/aadha?r/i.test(documentName)) {
-      return randomAadhaar();
-    }
-    // Resume and Driving License require a 12-character numeric document number.
-    return randomNumericId(12);
+    return randomDocumentNumber(documentName);
   }
 
-  private alternateFilePathForDocument(documentName: string, imagePath: string) {
-    return /resume|driving\s*l/i.test(documentName) ? imagePath : undefined;
+  private alternateFilePathForDocument(documentName: string, imagePath: string, pdfPath?: string) {
+    if (/resume|driving\s*l/i.test(documentName)) {
+      return imagePath;
+    }
+    if (/pan|aadha?r/i.test(documentName)) {
+      return pdfPath;
+    }
+    return undefined;
   }
 
   private async fillDocumentNumberIfRequired(
@@ -488,7 +665,13 @@ export class OnboardingApplicationPage {
       return;
     }
 
-    const value = documentNumber ?? this.documentNumberForDocument(documentName);
+    let value = documentNumber ?? this.documentNumberForDocument(documentName);
+    if (!value) {
+      return;
+    }
+    if (/pan/i.test(documentName)) {
+      value = value.toUpperCase();
+    }
     await numberInput.click();
     await numberInput.fill('');
     await numberInput.fill(value);
@@ -566,7 +749,9 @@ export class OnboardingApplicationPage {
 
   private async openDocumentUpload(documentName: string) {
     await this.closeUploadDialog();
-    await this.page.bringToFront();
+    if (!this.page.isClosed()) {
+      await this.page.bringToFront().catch(() => {});
+    }
     await this.goToDocumentsIfNeeded();
 
     const row = this.documentRow(documentName);
@@ -600,6 +785,11 @@ export class OnboardingApplicationPage {
     await scope.getByRole('button', { name: 'Choose File' }).setInputFiles(filePath);
   }
 
+  private async documentIsComplete(documentName: string) {
+    const status = await this.getDocumentRowStatus(documentName).catch(() => null);
+    return Boolean(status && this.isDocumentComplete(status));
+  }
+
   private async uploadDocument(
     documentName: string,
     filePath: string,
@@ -608,8 +798,7 @@ export class OnboardingApplicationPage {
   ) {
     const row = this.documentRow(documentName);
     await row.scrollIntoViewIfNeeded().catch(() => {});
-    const current = await this.getDocumentRowStatus(documentName);
-    if (current && this.isDocumentComplete(current)) {
+    if (await this.documentIsComplete(documentName)) {
       console.log(`${documentName} already uploaded, reusing it`);
       return;
     }
@@ -619,15 +808,27 @@ export class OnboardingApplicationPage {
 
     for (const candidate of candidates) {
       try {
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`${documentName} already uploaded, reusing it`);
+          return;
+        }
         if (!fs.existsSync(candidate)) {
           throw new Error(`ENOENT: no such file or directory, stat '${candidate}'`);
         }
         await this.openDocumentUpload(documentName);
         const scope = await this.activeUploadScope();
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
+        const docNum = documentNumber ?? this.documentNumberForDocument(documentName);
+
+        // Portal expects document number first, then file, then Upload.
+        await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        await this.page.waitForTimeout(500);
         await this.attachUploadFile(scope, candidate);
-        await this.fillDocumentNumberIfRequired(scope, documentName, documentNumber);
         await this.page.waitForTimeout(1000);
+
+        if (!/resume/i.test(documentName)) {
+          await this.fillDocumentNumberIfRequired(scope, documentName, docNum);
+        }
+
         const note = scope.getByText(/Only Pdf and image are allowed/i);
         if (await note.isVisible().catch(() => false)) {
           await note.click().catch(() => {});
@@ -637,19 +838,27 @@ export class OnboardingApplicationPage {
         await expect(upload).toBeEnabled({ timeout: 15000 });
         await upload.click();
 
-        if (await this.waitForUploadSuccess(scope, row)) {
+        const toastSeen = await this.waitForUploadSuccess(scope, row);
+        await this.closeUploadDialog();
+        if (toastSeen || await this.waitForRowComplete(documentName)) {
           console.log(`Uploaded ${documentName}`);
-          await this.closeUploadDialog();
-          await this.page.waitForTimeout(500);
           return;
         }
 
         lastError = `${documentName} upload did not succeed with ${pathBasename(candidate)}`;
-        await this.closeUploadDialog();
       } catch (error) {
         lastError = `${documentName} upload failed with ${pathBasename(candidate)}: ${error}`;
-        await this.closeUploadDialog();
+        await this.closeUploadDialog().catch(() => {});
+        if (await this.documentIsComplete(documentName)) {
+          console.log(`Uploaded ${documentName}`);
+          return;
+        }
       }
+    }
+
+    if (await this.documentIsComplete(documentName)) {
+      console.log(`Uploaded ${documentName}`);
+      return;
     }
 
     const scope = await this.activeUploadScope();
@@ -657,8 +866,19 @@ export class OnboardingApplicationPage {
     throw new Error(`${lastError}. Dialog: ${dialogText.replace(/\s+/g, ' ').trim()}`);
   }
 
+  private async waitForRowComplete(documentName: string, timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.documentIsComplete(documentName)) {
+        return true;
+      }
+      await this.page.waitForTimeout(400);
+    }
+    return this.documentIsComplete(documentName);
+  }
+
   private async waitForUploadSuccess(scope: Locator, row: Locator) {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 12000;
     while (Date.now() < deadline) {
       const scopeText = await scope.innerText().catch(() => '');
       if (/Document uploaded successfully|uploaded successfully/i.test(scopeText)) {
@@ -670,6 +890,9 @@ export class OnboardingApplicationPage {
       await row.scrollIntoViewIfNeeded().catch(() => {});
       const rowText = await row.innerText().catch(() => '');
       if (/Waiting for submission/i.test(rowText) && !/Rejected/i.test(rowText)) {
+        return true;
+      }
+      if (!(await this.hasOpenUploadUi()) && /Waiting for submission/i.test(rowText)) {
         return true;
       }
       await this.page.waitForTimeout(400);
