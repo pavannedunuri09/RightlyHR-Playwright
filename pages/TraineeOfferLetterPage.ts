@@ -420,6 +420,13 @@ export class TraineeOfferLetterPage {
     await this.salaryInput.blur();
     await this.ensureComboSelected('Shift*', /[A-Za-z]/);
 
+    // Select Variable Pay = No if combobox is present
+    const varPay = this.page.getByRole('combobox', { name: 'Please select variable pay' });
+    if (await varPay.isVisible().catch(() => false)) {
+      await varPay.click();
+      await this.page.getByRole('option', { name: 'No' }).click().catch(() => {});
+    }
+
     const issued = isoDate(0);
     await this.fillDateField(this.offerIssuedDate, issued);
     await this.fillDateField(this.expectedStartDate, issued);
@@ -464,6 +471,40 @@ export class TraineeOfferLetterPage {
     await field.fill(value);
     await field.press('Tab').catch(() => field.blur());
     await this.closeOpenOverlays();
+  }
+
+  private async chooseComboByRoleOrLabel(combo: Locator, label: string, optionName: string | RegExp, search?: string) {
+    if (await combo.isVisible().catch(() => false)) {
+      await this.page.keyboard.press('Escape').catch(() => {});
+      await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+      await combo.click();
+      if (!(await this.selectPanelVisible())) {
+        await combo.locator('..').getByRole('button', { name: 'dropdown trigger' }).click().catch(() => {});
+      }
+      await expect.poll(async () => this.selectPanelVisible(), { timeout: 8000 }).toBeTruthy();
+      const listbox = this.page.getByRole('listbox').last();
+      const option = typeof optionName === 'string'
+        ? listbox.getByRole('option', { name: optionName, exact: true })
+        : listbox.getByRole('option').filter({ hasText: optionName }).first();
+      if (await option.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await option.click();
+      } else {
+        const fallback = listbox.getByRole('option').first();
+        if (await fallback.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await fallback.click();
+        }
+      }
+      await this.page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    } else {
+      await this.ensureComboSelected(label, optionName, search);
+    }
+  }
+
+  private async getComboInnerText(combo: Locator, label: string) {
+    if (await combo.isVisible().catch(() => false)) {
+      return await combo.innerText();
+    }
+    return await this.fieldAfterLabel(label).getByRole('combobox').innerText().catch(() => '');
   }
 
   private async ensureComboSelected(label: string, optionName: string | RegExp, search?: string) {

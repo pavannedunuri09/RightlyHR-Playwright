@@ -35,6 +35,13 @@
     "test:permissions": "playwright test --project=21-permissions --headed --workers=1 --no-deps",
     "test:regularization": "playwright test --project=22-regularization --headed --workers=1 --no-deps",
     "test:on-behalf-permissions": "playwright test --project=23-onbehalf-permissions --headed --workers=1 --no-deps",
+    "test:login": "playwright test tests/login.spec.ts --project=chromium --headed --workers=1",
+    "test:wfh": "playwright test tests/work-from-home.spec.ts --project=chromium --headed --workers=1",
+    "test:trainee": "playwright test tests/prospective-trainee.spec.ts --project=chromium --headed --workers=1",
+    "test:trainee:from07": "playwright test tests/prospective-trainee.spec.ts --grep \"Test-(0[7-9]|1[0-7])\" --project=chromium --headed --workers=1",
+    "test:headed": "playwright test --headed --project=chromium --workers=1",
+    "test:contract": "playwright test --project=11-contract",
+    "auth:login": "node scripts/login-and-save-session.js",
     "report": "playwright show-report"
   },
   "keywords": [],
@@ -45,6 +52,7 @@
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.4.1",
     "dotenv": "^17.4.2",
+    "typescript": "^7.0.2",
     "xlsx": "^0.18.5"
   }
 }

@@ -1353,7 +1353,9 @@ function normalizePortalHref(href: string): string | null {
 }
 
 function defaultPreOnboardingBaseUrl() {
-  const explicit = process.env.PRE_ONBOARDING_BASE_URL?.trim() || process.env.PRE_ONBOARDING_URL?.trim();
+  const explicit =
+    process.env.PRE_ONBOARDING_BASE_URL?.trim() ||
+    process.env.PRE_ONBOARDING_URL?.trim();
   if (explicit) {
     return explicit.replace(/\/$/, '');
   }
@@ -1362,23 +1364,6 @@ function defaultPreOnboardingBaseUrl() {
     return hrms.replace(/hrmsqa/i, 'preonboardingqa');
   }
   return 'https://preonboardingqarightlyhr.onpremise.cluster.rightlyhr.com';
-}
-
-function portalUrlCandidates(url: string) {
-  const original = url.replace(/\/$/, '');
-  const swapped = /^https:/i.test(original)
-    ? original.replace(/^https:/i, 'http:')
-    : original.replace(/^http:/i, 'https:');
-  return [...new Set([
-    original,
-    `${original}/login`,
-    swapped,
-    `${swapped}/login`,
-  ])];
-}
-
-async function isPreOnboardingLoginVisible(page: Page, timeout = 10000) {
-  return page.getByRole('textbox', { name: 'Username*' }).isVisible({ timeout }).catch(() => false);
 }
 
 function parseCredentials(body: string) {
