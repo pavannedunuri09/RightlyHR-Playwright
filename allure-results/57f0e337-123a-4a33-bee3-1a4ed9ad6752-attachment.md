@@ -1,0 +1,415 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: probation.spec.ts >> Probation Flow — HR Reject and Extend from Rejected >> 07. Re-request from Rejected Probation Info >> re-requests rejected probation and shows employee in Pending Approvals queue
+- Location: tests\probation.spec.ts:122:9
+
+# Error details
+
+```
+Error: No Rejected probation record found to re-request. Ensure Bhavitha has a Rejected row before running test 08.
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e8]:
+    - img "Company Logo" [ref=e10]
+    - generic [ref=e11]:
+      - generic [ref=e12] [cursor=pointer]
+      - generic [ref=e20] [cursor=pointer]
+      - generic [ref=e28] [cursor=pointer]
+      - generic [ref=e39] [cursor=pointer]:
+        - paragraph [ref=e40]: Induu Priyaa
+        - paragraph [ref=e41]: Chief Executive Officer
+  - generic [ref=e47]:
+    - generic [ref=e50]:
+      - list [ref=e52]:
+        - listitem [ref=e53] [cursor=pointer]:
+          - img "Icon" [ref=e54]
+          - text: Dashboard
+        - listitem [ref=e55]:
+          - generic [ref=e56]:
+            - generic [ref=e57] [cursor=pointer]:
+              - img "Icon" [ref=e58]
+              - text: My Info
+            - generic [ref=e59] [cursor=pointer]:
+              - img "Icon" [ref=e60]
+              - text: Employees
+            - generic [ref=e63] [cursor=pointer]:
+              - img "Icon" [ref=e64]
+              - text: Time Off
+            - generic [ref=e65] [cursor=pointer]:
+              - img "Icon" [ref=e66]
+              - text: Attendance
+            - generic [ref=e67] [cursor=pointer]:
+              - img "Icon" [ref=e68]
+              - text: Reports
+            - generic [ref=e71] [cursor=pointer]:
+              - img "Icon" [ref=e72]
+              - text: Project Management
+            - generic [ref=e73] [cursor=pointer]:
+              - img "Icon" [ref=e74]
+              - text: Skill Set
+            - generic [ref=e77] [cursor=pointer]:
+              - img "Icon" [ref=e78]
+              - text: On Behalf Of
+            - generic [ref=e81] [cursor=pointer]:
+              - img "Icon" [ref=e82]
+              - text: Pending Approvals
+            - generic [ref=e85] [cursor=pointer]:
+              - img "Icon" [ref=e86]
+              - text: PMS
+        - listitem [ref=e87] [cursor=pointer]:
+          - img "Icons" [ref=e90]
+      - img "Powered By logo" [ref=e93]
+    - generic [ref=e97]:
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - generic [ref=e100] [cursor=pointer]:
+            - generic [ref=e101]: Probation Employee
+            - generic [ref=e102]: 
+          - generic [ref=e104]: Probation Info
+          - generic [ref=e107] [cursor=pointer]
+        - generic [ref=e111]:
+          - button "View History" [ref=e112] [cursor=pointer]
+          - button "Generate Credentials" [ref=e113] [cursor=pointer]
+      - generic [ref=e114]:
+        - generic [ref=e117]:
+          - generic [ref=e118]:
+            - generic [ref=e119]:
+              - img "Profile Image" [ref=e120]
+              - img "edit-icon" [ref=e123] [cursor=pointer]
+            - generic [ref=e124]:
+              - paragraph [ref=e125]: harshitha Palagiriii
+              - paragraph [ref=e126]: SD3021343
+              - paragraph [ref=e127]:
+                - link "IconBhavitha.palagiri@snaddevelopers.com" [ref=e128] [cursor=pointer]:
+                  - /url: mailto:Bhavitha.palagiri@snaddevelopers.com
+                  - img "Icon" [ref=e129]
+                  - generic [ref=e130]: Bhavitha.palagiri@snaddevelopers.com
+              - paragraph [ref=e131]:
+                - img "Icon" [ref=e132]
+                - text: Chief Executive Officer
+              - paragraph [ref=e133]:
+                - img "Icon" [ref=e134]
+                - text: Hyderabad,Jai Hind Enclave building
+              - paragraph [ref=e135]:
+                - img "Icon" [ref=e136]
+                - generic [ref=e137]: Full Time|GraveyardShift|18:30-03:30
+              - paragraph [ref=e138]:
+                - img "Icon" [ref=e139]
+                - generic [ref=e140]: +91 9875755554
+          - generic [ref=e143]:
+            - paragraph [ref=e144]: Team Manager
+            - paragraph [ref=e145]: Induu Priyaa
+          - generic [ref=e148]:
+            - paragraph [ref=e149]: Reporting Manager
+            - paragraph [ref=e150]: Induu Priyaa
+          - list [ref=e155]:
+            - listitem [ref=e156]:
+              - generic [ref=e157] [cursor=pointer]: Personal
+            - listitem [ref=e158]:
+              - generic [ref=e159] [cursor=pointer]: Job
+            - listitem [ref=e160]:
+              - generic [ref=e161] [cursor=pointer]: Documents
+          - generic [ref=e165]:
+            - generic [ref=e167] [cursor=pointer]:
+              - img "Pre Onboarding Info" [ref=e168]
+              - generic [ref=e169]: Pre Onboarding Info
+            - generic [ref=e171] [cursor=pointer]:
+              - img "Onboarding Info" [ref=e172]
+              - generic [ref=e173]: Onboarding Info
+            - generic [ref=e175] [cursor=pointer]:
+              - img "Compensations" [ref=e176]
+              - generic [ref=e177]: Compensations
+            - generic [ref=e179] [cursor=pointer]:
+              - img "Probation Info" [ref=e180]
+              - generic [ref=e181]: Probation Info
+            - generic [ref=e183] [cursor=pointer]:
+              - img "Job Info" [ref=e184]
+              - generic [ref=e185]: Job Info
+            - generic [ref=e187] [cursor=pointer]:
+              - img "Team Members" [ref=e188]
+              - generic [ref=e189]: Team Members
+            - generic [ref=e191] [cursor=pointer]:
+              - img "Assigned Assets" [ref=e192]
+              - generic [ref=e193]: Assigned Assets
+            - generic [ref=e195] [cursor=pointer]:
+              - img "Employment History" [ref=e196]
+              - generic [ref=e197]: Employment History
+            - generic [ref=e199] [cursor=pointer]:
+              - img "Certifications" [ref=e200]
+              - generic [ref=e201]: Certifications
+            - generic [ref=e203] [cursor=pointer]:
+              - img "Desk Info" [ref=e204]
+              - generic [ref=e205]: Desk Info
+            - generic [ref=e207] [cursor=pointer]:
+              - img "Separation Request" [ref=e208]
+              - generic [ref=e209]: Separation Request
+            - generic [ref=e211] [cursor=pointer]:
+              - img "No Due Clearance Info" [ref=e212]
+              - generic [ref=e213]: No Due Clearance Info
+            - generic [ref=e215] [cursor=pointer]:
+              - img "Onboarding Documents" [ref=e216]
+              - generic [ref=e217]: Onboarding Documents
+            - generic [ref=e219] [cursor=pointer]:
+              - img "Trainee Onboard Request" [ref=e220]
+              - generic [ref=e221]: Trainee Onboard Request
+            - generic [ref=e223] [cursor=pointer]:
+              - img "Offboarding Info" [ref=e224]
+              - generic [ref=e225]: Offboarding Info
+            - generic [ref=e227] [cursor=pointer]:
+              - img "Cards" [ref=e228]
+              - generic [ref=e229]: Cards
+            - generic [ref=e231] [cursor=pointer]:
+              - img "Assigned Projects" [ref=e232]
+              - generic [ref=e233]: Assigned Projects
+        - generic [ref=e236]:
+          - generic [ref=e237]: Probation Info
+          - table [ref=e243]:
+            - rowgroup [ref=e244]:
+              - row [ref=e245]:
+                - columnheader [ref=e246] [cursor=pointer]
+                - columnheader [ref=e255] [cursor=pointer]
+                - columnheader [ref=e264] [cursor=pointer]
+                - columnheader [ref=e273] [cursor=pointer]
+                - columnheader [ref=e282] [cursor=pointer]
+                - columnheader "Approver History" [ref=e291]
+                - columnheader [ref=e292] [cursor=pointer]
+                - columnheader "Action(s)" [ref=e301]
+            - rowgroup [ref=e302]:
+              - row [ref=e303]:
+                - cell "Feb 2, 2026" [ref=e304]
+                - cell "50" [ref=e305]
+                - cell "Feb 2, 2026" [ref=e306]
+                - cell "Apr 2, 2026" [ref=e307]
+                - cell "-" [ref=e308]
+                - cell [ref=e309]:
+                  - generic [ref=e310] [cursor=pointer]
+                - cell "Withdrawn" [ref=e315]
+                - cell "-" [ref=e316]
+              - row [ref=e318]:
+                - cell "Feb 2, 2026" [ref=e319]
+                - cell "50" [ref=e320]
+                - cell "Feb 2, 2026" [ref=e321]
+                - cell "Apr 2, 2026" [ref=e322]
+                - cell "Nov 1, 2026" [ref=e323]
+                - cell [ref=e324]:
+                  - generic [ref=e325] [cursor=pointer]
+                - cell "Approved" [ref=e330]
+                - cell "-" [ref=e331]
+```
+
+# Test source
+
+```ts
+  169 | 
+  170 |   currentStatusCell() {
+  171 |     return this.currentProbationInfoRow().locator('td').filter({
+  172 |       hasText: /^(Pending|Rejected|Waiting for Approval|Approved|Extended)$/,
+  173 |     }).first();
+  174 |   }
+  175 | 
+  176 |   rejectedProbationInfoRow() {
+  177 |     return this.page.locator('app-probation-details table tbody tr').filter({
+  178 |       has: this.page.locator('td').filter({ hasText: /^Rejected$/i }),
+  179 |     }).first();
+  180 |   }
+  181 | 
+  182 |   approvedProbationInfoRow() {
+  183 |     return this.page.locator('app-probation-details table tbody tr').filter({
+  184 |       has: this.page.locator('td').filter({ hasText: /^Approved$/i }),
+  185 |     }).first();
+  186 |   }
+  187 | 
+  188 |   extendedProbationInfoRow() {
+  189 |     return this.page.locator('app-probation-details table tbody tr').filter({
+  190 |       has: this.page.locator('td').filter({ hasText: /^\s*Extended\s*$/i }),
+  191 |     }).last();
+  192 |   }
+  193 | 
+  194 |   approverHistoryIcon(row: Locator) {
+  195 |     const historyCell = row.locator('td').nth(5);
+  196 |     return historyCell.locator('[class*="cursor"], i, img, svg, button, a, span, div').first();
+  197 |   }
+  198 | 
+  199 |   probationInfoRow(status: 'Pending' | 'Rejected' | 'Waiting for Approval') {
+  200 |     return this.page.locator('app-probation-details table tbody tr').filter({
+  201 |       has: this.page.locator('td').filter({ hasText: new RegExp(`^\\s*${status}\\s*$`, 'i') }),
+  202 |     }).first();
+  203 |   }
+  204 | 
+  205 |   requestMenuItem() {
+  206 |     return this.page.locator('a.dropdown-item, .dropdown-menu li, .dropdown-menu a').filter({ hasText: /Request for Probation/i }).first();
+  207 |   }
+  208 | 
+  209 |   reRequestMenuItem() {
+  210 |     return this.page.locator('a.dropdown-item, .dropdown-menu li, .dropdown-menu a').filter({ hasText: /Re-Request for Probation/i }).first();
+  211 |   }
+  212 | 
+  213 |   async requestProbationConfirmation() {
+  214 |     const row = this.currentProbationInfoRow();
+  215 |     await row.waitFor({ state: 'visible', timeout: 15000 });
+  216 |     await this.jobInfo.openRowKebab(row);
+  217 | 
+  218 |     const item = row.getByRole('listitem').filter({ hasText: /Request for Probation/i }).or(this.requestMenuItem());
+  219 |     await item.first().click();
+  220 | 
+  221 |     await expect(this.requestRaisedMessage).toBeVisible({ timeout: 15000 });
+  222 |     await expect(this.currentStatusCell()).toHaveText(/Waiting for Approval/i, { timeout: 15000 });
+  223 |   }
+  224 | 
+  225 |   async reRequestProbationConfirmation() {
+  226 |     const row = this.rejectedProbationInfoRow();
+  227 |     await row.waitFor({ state: 'visible', timeout: 15000 });
+  228 |     await this.jobInfo.openRowKebab(row);
+  229 | 
+  230 |     const item = row.getByRole('listitem').filter({ hasText: /Re-Request for Probation/i }).or(this.reRequestMenuItem());
+  231 |     await item.first().click();
+  232 | 
+  233 |     await expect(this.requestRaisedMessage).toBeVisible({ timeout: 15000 });
+  234 |     await expect(this.waitingForApprovalProbationInfoRow()).toBeVisible({ timeout: 15000 });
+  235 |   }
+  236 | 
+  237 |   async requestProbationFromExtendedRow() {
+  238 |     const row = this.extendedProbationInfoRow();
+  239 |     await row.waitFor({ state: 'visible', timeout: 15000 });
+  240 |     await this.jobInfo.openRowKebab(row);
+  241 | 
+  242 |     const item = row.getByRole('listitem').filter({ hasText: /Request for Probation/i }).or(this.requestMenuItem());
+  243 |     await item.first().click();
+  244 | 
+  245 |     await expect(this.requestRaisedMessage).toBeVisible({ timeout: 15000 });
+  246 |     await expect(this.waitingForApprovalProbationInfoRow()).toBeVisible({ timeout: 15000 });
+  247 |   }
+  248 | 
+  249 |   async openProbationInfoForEmployee(employeeName: string, searchText: string) {
+  250 |     await this.openEmployeesProbation();
+  251 |     await this.openProbationEmployee(employeeName, searchText);
+  252 |     await this.openProbationInfoTab();
+  253 |   }
+  254 | 
+  255 |   waitingForApprovalProbationInfoRow() {
+  256 |     return this.page.locator('app-probation-details table tbody tr').filter({
+  257 |       has: this.page.locator('td').filter({ hasText: /^Waiting for Approval$/i }),
+  258 |     }).first();
+  259 |   }
+  260 | 
+  261 |   async reRequestFromRejectedProbationInfo(employeeName: string, searchText: string) {
+  262 |     await this.openProbationInfoForEmployee(employeeName, searchText);
+  263 | 
+  264 |     if (await this.rejectedProbationInfoRow().isVisible().catch(() => false)) {
+  265 |       await this.reRequestProbationConfirmation();
+  266 |     } else if (await this.waitingForApprovalProbationInfoRow().isVisible().catch(() => false)) {
+  267 |       return;
+  268 |     } else {
+> 269 |       throw new Error(
+      |             ^ Error: No Rejected probation record found to re-request. Ensure Bhavitha has a Rejected row before running test 08.
+  270 |         'No Rejected probation record found to re-request. Ensure Bhavitha has a Rejected row before running test 08.',
+  271 |       );
+  272 |     }
+  273 | 
+  274 |     await expect(this.waitingForApprovalProbationInfoRow()).toBeVisible({ timeout: 15000 });
+  275 |   }
+  276 | 
+  277 |   async raiseRequestFromExtendedProbationInfo(employeeName: string, searchText: string) {
+  278 |     await this.openProbationInfoForEmployee(employeeName, searchText);
+  279 | 
+  280 |     if (await this.extendedProbationInfoRow().isVisible().catch(() => false)) {
+  281 |       await this.requestProbationFromExtendedRow();
+  282 |     } else if (await this.waitingForApprovalProbationInfoRow().isVisible().catch(() => false)) {
+  283 |       return;
+  284 |     } else {
+  285 |       throw new Error(
+  286 |         'No Extended probation record found to raise request. Ensure Bhavitha has an Extended row before running test 13.',
+  287 |       );
+  288 |     }
+  289 | 
+  290 |     await expect(this.waitingForApprovalProbationInfoRow()).toBeVisible({ timeout: 15000 });
+  291 |   }
+  292 | 
+  293 |   async ensureProbationRequestRaised() {
+  294 |     await this.openProbationInfoTab();
+  295 |     const row = this.currentProbationInfoRow();
+  296 |     await row.waitFor({ state: 'visible', timeout: 15000 });
+  297 |     await this.currentStatusCell().waitFor({ state: 'visible', timeout: 15000 });
+  298 | 
+  299 |     const status = (await this.currentStatusCell().innerText()).replace(/\s+/g, ' ').trim();
+  300 |     if (/waiting for approval|rejected/i.test(status)) {
+  301 |       return;
+  302 |     }
+  303 |     if (/pending/i.test(status)) {
+  304 |       await this.requestProbationConfirmation();
+  305 |     }
+  306 |   }
+  307 | 
+  308 |   async readProbationPendingCount() {
+  309 |     await this.openPendingOnboardingProbation();
+  310 |     const text = (await this.probationPendingTab.first().innerText()).replace(/\s+/g, ' ').trim();
+  311 |     const match = text.match(/\((\d+)\)/);
+  312 |     return match ? Number(match[1]) : 0;
+  313 |   }
+  314 | 
+  315 |   async openPendingOnboardingProbation() {
+  316 |     if (await this.isProbationQueueReady({ timeout: 2000 })) {
+  317 |       return;
+  318 |     }
+  319 | 
+  320 |     await this.openPendingOnboardingProbationViaMenu();
+  321 |     if (await this.isProbationQueueReady({ timeout: 10000 })) {
+  322 |       return;
+  323 |     }
+  324 | 
+  325 |     for (const path of [
+  326 |       '/pending-approvals/on-boarding/probation',
+  327 |       '/pending-approvals/on-boarding/probation/for-you',
+  328 |       '/pending-approvals/onboarding/probation',
+  329 |     ]) {
+  330 |       await this.page.goto(path, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  331 |       if (await this.isProbationQueueReady({ timeout: 8000 })) {
+  332 |         return;
+  333 |       }
+  334 |     }
+  335 | 
+  336 |     await this.pendingQueueReady();
+  337 |   }
+  338 | 
+  339 |   private async openPendingOnboardingProbationViaMenu() {
+  340 |     const pendingNav = this.pendingApprovalsToggle.first();
+  341 |     if (!(await pendingNav.isVisible().catch(() => false))) {
+  342 |       await this.page.goto('/dashboard/emp', { waitUntil: 'domcontentloaded' }).catch(() => {});
+  343 |       await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 20000 }).catch(() => {});
+  344 |     }
+  345 | 
+  346 |     await pendingNav.waitFor({ state: 'visible', timeout: 15000 });
+  347 |     await pendingNav.click();
+  348 | 
+  349 |     const onboardingTab = this.pendingOnboardingTab.first();
+  350 |     await onboardingTab.waitFor({ state: 'visible', timeout: 15000 });
+  351 |     await onboardingTab.click();
+  352 | 
+  353 |     const probationTab = this.probationPendingTab.first();
+  354 |     await probationTab.waitFor({ state: 'visible', timeout: 15000 });
+  355 |     await probationTab.click();
+  356 |   }
+  357 | 
+  358 |   private probationQueueMarker() {
+  359 |     return this.page.getByRole('columnheader', { name: 'Employee ID' })
+  360 |       .or(this.page.getByRole('columnheader', { name: 'Employee Name' }));
+  361 |   }
+  362 | 
+  363 |   private assessmentFormHeading() {
+  364 |     return this.page.getByText(/ASSESSMENT FORM FOR PROBATION CONFIRMATION/i);
+  365 |   }
+  366 | 
+  367 |   async isAssessmentFormVisible() {
+  368 |     return this.assessmentFormHeading().isVisible().catch(() => false);
+  369 |   }
+```

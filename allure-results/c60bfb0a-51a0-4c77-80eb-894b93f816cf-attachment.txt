@@ -1,0 +1,1 @@
+TC02 PASSED - HR clicked Prospective employee tab

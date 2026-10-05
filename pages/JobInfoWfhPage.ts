@@ -158,18 +158,24 @@ export class JobInfoWfhPage {
   }
 
   private allocateFieldTrigger(dialog: Locator, label: string) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return dialog
-      .getByText(new RegExp(`^${escaped}\\s*\\*$`))
-      .locator('..')
-      .getByRole('button', { name: 'dropdown trigger' });
+      .locator('div')
+      .filter({ hasText: label })
+      .filter({ has: this.page.getByRole('combobox') })
+      .last()
+      .getByRole('combobox')
+      .first();
   }
 
   private async selectAllocateOption(dialog: Locator, label: string, optionName: string) {
-    const trigger = this.allocateFieldTrigger(dialog, label);
-    await trigger.waitFor({ state: 'visible' });
-    await trigger.click();
-    await this.page.getByRole('option', { name: optionName, exact: true }).click();
+    const combo = this.allocateFieldTrigger(dialog, label);
+    await combo.waitFor({ state: 'visible' });
+    const current = ((await combo.innerText().catch(() => '')) || '').trim();
+    if (new RegExp(`^${optionName}$`, 'i').test(current)) {
+      return;
+    }
+    await combo.click();
+    await this.page.getByRole('option', { name: optionName, exact: true }).first().click();
   }
 
   async fillAllocateForm(effectiveFrom: string, managerLabel: string) {
@@ -181,7 +187,7 @@ export class JobInfoWfhPage {
     await this.selectAllocateOption(dialog, 'Allow Remote Login', 'No');
 
     const workLocationTrigger = this.allocateFieldTrigger(dialog, 'Work From Home Work Location')
-      .or(dialog.getByText(/Work Location\s*\*/).locator('..').getByRole('button', { name: 'dropdown trigger' }).first());
+      .or(this.allocateFieldTrigger(dialog, 'Work Location'));
     await workLocationTrigger.waitFor({ state: 'visible' });
     await workLocationTrigger.click();
     try {
@@ -235,8 +241,7 @@ export class JobInfoWfhPage {
     await this.selectAllocateOption(dialog, 'Allow Work From Home', 'No');
     await this.selectAllocateOption(dialog, 'Allow Remote Login', 'Yes');
 
-    const locationTrigger = this.allocateFieldTrigger(dialog, 'Work Location')
-      .or(dialog.getByText(/Work Location\s*\*/).locator('..').getByRole('button', { name: 'dropdown trigger' }).first());
+    const locationTrigger = this.allocateFieldTrigger(dialog, 'Work Location');
     await locationTrigger.waitFor({ state: 'visible' });
     await locationTrigger.click();
     try {

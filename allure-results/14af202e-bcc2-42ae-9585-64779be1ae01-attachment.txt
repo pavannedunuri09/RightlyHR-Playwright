@@ -1,0 +1,11 @@
+Reusing kavya.joshi.dmw1@yopmail.com (RHR291121 Kavya Joshi Oct 5, 2026 kavya.joshi.dmw1@yopmail.com +91 9424698998 Hyderabad Jai Hind Enclave building - Front End Developer)
+Saved trainee for reuse: kavya.joshi.dmw1@yopmail.com
+Using employee ID from active list: 291121
+Saved trainee for reuse: kavya.joshi.dmw@yopmail.com
+Requesting onboard for Kavya Joshi (kavya.joshi.dmw@yopmail.com)
+Opened Trainee Onboard Request tab
+Opened Basic Info tab
+Employee ID already on Basic Info: 291121
+Saved trainee for reuse: kavya.joshi.dmw@yopmail.com
+Work email already set: kavya.joshi.dmw1@yopmail.com
+Team Manager autofilled: saii Pavan Dinesh Tejaa

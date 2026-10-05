@@ -108,18 +108,19 @@ export class TraineeJobPrepPage {
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
     await this.selectDialogOption('Department', 'SDA');
-    await this.selectDialogOption('Team', 'Test Department');
+    await this.selectDialogOption('Team', 'QA team');
     await this.page.keyboard.press('Escape').catch(() => {});
     await this.waitForTeamManagerAutofill(dialog);
     await this.selectDialogOption('Reporting Manager', /saii Pavan Dinesh Tejaa/i);
-    await this.selectJobType(dialog, 'Full Time');
+    await this.selectDialogOption('Shift', /General Shift/i);
+    await this.selectJobType(dialog, 'Full-Time');
 
     const save = dialog.getByRole('button', { name: 'Update' });
     await expect(save).toBeEnabled({ timeout: 15000 });
     await save.click();
     await expect(this.page.getByText(/Job details updated|updated successfully|success/i).first())
       .toBeVisible({ timeout: 15000 });
-    console.log('Job Info updated: Department SDA, Team Test Department, RM saii Pavan Dinesh Tejaa, Job Type Full Time');
+    console.log('Job Info updated: Department SDA, Team QA team, RM saii Pavan Dinesh Tejaa, Shift General Shift, Job Type Full-Time');
   }
 
   private jobInfoDialog() {
@@ -196,7 +197,7 @@ export class TraineeJobPrepPage {
     } else {
       await combo.click();
     }
-    const option = this.page.getByRole('option', { name: jobType, exact: true });
+    const option = this.page.getByRole('option', { name: jobType, exact: true }).first();
     await option.waitFor({ state: 'visible', timeout: 10000 });
     await option.click();
     await expect(dialog.getByRole('combobox', { name: new RegExp(jobType, 'i') })).toBeVisible({ timeout: 8000 });

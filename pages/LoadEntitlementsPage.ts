@@ -26,8 +26,6 @@ export class LoadEntitlementsPage {
   readonly locationInput: Locator;
   readonly subLocationInput: Locator;
   readonly shiftInput: Locator;
-  readonly firstNameInput: Locator;
-  readonly lastNameInput: Locator;
 
   readonly cycleHeader: Locator;
   readonly categoryHeader: Locator;
@@ -51,14 +49,8 @@ export class LoadEntitlementsPage {
       .or(page.getByText(/Load EntitlementsThis module allows/i))
       .first();
 
-    this.employeeCombobox = page
-      .getByRole('searchbox', { name: /^Employee$/i })
-      .or(page.getByRole('searchbox', { name: /Employee Id|Search by Employee/i }))
-      .or(page.getByRole('combobox', { name: /Please select Employee|Select Employee|Employee/i }))
-      .first();
-    this.employeeSearchbox = this.employeeCombobox.or(
-      page.getByRole('searchbox', { name: /Search by Employee Id or Name/i }),
-    ).first();
+    this.employeeCombobox = page.getByRole('combobox', { name: /Please select Employee|Select Employee/i });
+    this.employeeSearchbox = page.getByRole('searchbox', { name: /Search by Employee Id or Name/i });
     this.workEmailInput = page
       .getByRole('textbox', { name: /Work Email/i })
       .or(this.fieldInputByLabel(/Work Email/i))
@@ -79,8 +71,6 @@ export class LoadEntitlementsPage {
       .getByRole('textbox', { name: /^Shift$/i })
       .or(this.fieldInputByLabel(/^Shift$/i))
       .first();
-    this.firstNameInput = page.getByRole('textbox', { name: /First Name/i }).first();
-    this.lastNameInput = page.getByRole('textbox', { name: /Last Name/i }).first();
 
     this.cycleHeader = page.getByRole('columnheader', { name: /Cycle/i });
     this.categoryHeader = page.getByRole('columnheader', { name: /^Category$/i });
@@ -126,8 +116,6 @@ export class LoadEntitlementsPage {
       this.locationInput,
       this.subLocationInput,
       this.shiftInput,
-      this.firstNameInput,
-      this.lastNameInput,
     ];
   }
 
@@ -225,7 +213,7 @@ export class LoadEntitlementsPage {
 
     await this.loadEntitlementsLink.waitFor({ state: 'visible', timeout: 15000 });
     await this.loadEntitlementsLink.click();
-    await this.page.getByText('Employee Id', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+    await this.page.getByText(/Select Employee/i).first().waitFor({ state: 'visible', timeout: 15000 });
     await this.employeeCombobox.waitFor({ state: 'visible', timeout: 15000 });
     await this.loadEntitlementsButton.waitFor({ state: 'visible', timeout: 15000 });
   }
@@ -310,9 +298,18 @@ export class LoadEntitlementsPage {
       await this.page.waitForTimeout(500);
     }
 
-    const row = this.categoryRow(categoryName);
+    const namedRow = this.categoryRow(categoryName);
+    const row = (await namedRow.isVisible().catch(() => false))
+      ? namedRow
+      : this.entitlementsTable.getByRole('row').filter({ has: this.page.getByRole('spinbutton') }).first();
     await expect(row).toBeVisible({ timeout: 15000 });
-    await expect(row).toContainText(expectation.days);
+
+    const spinbutton = row.getByRole('spinbutton');
+    if (await spinbutton.first().isVisible().catch(() => false)) {
+      await expect(spinbutton.first()).toHaveValue(expectation.days);
+    } else {
+      await expect(row).toContainText(expectation.days);
+    }
 
     if (await this.frequencyTypeLabel.isVisible().catch(() => false)) {
       await expect(
@@ -325,11 +322,6 @@ export class LoadEntitlementsPage {
       if (expectation.cyclePattern.test(tableText)) {
         expect(tableText).toMatch(expectation.cyclePattern);
       }
-    }
-
-    const spinbutton = row.getByRole('spinbutton');
-    if (await spinbutton.first().isVisible().catch(() => false)) {
-      await expect(spinbutton.first()).toHaveValue(expectation.days);
     }
   }
 

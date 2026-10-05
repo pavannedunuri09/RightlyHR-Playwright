@@ -426,29 +426,44 @@ export class MyInfoPage {
     await this.openPersonalSubTab('Addresses');
   }
 
+  private sameAsCurrentAddressCheckbox() {
+    return this.page.getByRole('checkbox', { name: /Same as Current Address/i });
+  }
+
+  private addressZipInput(section: 'current' | 'permanent') {
+    const byId =
+      section === 'current'
+        ? this.page.locator('#currentZipCode')
+        : this.page.locator('#permanentZipCode');
+    const byOrder = this.page.getByRole('textbox', { name: /Zip Code\/Postal Code/i }).nth(
+      section === 'current' ? 0 : 1,
+    );
+    return byId.or(byOrder).first();
+  }
+
   async updateAddress(data: AddressData) {
     await this.openAddresses();
     await this.clickEditIcon();
 
-    const sameAsPermCheckbox = this.page.locator('input[formcontrolname="sameAsPermanent"]');
     if (data.sameAsPermanent !== undefined) {
-      if (data.sameAsPermanent) {
-        await sameAsPermCheckbox.check();
-      } else {
-        await sameAsPermCheckbox.uncheck();
+      const sameAsCurrent = this.sameAsCurrentAddressCheckbox();
+      await sameAsCurrent.waitFor({ state: 'visible', timeout: 10000 });
+      if ((await sameAsCurrent.isChecked()) !== data.sameAsPermanent) {
+        await sameAsCurrent.click();
+        await expect(sameAsCurrent).toBeChecked({ checked: data.sameAsPermanent });
       }
+    }
+
+    if (data.currentZip) {
+      const currZip = this.addressZipInput('current');
+      await currZip.waitFor({ state: 'visible', timeout: 10000 });
+      await currZip.fill(data.currentZip);
     }
 
     if (data.permanentZip) {
-      const permZip = this.page.locator('#permanentZipCode');
+      const permZip = this.addressZipInput('permanent');
+      await permZip.waitFor({ state: 'visible', timeout: 10000 });
       await permZip.fill(data.permanentZip);
-    }
-
-    if (!data.sameAsPermanent && data.currentZip) {
-      const currZip = this.page.locator('#currentZipCode');
-      if (await currZip.isVisible()) {
-        await currZip.fill(data.currentZip);
-      }
     }
 
     const saveButton = this.page.getByRole('button', { name: 'Save', exact: true });
@@ -659,7 +674,10 @@ export class MyInfoPage {
     const holderInput = this.page.getByRole('textbox', { name: "Account Holder's Name*" });
     await holderInput.fill(data.accountHolder);
 
-    const accountInput = this.page.getByRole('spinbutton', { name: 'Account Number*' });
+    const accountInput = this.page
+      .getByRole('textbox', { name: 'Account Number*' })
+      .or(this.page.getByRole('spinbutton', { name: 'Account Number*' }))
+      .first();
     await accountInput.fill(data.accountNumber);
 
     const ifscInput = this.page.getByRole('textbox', { name: 'IFSC Code*' });

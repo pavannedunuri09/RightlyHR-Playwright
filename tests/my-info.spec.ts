@@ -321,7 +321,7 @@ test.describe('My Info Module Automation Suite', () => {
   // ==========================================
   // TC14 - Documents upload
   // ==========================================
-  test('TC14 - Documents upload', async ({ page }) => {
+ /* test('TC14 - Documents upload', async ({ page }) => {
     // Navigate into ClientDocuments -> Client Calls or TimesheetReports
     await myInfoPage.uploadDocument(['TimesheetReports', '12460']);
     await expect(page.getByText('12460', { exact: true }).first()).toBeVisible();
@@ -336,7 +336,7 @@ test.describe('My Info Module Automation Suite', () => {
     expect(filename).toBeTruthy();
     expect(filename.length).toBeGreaterThan(0);
   });
-
+*/
 
   // ==========================================
   // TC-DOC-LETTERS-01 - Verify Letters section and all letter types

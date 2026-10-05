@@ -1,0 +1,24 @@
+Reusing kavya.joshi.dmw@yopmail.com (13049 Kavya Joshi Oct 5, 2026 kavya.joshi.dmw@yopmail.com +91 9424698998 Hyderabad Jai Hind Enclave building Front End Developer 31 Offer Letter Rejected By Manager)
+Saved trainee for reuse: kavya.joshi.dmw@yopmail.com
+Regenerating offer letter for Kavya Joshi (kavya.joshi.dmw@yopmail.com)
+Selected employee: 13049 - Kavya Joshi
+Default email: kavya.joshi.dmw@yopmail.com
+Default salutation: Miss.
+Default first name: Kavya
+Default middle name: (empty)
+Default last name: Joshi
+Default gender: Female
+Default designation: Front End Developer
+Selecting address: Current Address
+Default address line 1: Road no.70
+Default address line 2: Sector 70
+Default city: Hyderabad
+Default state: Telangana
+Default country: India
+Default pincode: 500012
+Training: 1
+Manager: FPS0600 - Bhavani seepana Rao
+Document type: Soft Copy
+Note: Trainee Offer letter
+Generate success: Trainee Offer letter generated successfully
+Approval success: Approval request sent successfully
