@@ -257,7 +257,7 @@ test.describe.serial('Probation Flow — Confirm from Extended', () => {
 
   test.describe('16. HR Process probation decision', () => {
     test('processes probation from HR Process popup with Process option in Pending Approvals Probation queue', async ({ page }) => {
-      test.setTimeout(240000);
+      test.setTimeout(420000);
       const probationPage = new ProbationPage(page);
 
       await probationPage.openHrProcessDialog(PROBATION_EMPLOYEE_NAME, PROBATION_EMPLOYEE_SEARCH);

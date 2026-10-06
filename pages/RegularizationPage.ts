@@ -133,16 +133,29 @@ export class RegularizationPage {
     const email = process.env.EMPLOYEE_EMAIL?.trim() || 'Indu@yopmail.com';
     const password = process.env.EMPLOYEE_PASSWORD?.trim() || 'Indu@123';
 
+    await this.loginPage.logoutOrClearSession();
     await this.loginPage.goto();
     await this.loginPage.login(email, password);
     await this.page.waitForURL(/\/dashboard\/emp|\/attendance/, { timeout: 30000 }).catch(() => { });
     await this.page.waitForTimeout(2000);
+    await this.captureSignedInEmployeeName();
+  }
+
+  async captureSignedInEmployeeName() {
+    const name = this.page
+      .getByRole('img', { name: 'Profile Image' })
+      .locator('xpath=ancestor::*[.//p][1]')
+      .getByRole('paragraph')
+      .first();
+    await name.waitFor({ state: 'visible', timeout: 15000 });
+    this.signedInEmployeeName = (await name.innerText()).replace(/\s+/g, ' ').trim();
   }
 
   async loginAsHr() {
     const email = process.env.LOGIN_EMAIL?.trim() || 'bhavitha.palagiri@snaddevelopers.com';
     const password = process.env.LOGIN_PASSWORD?.trim() || 'Bhavi@16';
 
+    await this.loginPage.logoutOrClearSession();
     await this.loginPage.goto();
     await this.loginPage.login(email, password);
     await this.page.waitForURL(/\/dashboard|\/pending-approvals/, { timeout: 30000 }).catch(() => { });
@@ -239,6 +252,8 @@ export class RegularizationPage {
   }
 
   requestedDate: string = '';
+  signedInEmployeeName: string = '';
+  lastRequestType: string = '';
 
   /**
    * Clicks on the Regularization button in the current month table
@@ -273,6 +288,7 @@ export class RegularizationPage {
     const duration = data.duration || '0.5';
     const regType = data.regularizationType || 'Missed Punch';
     const reason = data.reason || 'Punchin missed for urgent work';
+    this.lastRequestType = regType;
 
     const modal = this.page.locator('dialog, ngb-modal-window, [role="dialog"], .modal').first();
     await modal.waitFor({ state: 'visible', timeout: 10000 });
@@ -523,14 +539,8 @@ export class RegularizationPage {
     await this.page.waitForTimeout(1500);
   }
 
-  async rejectFirstPendingRequest(searchQuery: string = 'indu') {
-    if (await this.pendingSearchInput.isVisible().catch(() => false)) {
-      await this.pendingSearchInput.fill(searchQuery);
-      await this.page.waitForTimeout(1000);
-    }
-
-    const row = this.page.locator('table tbody tr').filter({ hasText: new RegExp(searchQuery, 'i') }).first()
-      .or(this.page.locator('table tbody tr').first());
+  async rejectFirstPendingRequest(searchQuery: string = 'indu', requestHint?: string) {
+    const row = await this.findPendingRequestRow([searchQuery], requestHint);
     await row.waitFor({ state: 'visible', timeout: 15000 });
 
     const kebab = row.locator('.dropdown > a, .dropdown button, a:has(.fa-ellipsis-v), button.dropdown-toggle').first();
@@ -604,8 +614,8 @@ export class RegularizationPage {
     await this.page.waitForTimeout(2000);
   }
 
-  async approveFirstPendingRequest(searchQueries: string[] = ['SD302133', 'Indu Priya']) {
-    const row = await this.findPendingRequestRow(searchQueries);
+  async approveFirstPendingRequest(searchQueries: string[] = ['SD302133', 'Indu Priya'], requestHint?: string) {
+    const row = await this.findPendingRequestRow(searchQueries, requestHint);
     const kebab = row.locator('.dropdown > a, .dropdown button, a:has(.fa-ellipsis-v), button.dropdown-toggle').first();
     await kebab.waitFor({ state: 'visible', timeout: 10000 });
     await kebab.click();
@@ -637,8 +647,10 @@ export class RegularizationPage {
     console.log(`Approved regularization request for ${searchQueries.join(' / ')}`);
   }
 
-  private async findPendingRequestRow(searchQueries: string[]) {
-    for (const query of searchQueries) {
+  private async findPendingRequestRow(searchQueries: string[], requestHint?: string) {
+    const hint = requestHint?.trim();
+    let nameMatch: Locator | undefined;
+    for (const query of searchQueries.filter(Boolean)) {
       if (await this.pendingSearchInput.isVisible().catch(() => false)) {
         await this.pendingSearchInput.fill('');
         await this.pendingSearchInput.fill(query);
@@ -646,14 +658,32 @@ export class RegularizationPage {
         await this.page.waitForTimeout(1000);
       }
 
-      const row = this.pendingTableRows.filter({ hasText: new RegExp(
-        query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-        'i',
-      ) }).first();
-      if (await row.isVisible({ timeout: 5000 }).catch(() => false)) {
-        return row;
+      const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const matched = this.pendingTableRows.filter({ hasText: pattern });
+      const hinted = hint
+        ? matched.filter({ hasText: new RegExp(hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }).first()
+        : matched.first();
+      if (await hinted.isVisible({ timeout: 3000 }).catch(() => false)) {
+        return hinted;
+      }
+      if (!nameMatch && await matched.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+        nameMatch = matched.first();
       }
     }
-    throw new Error(`No pending regularization found for ${searchQueries.join(' / ')}`);
+
+    if (nameMatch) {
+      return nameMatch;
+    }
+
+    if (hint) {
+      const hintedRow = this.pendingTableRows.filter({
+        hasText: new RegExp(hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      }).first();
+      if (await hintedRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+        return hintedRow;
+      }
+    }
+
+    throw new Error(`No pending regularization found for ${[...searchQueries, hint].filter(Boolean).join(' / ')}`);
   }
 }

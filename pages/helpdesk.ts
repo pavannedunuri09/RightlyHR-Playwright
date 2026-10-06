@@ -203,7 +203,22 @@ readonly additionalInput: Locator;
     }
 
     async clickAddButton() {
+        const dialog = this.page.getByRole('dialog');
+        if (await dialog.isVisible().catch(() => false)) {
+            await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+            await dialog.waitFor({ state: 'hidden' });
+            return;
+        }
         await this.addButton.click();
+    }
+
+    async dismissDialogIfOpen() {
+        const dialog = this.page.getByRole('dialog');
+        if (!(await dialog.isVisible().catch(() => false))) {
+            return;
+        }
+        await dialog.getByRole('button', { name: 'Cancel' }).click();
+        await dialog.waitFor({ state: 'hidden' });
     }
 
     async enterCategory(category: string) {
@@ -211,6 +226,7 @@ readonly additionalInput: Locator;
     }
 
     async clickSubcategoryTab() {
+        await this.dismissDialogIfOpen();
         await this.subcategoryTab.click();
     }
 
@@ -319,6 +335,21 @@ readonly additionalInput: Locator;
                 exact: true
             })
             .click();
+    }
+
+    async clickOpenTicket(matchText: string) {
+        const matchingRow = this.page.getByRole('row').filter({ hasText: matchText }).first();
+        const openRow = this.page.getByRole('row').filter({ hasText: /\bOpen\b/ }).first();
+
+        let row = matchingRow;
+        try {
+            await matchingRow.waitFor({ state: 'visible', timeout: 8000 });
+        } catch {
+            row = openRow;
+            await row.waitFor({ state: 'visible' });
+        }
+
+        await row.getByText(/TKT\s*-\s*\d+/).first().click();
     }
 
     async selectAssignTo() {

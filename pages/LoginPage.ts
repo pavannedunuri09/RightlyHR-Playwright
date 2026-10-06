@@ -37,11 +37,14 @@ export class LoginPage {
   }
 
   async logoutOrClearSession() {
-    await this.page.context().clearCookies();
+    if (!this.page.url().startsWith('http')) {
+      await this.page.goto('/login', { waitUntil: 'domcontentloaded' });
+    }
     await this.page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
     }).catch(() => {});
+    await this.page.context().clearCookies();
   }
 
   async loginWithCredentials(email: string, password: string) {

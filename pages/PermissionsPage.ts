@@ -245,8 +245,8 @@ export class PermissionsPage {
     const empEmail = email || process.env.EMPLOYEE_EMAIL?.trim() || 'indu@yopmail.com';
     const empPassword = password || process.env.EMPLOYEE_PASSWORD?.trim() || 'Indu@123';
 
-    await this.page.goto('/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await this.loginPage.emailInput.waitFor({ state: 'visible', timeout: 15000 });
+    await this.loginPage.logoutOrClearSession();
+    await this.loginPage.goto();
     await this.loginPage.login(empEmail, empPassword);
     await this.page.waitForURL(/\/dashboard|\/time-off|\/attendance/, { timeout: 45000, waitUntil: 'domcontentloaded' }).catch(() => {});
     await this.page.waitForTimeout(2000);
@@ -256,8 +256,8 @@ export class PermissionsPage {
     const hrEmail = email || process.env.LOGIN_EMAIL?.trim() || 'bhavitha.palagiri@snaddevelopers.com';
     const hrPassword = password || process.env.LOGIN_PASSWORD?.trim() || 'Bhavi@16';
 
-    await this.page.goto('/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await this.loginPage.emailInput.waitFor({ state: 'visible', timeout: 15000 });
+    await this.loginPage.logoutOrClearSession();
+    await this.loginPage.goto();
     await this.loginPage.login(hrEmail, hrPassword);
     await this.page.waitForURL(/\/dashboard|\/pending-approvals/, { timeout: 45000, waitUntil: 'domcontentloaded' }).catch(() => {});
     await this.page.waitForTimeout(2000);

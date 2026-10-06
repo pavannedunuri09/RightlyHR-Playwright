@@ -1,9 +1,6 @@
 import { test, expect, Page } from './fixtures/test';
 import { RegularizationPage } from '../pages/RegularizationPage';
 
-const EMPLOYEE_NAME = 'Indu Priya';
-const EMPLOYEE_ID = 'SD302135';
-
 test.describe.serial('Attendance >> Regularization End-to-End Test Suite', () => {
   let page: Page;
   let regularizationPage: RegularizationPage;
@@ -139,7 +136,10 @@ test.describe.serial('Attendance >> Regularization End-to-End Test Suite', () =>
     await regularizationPage.navigateToPendingApprovalsRegularization();
 
     // Reject request and verify success
-    await regularizationPage.rejectFirstPendingRequest('indu');
+    await regularizationPage.rejectFirstPendingRequest(
+      regularizationPage.signedInEmployeeName,
+      regularizationPage.lastRequestType,
+    );
   });
 
   // =========================================================================
@@ -155,7 +155,7 @@ test.describe.serial('Attendance >> Regularization End-to-End Test Suite', () =>
     await regularizationPage.navigateToTimeOffRegularization();
 
     // Search accepts either employee ID or full employee name.
-    await regularizationPage.selectEmployee(EMPLOYEE_NAME, EMPLOYEE_ID);
+    await regularizationPage.selectEmployee(regularizationPage.signedInEmployeeName);
 
     // 3. Click Rejected tab and verify rejected request is present
     await regularizationPage.selectTab('rejected');
@@ -232,11 +232,14 @@ test.describe.serial('Attendance >> Regularization End-to-End Test Suite', () =>
     await regularizationPage.logout();
     await regularizationPage.loginAsHr();
     await regularizationPage.navigateToPendingApprovalsRegularization();
-    await regularizationPage.approveFirstPendingRequest([EMPLOYEE_ID, EMPLOYEE_NAME, 'Indu']);
+    await regularizationPage.approveFirstPendingRequest(
+      [regularizationPage.signedInEmployeeName],
+      'Missed Punch OUT',
+    );
     approvedRegularizationRequests += 1;
 
     await regularizationPage.navigateToTimeOffRegularization();
-    await regularizationPage.selectEmployee(EMPLOYEE_NAME, EMPLOYEE_ID);
+    await regularizationPage.selectEmployee(regularizationPage.signedInEmployeeName);
     await regularizationPage.selectTab('processed');
     await expect(regularizationPage.regularizationRows.first()).toBeVisible({ timeout: 15000 });
   });

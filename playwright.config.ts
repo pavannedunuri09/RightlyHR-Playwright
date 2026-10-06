@@ -83,9 +83,17 @@ export default defineConfig({
         storageState: '.auth/user.json',
       },
       dependencies: ['setup'],
-      // Contract has its own project (11-contract); exclude it here to avoid
-      // running TC01–TC47 twice when executing tests/Contract.spec.ts.
-      testIgnore: [/(?:^|[\\/])Contract\.spec\.ts$/],
+      // These specs have their own projects. Exclude them here so
+      // `npx playwright test tests/<file>` does not run them twice.
+      // Chromium also injects storageState, which skips the login form
+      // these specs fill themselves.
+      testIgnore: [
+        /(?:^|[\\/])Contract\.spec\.ts$/,
+        /(?:^|[\\/])HelpDesk\.spec\.ts$/,
+        /(?:^|[\\/])Separation\.spec\.ts$/,
+        /(?:^|[\\/])SeparationRejected\.spec\.ts$/,
+        /(?:^|[\\/])recall\.spec\.ts$/,
+      ],
     },
     {
       name: '01-login',

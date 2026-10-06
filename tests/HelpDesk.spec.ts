@@ -2,6 +2,11 @@ import { test, expect } from './fixtures/test';
 import { HelpDesk } from '../pages/helpdesk';
 import { LoginPage } from '../pages/LoginPage';
 
+const stamp = Date.now().toString().slice(-6);
+const categoryName = `Emp ${stamp}`;
+const subcategoryName = `Sub ${stamp}`;
+const queryDescription = `unable to login portal ${stamp}`;
+
 
 // ======================================================
 // HR HELP DESK CONFIGURATION FLOW
@@ -69,7 +74,7 @@ test.describe.serial('HR Helpdesk Configuration Flow', () => {
 
             await helpDesk.clickAddButton();
 
-            await helpDesk.enterCategory('Employee issue');
+            await helpDesk.enterCategory(categoryName);
 
             await helpDesk.clickAddButton();
         }
@@ -88,9 +93,9 @@ test.describe.serial('HR Helpdesk Configuration Flow', () => {
 
             await helpDesk.clickAddButton();
 
-            await helpDesk.selectCategory('Employee issue');
+            await helpDesk.selectCategory(categoryName);
 
-            await helpDesk.enterSubcategory('Offer downnload');
+            await helpDesk.enterSubcategory(subcategoryName);
 
             await helpDesk.clickAddButton();
         }
@@ -169,7 +174,7 @@ test.describe.serial('Employee Helpdesk Flow', () => {
         async () => {
 
             await helpDesk.selectEmployeeCategory(
-                'Employee issue'
+                categoryName
             );
         }
     );
@@ -184,7 +189,7 @@ test.describe.serial('Employee Helpdesk Flow', () => {
         async () => {
 
             await helpDesk.selectEmployeeSubcategory(
-                'Offer downnload'
+                subcategoryName
             );
         }
     );
@@ -199,7 +204,7 @@ test.describe.serial('Employee Helpdesk Flow', () => {
         async () => {
 
             await helpDesk.enterDescription(
-                'unable to login portal'
+                queryDescription
             );
         }
     );
@@ -339,9 +344,7 @@ test.describe.serial('HR Team Queries Flow', () => {
         'TC14 - HR should be able to click on ticket id',
         async () => {
 
-            await helpDesk.clickTicketId(
-                'TKT - 13'
-            );
+            await helpDesk.clickOpenTicket(categoryName);
         }
     );
 

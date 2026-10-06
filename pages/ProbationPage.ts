@@ -66,11 +66,8 @@ export class ProbationPage {
       .or(page.getByText('Pending Approvals', { exact: true }));
     this.pendingApprovalsToggle = this.pendingApprovalsNav
       .or(page.locator('#sidenav-main-drop .nav-item').filter({ hasText: 'Pending Approvals' }).locator('[data-bs-toggle="dropdown"]'));
-    this.pendingOnboardingTab = page.locator('app-pending-approvals-tabs .grid-item, .grid-item').filter({ hasText: /^Onboarding\s*\(\d+\)$/i })
-      .or(page.locator('div').filter({ hasText: /^Onboarding\s*\(\d+\)$/i }));
-    this.probationPendingTab = page.locator('app-pending-approvals-tabs').getByText(/^Probation\s*\(\d+\)$/)
-      .or(page.getByRole('listitem').filter({ hasText: /^Probation\s*\(\d+\)$/ }))
-      .or(page.getByText(/^Probation\s*\(\d+\)$/));
+    this.pendingOnboardingTab = page.locator('div').filter({ hasText: /^Onboarding\s*\(\d+\)$/i }).filter({ visible: true });
+    this.probationPendingTab = page.locator('div, a, span, li').filter({ hasText: /^Probation\s*\(\d+\)$/i }).filter({ visible: true });
     this.assessmentFormButton = page.getByRole('button', { name: 'Assessment form' });
     this.assessmentTextArea = page.getByRole('textbox', { name: 'Text area' });
     this.requestRaisedMessage = page.getByText('Probation request raised');
@@ -317,6 +314,14 @@ export class ProbationPage {
       return;
     }
 
+    const probationSideItem = this.page.getByRole('listitem').filter({ hasText: /^Probation\s*\(\d+\)$/i }).first();
+    if (await probationSideItem.isVisible().catch(() => false)) {
+      await probationSideItem.click();
+      if (await this.isProbationQueueReady({ timeout: 10000 })) {
+        return;
+      }
+    }
+
     await this.openPendingOnboardingProbationViaMenu();
     if (await this.isProbationQueueReady({ timeout: 10000 })) {
       return;
@@ -343,21 +348,27 @@ export class ProbationPage {
       await this.page.getByText('Have a nice day at work!').waitFor({ state: 'visible', timeout: 20000 }).catch(() => {});
     }
 
-    await pendingNav.waitFor({ state: 'visible', timeout: 15000 });
-    await pendingNav.click();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await pendingNav.waitFor({ state: 'visible', timeout: 15000 });
+      await pendingNav.click();
 
-    const onboardingTab = this.pendingOnboardingTab.first();
-    await onboardingTab.waitFor({ state: 'visible', timeout: 15000 });
-    await onboardingTab.click();
+      const onboardingTab = this.pendingOnboardingTab.first();
+      if (!(await onboardingTab.isVisible({ timeout: 8000 }).catch(() => false))) {
+        continue;
+      }
+      await onboardingTab.click();
 
-    const probationTab = this.probationPendingTab.first();
-    await probationTab.waitFor({ state: 'visible', timeout: 15000 });
-    await probationTab.click();
+      const probationTab = this.probationPendingTab.first();
+      if (!(await probationTab.isVisible({ timeout: 8000 }).catch(() => false))) {
+        continue;
+      }
+      await probationTab.click();
+      return;
+    }
   }
 
   private probationQueueMarker() {
-    return this.page.getByRole('columnheader', { name: 'Employee ID' })
-      .or(this.page.getByRole('columnheader', { name: 'Employee Name' }));
+    return this.page.getByRole('columnheader', { name: 'Employee ID' });
   }
 
   private assessmentFormHeading() {
@@ -499,13 +510,6 @@ export class ProbationPage {
   async assertEmployeeInPendingProbationQueue(employeeName: string, employeeId?: string, searchText?: string) {
     await this.openPendingOnboardingProbation();
 
-    if (await this.isAssessmentFormVisible()) {
-      await expect(this.page.getByText(this.employeeNamePattern(employeeName)).first()).toBeVisible({
-        timeout: 15000,
-      });
-      return;
-    }
-
     if (searchText) {
       await this.filterPendingProbationEmployee(searchText);
     }
@@ -550,14 +554,20 @@ export class ProbationPage {
     const row = this.pendingRow(employeeName).first();
     await expect(row).toBeVisible({ timeout: 15000 });
 
-    const processButton = row.getByRole('button', { name: 'Process' });
+    const processButton = row.getByRole('button', { name: /^Process$/i });
     if (await processButton.isVisible().catch(() => false)) {
       await processButton.click();
       return;
     }
 
-    await this.openPendingRowKebab(row);
-    await this.pendingActionOption(row, 'Process').first().click();
+    const kebab = this.pendingRowKebab(row);
+    if (await kebab.isVisible().catch(() => false)) {
+      await this.openPendingRowKebab(row);
+      await this.pendingActionOption(row, 'Process').first().click();
+      return;
+    }
+
+    throw new Error(`Process is not available for ${employeeName}. The row shows Assessment form instead of Process.`);
   }
 
   /** After re-request, some envs show Process immediately; others show Assessment form until RM/TM extend. */
@@ -585,6 +595,7 @@ export class ProbationPage {
   }
 
   async openHrProcessDialog(employeeName: string, searchText?: string) {
+    await this.advanceReRequestedProbationToHrProcess(employeeName, searchText);
     await this.clickPendingProcessAction(employeeName, searchText);
     await this.hrProcessDialog.waitFor({ state: 'visible', timeout: 15000 });
   }
