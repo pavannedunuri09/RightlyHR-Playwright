@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 import { OnBehalfWfhPage } from '../pages/OnBehalfWfhPage';
-const TARGET_EMPLOYEE_NAME = 'SD3021300 - Bhavitha Reddy';
-const TARGET_EMPLOYEE_SEARCH = 'bhavitha';
-const EMPLOYEE_ROW_NAME = 'Bhavitha Reddy';
+const TARGET_EMPLOYEE_NAME = 'SD3021343 - harshitha Palagiriii';
+const TARGET_EMPLOYEE_SEARCH = 'harshitha';
+const EMPLOYEE_ROW_NAME = 'harshitha Palagiriii';
 
 const ON_BEHALF_SORT_TABS = [
   'Waiting For Approval',
