@@ -68,7 +68,6 @@ export class ProspectiveTraineePage {
 
   async openTraineesList() {
     await this.openEmployeesModule();
-
     await this.prospectiveTab.waitFor({ state: 'visible' });
     await this.prospectiveTab.click();
     await this.page.waitForURL(/\/employee-management\/prospective/, {

@@ -1,16 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
-import { getBaseUrl } from './config/environment';
+import { resolveHrBaseUrl } from './config/environment';
 
 dotenv.config({
   path: path.resolve(process.cwd(), '.env'),
   override: true
 });
 
-const baseURL = process.env.BASE_URL?.trim();
+const baseURL = resolveHrBaseUrl();
 if (!baseURL) {
-  throw new Error('Set BASE_URL in .env (e.g. https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com)');
+  throw new Error(
+    'Set BASE_URL or RightlyHR_URL in .env (e.g. https://hrmsqarightlyhr.onpremise.cluster.rightlyhr.com)',
+  );
 }
 
 /**
@@ -39,6 +41,7 @@ export default defineConfig({
     '**/codegen-onbehalf-remote.ts',
     '**/codegen-probtion.ts',
     '**/codegen-onbehalfofapprovalspermissions*',
+    '**/auth.setup.ts',
   ],
   timeout: 120000,
 
@@ -57,7 +60,7 @@ export default defineConfig({
 
   
   use: {
-    baseURL: process.env.RightlyHR_URL?.trim() || baseURL,
+    baseURL,
     headless: process.env.HEADLESS === 'true',
     //  || !!process.env.CI,
     launchOptions: {
@@ -73,19 +76,24 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'setup',
-      testMatch: /.*\.setup\.ts/,
-    },
-    {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
         storageState: '.auth/user.json',
       },
-      dependencies: ['setup'],
+      dependencies: ['00-hr-login'],
       // Contract has its own project (11-contract); exclude it here to avoid
       // running TC01–TC47 twice when executing tests/Contract.spec.ts.
-      testIgnore: [/(?:^|[\\/])Contract\.spec\.ts$/],
+      testIgnore: [
+        /(?:^|[\\/])Contract\.spec\.ts$/,
+        /prospective-trainee\.spec\.ts$/,
+        /hr-login\.spec\.ts$/,
+      ],
+    },
+    {
+      name: '00-hr-login',
+      testMatch: /hr-login\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: '01-login',
@@ -166,6 +174,15 @@ export default defineConfig({
       testMatch: /(?:^|[\\/])Contract\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
       timeout: 180_000,
+    },
+    {
+      name: '17-prospective-trainee',
+      testMatch: /prospective-trainee\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: '.auth/user.json',
+      },
+      dependencies: ['00-hr-login'],
     },
      /*{
        name:'30-my-info',

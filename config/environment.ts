@@ -31,6 +31,32 @@ export function getBaseUrl(): string {
   return URLS[getEnvironment()];
 }
 
+/** Ensures env hostnames work as Playwright baseURL (requires http/https). */
+export function normalizeBaseUrl(raw?: string): string {
+  const value = raw?.trim();
+  if (!value) {
+    return '';
+  }
+  const withoutTrailingSlash = value.replace(/\/+$/, '');
+  if (/^https?:\/\//i.test(withoutTrailingSlash)) {
+    return withoutTrailingSlash;
+  }
+  return `https://${withoutTrailingSlash.replace(/^\/+/, '')}`;
+}
+
+/** HRMS app URL from .env, with APP_ENV fallback when unset. */
+export function resolveHrBaseUrl(): string {
+  const fromEnv =
+    process.env.RightlyHR_URL ||
+    process.env.BASE_URL ||
+    process.env.HRMS_BASE_URL;
+  const normalized = normalizeBaseUrl(fromEnv);
+  if (normalized) {
+    return normalized;
+  }
+  return getBaseUrl();
+}
+
 export const ROUTES = {
   login: '/login',
 

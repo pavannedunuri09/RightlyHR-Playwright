@@ -59,16 +59,17 @@ test.describe('Login page', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
-  test('logs in with valid credentials and reaches the employee dashboard', async ({ page }) => {
-    const email = process.env.LOGIN_EMAIL?.trim();
-    const password = process.env.LOGIN_PASSWORD?.trim();
-    test.skip(!email || !password, 'Set LOGIN_EMAIL and LOGIN_PASSWORD in .env');
+  test('logs in with valid HR credentials and reaches the employee dashboard', async ({ page }) => {
+    const hasHrCreds = Boolean(
+      (process.env.LOGIN_EMAIL || process.env.HR_USERNAME || process.env.HR_EMAIL)?.trim() &&
+        (process.env.LOGIN_PASSWORD || process.env.HR_PASSWORD)?.trim(),
+    );
+    test.skip(!hasHrCreds, 'Set LOGIN_EMAIL and LOGIN_PASSWORD (HR) in .env');
 
     const loginPage = new LoginPage(page);
-    await loginPage.goto();
-    await loginPage.login(email!, password!);
+    await loginPage.loginHrFromEnv();
 
-    await expect(page).toHaveURL(/\/dashboard\/emp/, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30000 });
     await expect(page.getByText('Have a nice day at work!')).toBeVisible();
     await expect(page.getByText('Dashboard', { exact: true }).first()).toBeVisible();
   });

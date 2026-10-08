@@ -48,7 +48,7 @@ export class LoginPage {
     await this.logoutOrClearSession();
     await this.goto();
     await this.login(email, password);
-    await this.page.waitForURL(/\/dashboard\/emp/, {
+    await this.page.waitForURL(/\/dashboard/, {
       timeout: 45000,
       waitUntil: 'domcontentloaded',
     });
@@ -59,11 +59,41 @@ export class LoginPage {
     await this.passwordVisibilityToggle.click();
   }
 
-  async loginFromEnv() {
-    const email = (process.env.EMPLOYEE_EMAIL || process.env.LOGIN_EMAIL)?.trim();
-    const password = (process.env.EMPLOYEE_PASSWORD || process.env.LOGIN_PASSWORD)?.trim();
+  hrCredentialsFromEnv(): { email: string; password: string } {
+    const email = (
+      process.env.LOGIN_EMAIL ||
+      process.env.HR_USERNAME ||
+      process.env.HR_EMAIL
+    )?.trim();
+    const password = (
+      process.env.LOGIN_PASSWORD ||
+      process.env.HR_PASSWORD
+    )?.trim();
     if (!email || !password) {
-      throw new Error('Set EMPLOYEE_EMAIL / LOGIN_EMAIL and EMPLOYEE_PASSWORD / LOGIN_PASSWORD in .env');
+      throw new Error('Set LOGIN_EMAIL and LOGIN_PASSWORD (HR) in .env');
+    }
+    return { email, password };
+  }
+
+  async loginHrFromEnv() {
+    const { email, password } = this.hrCredentialsFromEnv();
+    await this.loginWithCredentials(email, password);
+  }
+
+  async loginFromEnv() {
+    const email = (
+      process.env.LOGIN_EMAIL ||
+      process.env.HR_USERNAME ||
+      process.env.HR_EMAIL ||
+      process.env.EMPLOYEE_EMAIL
+    )?.trim();
+    const password = (
+      process.env.LOGIN_PASSWORD ||
+      process.env.HR_PASSWORD ||
+      process.env.EMPLOYEE_PASSWORD
+    )?.trim();
+    if (!email || !password) {
+      throw new Error('Set LOGIN_EMAIL / LOGIN_PASSWORD (HR) or EMPLOYEE_EMAIL / EMPLOYEE_PASSWORD in .env');
     }
     await this.logoutOrClearSession();
     await this.goto();
